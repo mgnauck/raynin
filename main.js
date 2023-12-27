@@ -60,8 +60,6 @@ let computePipeline;
 let renderPipeline;
 let renderPassDescriptor;
 
-let wa = {};
-
 let startTime;
 let gatheredSamples;
 
@@ -925,13 +923,13 @@ function createScene()
   console.log("Object count: " + objects.length / OBJECT_SIZE);
 }
 
-async function loadWasmModule(wasmInstance, module)
+function Wasm(module)
 {
-  const environment = {
+  this.environment = {
     console_log_buf: (addr, len) => {
       let s = "";
       for(let i=0; i<len; i++)
-        s += String.fromCharCode(wasmInstance.memUint8[addr + i]);
+        s += String.fromCharCode(this.memUint8[addr + i]);
       console.log(s);
     },
     sqrtf: (v) => Math.sqrt(v),
@@ -939,18 +937,21 @@ async function loadWasmModule(wasmInstance, module)
     cosf: (v) => Math.cos(v),
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
-    powf: (b, e) => Math.pow(b, e),
+    powf: (b, e) => Math.pow(b, e)
   };
 
-  const { instance } = await WebAssembly.instantiate(module, { env: environment });
+  this.instantiate = async function()
+  {
+    const res = await WebAssembly.instantiate(module, { env: this.environment });
 
-  console.log(`Available memory in wasm module: ${(instance.exports.memory.buffer.byteLength / (1024 * 1024)).toFixed(2)} MiB`);
-  
-  wasmInstance.exports = instance.exports;
+    this.exports = res.instance.exports;
 
-  wasmInstance.memUint8 = new Uint8Array(instance.exports.memory.buffer);
-  wasmInstance.memUint32 = new Uint32Array(instance.exports.memory.buffer);
-  wasmInstance.memFloat32 = new Float32Array(instance.exports.memory.buffer);
+    this.memUint8 = new Uint8Array(this.exports.memory.buffer);
+    this.memUint32 = new Uint32Array(this.exports.memory.buffer);
+    this.memFloat32 = new Float32Array(this.exports.memory.buffer);
+    
+    console.log(`Available memory in wasm module: ${(this.exports.memory.buffer.byteLength / (1024 * 1024)).toFixed(2)} MiB`);
+  }
 }
 
 async function main()
@@ -968,9 +969,12 @@ async function main()
     throw new Error("Failed to request logical device.");
   */
 
-  await loadWasmModule(wa, WASM.includes("END_") ?
+  let module = WASM.includes("END_") ?
     await (await fetch("intro.wasm")).arrayBuffer() :
-    Uint8Array.from(atob(WASM), (m) => m.codePointAt(0)));
+    Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))
+
+  let wa = new Wasm(module);
+  await wa.instantiate();
 
   wa.exports.init();
 
