@@ -1,5 +1,5 @@
 OUTDIR=output
-SRC=main.c util.c mathutil.c vec3.c
+SRC=main.c util.c mathutil.c printf.c log.c vec3.c
 OBJ=$(patsubst %.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=visual.wgsl
@@ -12,6 +12,7 @@ CC=clang
 LD=wasm-ld
 DBGFLAGS=-DNDEBUG
 CCFLAGS=--target=wasm32 -std=c2x -pedantic-errors -Wall -Wextra -O3 -flto -nostdlib -Wno-unused-parameter -Wno-unused-variable
+#CCFLAGS+=-DSILENT
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=67108864 -z stack-size=8388608
 WOPTFLAGS=-O3
 
