@@ -926,12 +926,6 @@ function createScene()
 function Wasm(module)
 {
   this.environment = {
-    console_log_buf: (addr, len) => {
-      let s = "";
-      for(let i=0; i<len; i++)
-        s += String.fromCharCode(this.memUint8[addr + i]);
-      console.log(s);
-    },
     sqrtf: (v) => Math.sqrt(v),
     sinf: (v) => Math.sin(v),
     cosf: (v) => Math.cos(v),

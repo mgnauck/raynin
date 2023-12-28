@@ -1,17 +1,15 @@
 #include "vec3.h"
 #include "mathutil.h"
-#include "text.h"
 
 vec3 vec3_rnd()
 {
-  // TODO
-  return (vec3){ .x = 1.0f, .y = 1.0f, .z = 1.0f };
+  return (vec3){ .x = randf(), .y = randf(), .z = randf() };
 }
 
-vec3 vec3_rnd_rng(float min, float max)
+vec3 vec3_rnd_rng(float start, float end)
 {
-  // TODO
-  return (vec3){ .x = 1.0f, .y = 1.0f, .z = 1.0f };
+  float d = end - start;
+  return (vec3){ .x = start + randf() * d, .y = start + randf() * d, .z = start + randf() * d };
 }
 
 vec3 vec3_add(vec3 a, vec3 b)
@@ -72,28 +70,3 @@ vec3 vec3_spherical(float theta, float phi)
 {
   return (vec3){ .x = -cosf(phi) * sinf(theta), .y = -cosf(theta), .z = sinf(phi) * sinf(theta) };
 }
-
-size_t push_vec3(vec3 v, uint8_t precision, size_t ofs)
-{
-  size_t cnt = push_float(v.x, precision, ofs);
-  cnt = push_str(", ", cnt);
-  cnt = push_float(v.y, precision, cnt);
-  cnt = push_str(", ", cnt);
-  return push_float(v.z, precision, cnt);
-}
-
-void print_vec3(vec3 v, uint8_t precision)
-{
-  print_buf(push_vec3(v, precision, 0));
-}
-
-void text_vec3(vec3 v)
-{
-  global_str_buf_pos = push_vec3(v, 6, global_str_buf_pos);
-}
-
-void text_vec3_p(vec3 v, uint8_t precision)
-{
-  global_str_buf_pos = push_vec3(v, precision, global_str_buf_pos);
-}
-

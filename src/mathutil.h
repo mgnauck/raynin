@@ -1,26 +1,9 @@
 #ifndef MATHUTIL_H
 #define MATHUTIL_H
 
-#include <stddef.h>
+#include <stdint.h>
 
-/*
-#define max(a, b)            \
-({                           \
-    __typeof__ (a) _a = (a); \
-    __typeof__ (b) _b = (b); \
-    _a > _b ? _a : _b;       \
-})
-
-#define min(a, b)            \
-({                           \
-    __typeof__ (a) _a = (a); \
-    __typeof__ (b) _b = (b); \
-    _a < _b ? _a : _b;       \
-})
-*/
-
-// Does not prevent double evaluation but above macros give GNU
-// statement expression extension errors on designated initializers
+// Beware of double evaluation
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -35,5 +18,11 @@ extern float atan2f(float y, float x);
 extern float powf(float base, float exp);
 
 float floorf(float v);
+
+void srand(uint64_t seed, uint64_t seq);
+
+uint32_t rand(void);
+
+float randf(void);
 
 #endif

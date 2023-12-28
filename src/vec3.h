@@ -1,9 +1,6 @@
 #ifndef VEC3_H
 #define VEC3_H
 
-#include <stddef.h>
-#include <stdint.h>
-
 typedef struct vec3 {
   union {
     struct { float x, y, z; };
@@ -30,10 +27,5 @@ vec3 vec3_min(vec3 a, vec3 b);
 vec3 vec3_max(vec3 a, vec3 b);
 
 vec3 vec3_spherical(float theta, float phi);
-
-size_t push_vec3(vec3 v, uint8_t precision, size_t ofs);
-void print_vec3(vec3 v, uint8_t precision);
-void text_vec3(vec3 v);
-void text_vec3_p(vec3 v, uint8_t precision);
 
 #endif
