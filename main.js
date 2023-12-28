@@ -932,6 +932,7 @@ function Wasm(module)
         s += String.fromCharCode(this.memUint8[addr + i]);
       console.log(s);
     },
+    get_time: () => performance.now(),
     sqrtf: (v) => Math.sqrt(v),
     sinf: (v) => Math.sin(v),
     cosf: (v) => Math.cos(v),
