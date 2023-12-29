@@ -30,13 +30,13 @@ struct Ray
   t: f32
 }
 
-struct BvhNode
+/*struct BvhNode
 {
   aabbMin: vec3f,
   startIndex: f32, // Either index of first object or left child node
   aabbMax: vec3f,
   objCount: f32
-}
+}*/
 
 struct Object
 {
@@ -69,12 +69,12 @@ const MAT_TYPE_METAL = 2;
 const MAT_TYPE_GLASS = 3;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<storage, read> bvhNodes: array<BvhNode>;
-@group(0) @binding(2) var<storage, read> objects: array<Object>;
-@group(0) @binding(3) var<storage, read> shapes: array<vec4f>;
-@group(0) @binding(4) var<storage, read> materials: array<vec4f>;
-@group(0) @binding(5) var<storage, read_write> buffer: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> image: array<vec4f>;
+//@group(0) @binding(1) var<storage, read> bvhNodes: array<BvhNode>;
+@group(0) @binding(1) var<storage, read> objects: array<Object>;
+@group(0) @binding(2) var<storage, read> shapes: array<vec4f>;
+@group(0) @binding(3) var<storage, read> materials: array<vec4f>;
+@group(0) @binding(4) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(5) var<storage, read_write> image: array<vec4f>;
 
 var<private> nodeStack: array<u32, 32>; // Fixed size
 var<private> rngState: u32;
@@ -322,7 +322,10 @@ fn intersectObjects(ray: ptr<function, Ray>, objStartIndex: u32, objCount: u32, 
 fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
 {
   var objId: u32; 
-  var nodeIndex = 0u;
+  
+  intersectObjects(ray, 0, arrayLength(&objects), &objId);
+  
+  /*var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
   loop {
@@ -366,7 +369,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
         }
       }
     }
-  }
+  }*/
 
   if((*ray).t < MAX_DISTANCE) {
     let obj = &objects[objId];

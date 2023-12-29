@@ -3,9 +3,9 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-//const ACTIVE_SCENE = "SPHERES";
+const ACTIVE_SCENE = "SPHERES";
 //const ACTIVE_SCENE = "QUADS";
-const ACTIVE_SCENE = "RIOW";
+//const ACTIVE_SCENE = "RIOW";
 
 const MAX_RECURSION = 5;
 const SAMPLES_PER_PIXEL = 5;
@@ -20,15 +20,15 @@ const LOOK_VELOCITY = 0.015;
 // aabb min ext, (object/node) start index, aabb max ext, object count
 const BVH_NODE_SIZE = 8;
 
-// Size of object data
+// Size of a line of object data (4x uint32)
 // shapeType, shapeOfs, matType, matOfs
-const OBJECT_SIZE = 4;
+const OBJECT_LINE_SIZE = 4;
 
 // Size of a line of shape data (= vec4f)
 const SHAPE_LINE_SIZE = 4;
 
 // Size of a line of material data (= vec4f)
-const MAT_LINE_SIZE = 4;
+const MATERIAL_LINE_SIZE = 4;
 
 const SHAPE_TYPE_SPHERE = 1;
 const SHAPE_TYPE_BOX = 2;
@@ -169,7 +169,7 @@ function vec3FromArr(arr, index)
 {
   return arr.slice(index, index + 3);
 }
-
+/*
 function addObject(shapeType, shapeOfs, matType, matOfs)
 {
   objects.push(shapeType);
@@ -196,35 +196,30 @@ function addQuad(q, u, v)
   return shapes.length / SHAPE_LINE_SIZE - 3
 }
 
-function addMesh()
-{
-  // TODO
-}
-
 function addLambert(albedo)
 {
   materials.push(...albedo);
   materials.push(0); // pad to have full mat line
-  return materials.length / MAT_LINE_SIZE - 1;
+  return materials.length / MATERIAL_LINE_SIZE - 1;
 }
 
 function addMetal(albedo, fuzzRadius)
 {
   materials.push(...albedo);
   materials.push(fuzzRadius);
-  return materials.length / MAT_LINE_SIZE - 1;
+  return materials.length / MATERIAL_LINE_SIZE - 1;
 }
 
 function addGlass(albedo, refractionIndex)
 {
   materials.push(...albedo);
   materials.push(refractionIndex);
-  return materials.length / MAT_LINE_SIZE - 1;
+  return materials.length / MATERIAL_LINE_SIZE - 1;
 }
-
+*/
 function getObjCenter(objIndex)
 {
-  let objOfs = objIndex * OBJECT_SIZE;
+  let objOfs = objIndex * OBJECT_LINE_SIZE;
   switch(objects[objOfs]) {
     case SHAPE_TYPE_SPHERE: {
       return vec3FromArr(shapes, objects[objOfs + 1] * SHAPE_LINE_SIZE);
@@ -244,7 +239,7 @@ function getObjCenter(objIndex)
 
 function getObjAabb(objIndex)
 {
-  let objOfs = objIndex * OBJECT_SIZE;
+  let objOfs = objIndex * OBJECT_LINE_SIZE;
   switch(objects[objOfs]) {
     case SHAPE_TYPE_SPHERE: {
       let shapeOfs = objects[objOfs + 1] * SHAPE_LINE_SIZE; 
@@ -417,9 +412,9 @@ function subdivideBvhNode(nodeIndex)
       l++;
     } else {
       // Swap object data l/r
-      let leftObjOfs = l * OBJECT_SIZE;
-      let rightObjOfs = r * OBJECT_SIZE;
-      for(let i=0; i<OBJECT_SIZE; i++) {
+      let leftObjOfs = l * OBJECT_LINE_SIZE;
+      let rightObjOfs = r * OBJECT_LINE_SIZE;
+      for(let i=0; i<OBJECT_LINE_SIZE; i++) {
         let t = objects[leftObjOfs + i];
         objects[leftObjOfs + i] = objects[rightObjOfs + i];
         objects[rightObjOfs + i] = t;
@@ -449,7 +444,7 @@ function subdivideBvhNode(nodeIndex)
 function createBvh()
 {
   let start = performance.now();
-  addBvhNode(0, objects.length / OBJECT_SIZE);
+  addBvhNode(0, objects.length / OBJECT_LINE_SIZE);
   subdivideBvhNode(0);
   console.log("Create BVH: " + (performance.now() - start).toFixed(3) + " ms, node count: " + bvhNodes.length / BVH_NODE_SIZE);
 }
@@ -503,18 +498,18 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, view)
   passEncoder.end();
 }
 
-async function createGpuResources(bvhNodesSize, objectsSize,
-  shapesSize, materialsSize)
+async function createGpuResources(
+  bvhNodesSize, objectsSize, shapesSize, materialsSize)
 {
   globalsBuffer = device.createBuffer({
     size: 32 * 4,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  bvhNodesBuffer = device.createBuffer({
+  /*bvhNodesBuffer = device.createBuffer({
     size: bvhNodesSize * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
+  });*/
 
   objectsBuffer = device.createBuffer({
     size: objectsSize * 4,
@@ -546,22 +541,22 @@ async function createGpuResources(bvhNodesSize, objectsSize,
       { binding: 0, 
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: {type: "uniform"} },
-      { binding: 1, 
+      /*{ binding: 1, 
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {type: "read-only-storage"} },*/
+      { binding: 1,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {type: "read-only-storage"} },
       { binding: 2,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "read-only-storage"} },
+        buffer: {type: "read-only-storage"}},
       { binding: 3,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {type: "read-only-storage"}},
       { binding: 4,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "read-only-storage"}},
-      { binding: 5,
-        visibility: GPUShaderStage.COMPUTE,
         buffer: {type: "storage"}},
-      { binding: 6,
+      { binding: 5,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: {type: "storage"}}
     ]
@@ -571,12 +566,12 @@ async function createGpuResources(bvhNodesSize, objectsSize,
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: globalsBuffer } },
-      { binding: 1, resource: { buffer: bvhNodesBuffer } },
-      { binding: 2, resource: { buffer: objectsBuffer } },
-      { binding: 3, resource: { buffer: shapesBuffer } },
-      { binding: 4, resource: { buffer: materialsBuffer } },
-      { binding: 5, resource: { buffer: accumulationBuffer } },
-      { binding: 6, resource: { buffer: imageBuffer } }
+      //{ binding: 1, resource: { buffer: bvhNodesBuffer } },
+      { binding: 1, resource: { buffer: objectsBuffer } },
+      { binding: 2, resource: { buffer: shapesBuffer } },
+      { binding: 3, resource: { buffer: materialsBuffer } },
+      { binding: 4, resource: { buffer: accumulationBuffer } },
+      { binding: 5, resource: { buffer: imageBuffer } }
     ]
   });
 
@@ -610,14 +605,6 @@ async function createPipelines()
   
   renderPipeline = await createRenderPipeline(
     shaderModule, pipelineLayout, "vertexMain", "fragmentMain");
-}
-
-function copySceneData()
-{
-  device.queue.writeBuffer(bvhNodesBuffer, 0, new Float32Array([...bvhNodes]));
-  device.queue.writeBuffer(objectsBuffer, 0, new Uint32Array([...objects]));
-  device.queue.writeBuffer(shapesBuffer, 0, new Float32Array([...shapes]));
-  device.queue.writeBuffer(materialsBuffer, 0, new Float32Array([...materials]));
 }
 
 function copyCanvasData()
@@ -816,7 +803,6 @@ function handleKeyEvent(e)
       break;
     case "l":
       createPipelines();
-      updateView();
       console.log("Visual shader reloaded");
       break;
   }
@@ -868,7 +854,7 @@ async function startRender()
   requestAnimationFrame(render);
 }
 
-function createScene()
+/*function createScene()
 {
   if(ACTIVE_SCENE == "SPHERES") {
     addObject(SHAPE_TYPE_SPHERE, addSphere([0, -100.5, 0], 100), MAT_TYPE_LAMBERT, addLambert([0.5, 0.5, 0.5]));
@@ -920,8 +906,8 @@ function createScene()
     }
   }
 
-  console.log("Object count: " + objects.length / OBJECT_SIZE);
-}
+  console.log("Object count: " + objects.length / OBJECT_LINE_SIZE);
+}*/
 
 function Wasm(module)
 {
@@ -948,8 +934,8 @@ function Wasm(module)
     this.exports = res.instance.exports;
 
     this.memUint8 = new Uint8Array(this.exports.memory.buffer);
-    this.memUint32 = new Uint32Array(this.exports.memory.buffer);
-    this.memFloat32 = new Float32Array(this.exports.memory.buffer);
+    //this.memUint32 = new Uint32Array(this.exports.memory.buffer);
+    //this.memFloat32 = new Float32Array(this.exports.memory.buffer);
     
     console.log(`Available memory in wasm module: ${(this.exports.memory.buffer.byteLength / (1024 * 1024)).toFixed(2)} MiB`);
   }
@@ -957,7 +943,6 @@ function Wasm(module)
 
 async function main()
 {
-  /*
   if(!navigator.gpu)
     throw new Error("WebGPU is not supported on this browser.");
 
@@ -968,7 +953,6 @@ async function main()
   device = await gpuAdapter.requestDevice();
   if(!device)
     throw new Error("Failed to request logical device.");
-  */
 
   let module = WASM.includes("END_") ?
     await (await fetch("intro.wasm")).arrayBuffer() :
@@ -979,14 +963,31 @@ async function main()
 
   wa.exports.init();
 
+  console.log(`Object lines: ${wa.exports.get_object_line_count()}, Shape lines: ${wa.exports.get_shape_line_count()}, Material lines: ${wa.exports.get_material_line_count()}`);
+
+  await createGpuResources(0,
+    wa.exports.get_object_line_count() * OBJECT_LINE_SIZE,
+    wa.exports.get_shape_line_count() * SHAPE_LINE_SIZE,
+    wa.exports.get_material_line_count() * MATERIAL_LINE_SIZE);
+ 
+  device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.exports.get_object_buf(), wa.exports.get_object_buf_size()); 
+  device.queue.writeBuffer(shapesBuffer, 0, wa.memUint8, wa.exports.get_shape_buf(), wa.exports.get_shape_buf_size());
+  device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.exports.get_material_buf(), wa.exports.get_material_buf_size());
+
   /*
   createScene();
-  createBvh();
+  //createBvh();
 
-  await createGpuResources(bvhNodes.length, objects.length, shapes.length, materials.length);
+  await createGpuResources(0, objects.length, shapes.length, materials.length);
+
+  //device.queue.writeBuffer(bvhNodesBuffer, 0, new Float32Array([...bvhNodes]));
+  device.queue.writeBuffer(objectsBuffer, 0, new Uint32Array([...objects]));
+  device.queue.writeBuffer(shapesBuffer, 0, new Float32Array([...shapes]));
+  device.queue.writeBuffer(materialsBuffer, 0, new Float32Array([...materials]));
+  */
+
   copyCanvasData();
-  copySceneData();
-
+  
   resetView();
   updateView();
 
@@ -1006,7 +1007,6 @@ async function main()
     document.querySelector("button").addEventListener("click", startRender);
   else
     startRender();
-  */
 }
 
 main();
