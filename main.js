@@ -507,22 +507,22 @@ async function createGpuResources(
   });
 
   /*bvhNodesBuffer = device.createBuffer({
-    size: bvhNodesSize * 4,
+    size: bvhNodesSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });*/
 
   objectsBuffer = device.createBuffer({
-    size: objectsSize * 4,
+    size: objectsSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   shapesBuffer = device.createBuffer({
-    size: shapesSize * 4,
+    size: shapesSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   materialsBuffer = device.createBuffer({
-    size: materialsSize * 4,
+    size: materialsSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -931,13 +931,13 @@ function Wasm(module)
   {
     const res = await WebAssembly.instantiate(module, { env: this.environment });
 
-    this.exports = res.instance.exports;
+    Object.assign(this, res.instance.exports);
 
-    this.memUint8 = new Uint8Array(this.exports.memory.buffer);
-    //this.memUint32 = new Uint32Array(this.exports.memory.buffer);
-    //this.memFloat32 = new Float32Array(this.exports.memory.buffer);
+    this.memUint8 = new Uint8Array(this.memory.buffer);
+    //this.memUint32 = new Uint32Array(this.memory.buffer);
+    //this.memFloat32 = new Float32Array(this.memory.buffer);
     
-    console.log(`Available memory in wasm module: ${(this.exports.memory.buffer.byteLength / (1024 * 1024)).toFixed(2)} MiB`);
+    console.log(`Available memory in wasm module: ${(this.memory.buffer.byteLength / (1024 * 1024)).toFixed(2)} MiB`);
   }
 }
 
@@ -961,24 +961,21 @@ async function main()
   let wa = new Wasm(module);
   await wa.instantiate();
 
-  wa.exports.init();
+  wa.init();
 
-  console.log(`Object lines: ${wa.exports.get_object_line_count()}, Shape lines: ${wa.exports.get_shape_line_count()}, Material lines: ${wa.exports.get_material_line_count()}`);
+  console.log(`Object lines: ${wa.get_object_line_count()}, Shape lines: ${wa.get_shape_line_count()}, Material lines: ${wa.get_material_line_count()}`);
 
-  await createGpuResources(0,
-    wa.exports.get_object_line_count() * OBJECT_LINE_SIZE,
-    wa.exports.get_shape_line_count() * SHAPE_LINE_SIZE,
-    wa.exports.get_material_line_count() * MATERIAL_LINE_SIZE);
+  await createGpuResources(0, wa.get_object_buf_size(), wa.get_shape_buf_size(), wa.get_material_buf_size());
  
-  device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.exports.get_object_buf(), wa.exports.get_object_buf_size()); 
-  device.queue.writeBuffer(shapesBuffer, 0, wa.memUint8, wa.exports.get_shape_buf(), wa.exports.get_shape_buf_size());
-  device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.exports.get_material_buf(), wa.exports.get_material_buf_size());
+  device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.get_object_buf(), wa.get_object_buf_size()); 
+  device.queue.writeBuffer(shapesBuffer, 0, wa.memUint8, wa.get_shape_buf(), wa.get_shape_buf_size());
+  device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.get_material_buf(), wa.get_material_buf_size());
 
   /*
   createScene();
   //createBvh();
 
-  await createGpuResources(0, objects.length, shapes.length, materials.length);
+  await createGpuResources(0, objects.length * 4, shapes.length * 4, materials.length * 4);
 
   //device.queue.writeBuffer(bvhNodesBuffer, 0, new Float32Array([...bvhNodes]));
   device.queue.writeBuffer(objectsBuffer, 0, new Uint32Array([...objects]));
