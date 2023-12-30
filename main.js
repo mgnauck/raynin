@@ -958,7 +958,7 @@ async function main()
   //*
   wa.init();
 
-  console.log(`Object lines: ${wa.get_object_line_count()}, Shape lines: ${wa.get_shape_line_count()}, Material lines: ${wa.get_material_line_count()}`);
+  //console.log(`Object lines: ${wa.get_object_line_count()}, Shape lines: ${wa.get_shape_line_count()}, Material lines: ${wa.get_material_line_count()}`);
 
   await createGpuResources(0, wa.get_object_buf_size(), wa.get_shape_buf_size(), wa.get_material_buf_size());
  

@@ -5,6 +5,7 @@
 
 typedef struct bvh_node {
   vec3 min;
+  // obj start or node index
   uint32_t start_idx;
   vec3 max;
   uint32_t obj_cnt;
@@ -29,8 +30,7 @@ void bvh_subdivide_node(bvh *b, const scene *s, uint32_t node_idx)
 bvh *bvh_create(const scene *s)
 {
   bvh *b = malloc(sizeof(*b));
-  // TODO Alloc max node count
-  // b->nodes = malloc()
+  b->nodes = malloc((2 * s->object_line_count - 1) * sizeof(*b->nodes));
   b->node_cnt = 0;
  
   bvh_add_node(b, s, 0, s->object_line_count);
