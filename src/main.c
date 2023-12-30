@@ -45,7 +45,7 @@ scene *create_scene_quads()
         LAMBERT, add_lambert(s, create_lambert((vec3){{{ 0.2f, 1.0f, 0.2f }}}))));
   add_object(s, create_object(
         QUAD, add_quad(s, create_quad((vec3){{{ 3.0f, -2.0f, 1.0f }}}, (vec3){{{ 0.0f, 0.0f, 4.0f }}}, (vec3){{{ 0.0f, 4.0f, 0.0f }}})),
-        LAMBERT, add_lambert(s, create_lambert((vec3){{{ 0.2f, 2.0f, 1.0f }}}))));
+        LAMBERT, add_lambert(s, create_lambert((vec3){{{ 0.2f, 0.2f, 1.0f }}}))));
   add_object(s, create_object(
         QUAD, add_quad(s, create_quad((vec3){{{ -2.0f, 3.0f, 1.0f }}}, (vec3){{{ 4.0f, 0.0f, 0.0f }}}, (vec3){{{ 0.0f, 0.0f, 4.0f }}})),
         LAMBERT, add_lambert(s, create_lambert((vec3){{{ 1.0f, 0.5f, 0.0f }}}))));
