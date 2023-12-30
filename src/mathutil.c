@@ -15,7 +15,7 @@ float floorf(float v)
 }
 
 // https://www.pcg-random.org
-uint32_t pcg32_random_r(pcg32_random_t* rng)
+uint32_t pcg32_random_r(pcg32_random_t *rng)
 {
   uint64_t oldstate = rng->state;
   rng->state = oldstate * 6364136223846793005ULL + rng->inc;
@@ -47,4 +47,9 @@ float randf()
 {
   // ldexp(rand(), -32);
   return rand() / (double)UINT32_MAX;
+}
+
+float randf_rng(float start, float end)
+{
+  return start + randf() * (end - start);
 }

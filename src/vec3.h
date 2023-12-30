@@ -8,8 +8,8 @@ typedef struct vec3 {
   };
 } vec3;
 
-vec3 vec3_rnd();
-vec3 vec3_rnd_rng(float min, float max);
+vec3 vec3_rand();
+vec3 vec3_rand_rng(float min, float max);
 
 vec3 vec3_add(vec3 a, vec3 b);
 vec3 vec3_sub(vec3 a, vec3 b);

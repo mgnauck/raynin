@@ -80,7 +80,7 @@ uint32_t add_sphere(scene *scene, sphere shape)
 }
 
 uint32_t add_quad(scene *scene, quad shape)
-{  
+{
   memcpy(&scene->shape_buf[scene->shape_line_count * SHAPE_LINE_SIZE], &shape, sizeof(quad));
   
   size_t ofs = scene->shape_line_count;

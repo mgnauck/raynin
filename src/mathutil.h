@@ -24,5 +24,6 @@ void srand(uint64_t seed, uint64_t seq);
 uint32_t rand(void);
 
 float randf(void);
+float randf_rng(float start, float end);
 
 #endif

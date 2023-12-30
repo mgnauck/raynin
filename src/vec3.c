@@ -1,12 +1,12 @@
 #include "vec3.h"
 #include "mathutil.h"
 
-vec3 vec3_rnd()
+vec3 vec3_rand()
 {
   return (vec3){ .x = randf(), .y = randf(), .z = randf() };
 }
 
-vec3 vec3_rnd_rng(float start, float end)
+vec3 vec3_rand_rng(float start, float end)
 {
   float d = end - start;
   return (vec3){ .x = start + randf() * d, .y = start + randf() * d, .z = start + randf() * d };

@@ -3,8 +3,8 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-const ACTIVE_SCENE = "SPHERES";
-//const ACTIVE_SCENE = "QUADS";
+//const ACTIVE_SCENE = "SPHERES";
+const ACTIVE_SCENE = "QUADS";
 //const ACTIVE_SCENE = "RIOW";
 
 const MAX_RECURSION = 5;
@@ -169,7 +169,7 @@ function vec3FromArr(arr, index)
 {
   return arr.slice(index, index + 3);
 }
-/*
+
 function addObject(shapeType, shapeOfs, matType, matOfs)
 {
   objects.push(shapeType);
@@ -216,7 +216,7 @@ function addGlass(albedo, refractionIndex)
   materials.push(refractionIndex);
   return materials.length / MATERIAL_LINE_SIZE - 1;
 }
-*/
+
 function getObjCenter(objIndex)
 {
   let objOfs = objIndex * OBJECT_LINE_SIZE;
@@ -607,12 +607,6 @@ async function createPipelines()
     shaderModule, pipelineLayout, "vertexMain", "fragmentMain");
 }
 
-function copyCanvasData()
-{
-  device.queue.writeBuffer(globalsBuffer, 0, new Uint32Array([
-    CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_RECURSION]));
-}
-
 function copyViewData()
 {
   device.queue.writeBuffer(globalsBuffer, 8 * 4, new Float32Array([
@@ -854,7 +848,7 @@ async function startRender()
   requestAnimationFrame(render);
 }
 
-/*function createScene()
+function createScene()
 {
   if(ACTIVE_SCENE == "SPHERES") {
     addObject(SHAPE_TYPE_SPHERE, addSphere([0, -100.5, 0], 100), MAT_TYPE_LAMBERT, addLambert([0.5, 0.5, 0.5]));
@@ -907,7 +901,7 @@ async function startRender()
   }
 
   console.log("Object count: " + objects.length / OBJECT_LINE_SIZE);
-}*/
+}
 
 function Wasm(module)
 {
@@ -961,6 +955,7 @@ async function main()
   let wa = new Wasm(module);
   await wa.instantiate();
 
+  //*
   wa.init();
 
   console.log(`Object lines: ${wa.get_object_line_count()}, Shape lines: ${wa.get_shape_line_count()}, Material lines: ${wa.get_material_line_count()}`);
@@ -970,8 +965,9 @@ async function main()
   device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.get_object_buf(), wa.get_object_buf_size()); 
   device.queue.writeBuffer(shapesBuffer, 0, wa.memUint8, wa.get_shape_buf(), wa.get_shape_buf_size());
   device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.get_material_buf(), wa.get_material_buf_size());
+  //*/
 
-  /*
+  /* 
   createScene();
   //createBvh();
 
@@ -981,10 +977,11 @@ async function main()
   device.queue.writeBuffer(objectsBuffer, 0, new Uint32Array([...objects]));
   device.queue.writeBuffer(shapesBuffer, 0, new Float32Array([...shapes]));
   device.queue.writeBuffer(materialsBuffer, 0, new Float32Array([...materials]));
-  */
+  //*/
 
-  copyCanvasData();
-  
+  device.queue.writeBuffer(globalsBuffer, 0, new Uint32Array([
+    CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_RECURSION]));
+
   resetView();
   updateView();
 
