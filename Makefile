@@ -1,5 +1,5 @@
 OUTDIR=output
-SRC=main.c util.c mathutil.c printf.c log.c vec3.c aabb.c scene.c bvh.c
+SRC=main.c util.c mutil.c printf.c log.c vec3.c aabb.c scn.c bvh.c obj.c shape.c mat.c
 OBJ=$(patsubst %.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=visual.wgsl

@@ -1,4 +1,4 @@
-#include "mathutil.h"
+#include "mutil.h"
 #include <stdint.h>
 
 typedef struct pcg_state_setseq_64 {

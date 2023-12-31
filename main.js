@@ -958,13 +958,11 @@ async function main()
   //*
   wa.init();
 
-  //console.log(`Object lines: ${wa.get_object_line_count()}, Shape lines: ${wa.get_shape_line_count()}, Material lines: ${wa.get_material_line_count()}`);
-
-  await createGpuResources(0, wa.get_object_buf_size(), wa.get_shape_buf_size(), wa.get_material_buf_size());
+  await createGpuResources(0, wa.get_obj_buf_size(), wa.get_shape_buf_size(), wa.get_mat_buf_size());
  
-  device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.get_object_buf(), wa.get_object_buf_size()); 
+  device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.get_obj_buf(), wa.get_obj_buf_size()); 
   device.queue.writeBuffer(shapesBuffer, 0, wa.memUint8, wa.get_shape_buf(), wa.get_shape_buf_size());
-  device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.get_material_buf(), wa.get_material_buf_size());
+  device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.get_mat_buf(), wa.get_mat_buf_size());
   //*/
 
   /* 

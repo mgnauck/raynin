@@ -1,5 +1,5 @@
 #include "vec3.h"
-#include "mathutil.h"
+#include "mutil.h"
 
 vec3 vec3_rand()
 {

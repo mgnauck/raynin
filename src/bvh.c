@@ -1,21 +1,20 @@
 #include "bvh.h"
 #include <stdint.h>
-#include "scene.h"
+#include "scn.h"
 #include "aabb.h"
 
 typedef struct bvh_node {
-  vec3 min;
-  // obj start or node index
-  uint32_t start_idx;
-  vec3 max;
-  uint32_t obj_cnt;
+  vec3      min;
+  uint32_t  start_idx; // obj start or node index
+  vec3      max;
+  uint32_t  obj_cnt;
 } bvh_node;
 
-void bvh_add_node(bvh *b, const scene *s, int32_t start_idx, size_t obj_cnt)
+void bvh_add_node(bvh *b, const scn *s, int32_t start_idx, size_t obj_cnt)
 {
   aabb node_aabb = aabb_init();
   for(size_t i=0; i<obj_cnt; i++) {
-    aabb obj_aabb = obj_get_aabb(s, start_idx + i); // TODO
+    aabb obj_aabb = aabb_init(); //obj_get_aabb(s, start_idx + i);
     node_aabb = aabb_combine(node_aabb, obj_aabb);
   }
 
@@ -23,17 +22,17 @@ void bvh_add_node(bvh *b, const scene *s, int32_t start_idx, size_t obj_cnt)
   memcpy(&b->nodes[b->node_cnt++], &n, sizeof(n));
 }
 
-void bvh_subdivide_node(bvh *b, const scene *s, uint32_t node_idx)
+void bvh_subdivide_node(bvh *b, const scn *s, uint32_t node_idx)
 {
 }
 
-bvh *bvh_create(const scene *s)
+bvh *bvh_create(const scn *s)
 {
   bvh *b = malloc(sizeof(*b));
-  b->nodes = malloc((2 * s->object_line_count - 1) * sizeof(*b->nodes));
+  b->nodes = malloc((2 * s->obj_idx - 1) * sizeof(*b->nodes));
   b->node_cnt = 0;
  
-  bvh_add_node(b, s, 0, s->object_line_count);
+  bvh_add_node(b, s, 0, s->obj_idx);
   bvh_subdivide_node(b, s, 0);
 
   return b;

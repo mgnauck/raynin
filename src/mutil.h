@@ -1,5 +1,5 @@
-#ifndef MATHUTIL_H
-#define MATHUTIL_H
+#ifndef MUTIL_H
+#define MUTIL_H
 
 #include <stdint.h>
 
