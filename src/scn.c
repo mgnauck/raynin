@@ -120,13 +120,29 @@ aabb scn_get_obj_aabb(const scn *s, uint32_t obj_idx)
   obj *o = scn_get_obj(s, obj_idx);
   switch(o->shape_type) {
     case SPHERE:
-      return sphere_aabb(scn_get_sphere(s, o->shape_idx));
+      return sphere_get_aabb(scn_get_sphere(s, o->shape_idx));
       break;
-    case QUAD: 
-      return quad_aabb(scn_get_quad(s, o->shape_idx));
+    case QUAD:
+      return quad_get_aabb(scn_get_quad(s, o->shape_idx));
       break;
     default:
       // Unknown or unsupported shape
       return aabb_init();
+  }
+}
+
+vec3 scn_get_obj_center(const scn *s, uint32_t obj_idx)
+{
+  obj *o = scn_get_obj(s, obj_idx);
+  switch(o->shape_type) {
+    case SPHERE:
+      return scn_get_sphere(s, o->shape_idx)->center;
+      break;
+    case QUAD:
+      return quad_get_center(scn_get_quad(s, o->shape_idx));
+      break;
+    default:
+      // Unknown or unsupported shape
+      return (vec3){{{ 0.0f, 0.0f, 0.0f }}};
   }
 }

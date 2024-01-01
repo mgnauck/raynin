@@ -41,5 +41,6 @@ metal     *scn_get_metal(const scn *s, uint32_t idx);
 glass     *scn_get_glass(const scn *s, uint32_t idx);
 
 aabb      scn_get_obj_aabb(const scn *s, uint32_t obj_idx);
+vec3      scn_get_obj_center(const scn *s, uint32_t obj_idx);
 
 #endif

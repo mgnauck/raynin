@@ -21,7 +21,8 @@ typedef struct quad {
 sphere    sphere_create(vec3 center, float radius);
 quad      quad_create(vec3 q, vec3 u, vec3 v);
 
-aabb      sphere_aabb(const sphere *s);
-aabb      quad_aabb(const quad *q);
+aabb      sphere_get_aabb(const sphere *s);
+aabb      quad_get_aabb(const quad *q);
+vec3      quad_get_center(const quad *q);
 
 #endif
