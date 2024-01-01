@@ -218,32 +218,25 @@ size_t get_bvh_node_buf_size()
 __attribute__((visibility("default")))
 void init(void)
 {
-  log("init()");
-
   srand(42u, 54u);
 
-  curr_scn = create_scn_spheres();
+  //curr_scn = create_scn_spheres();
   //curr_scn = create_scn_quads();
-  //curr_scn = create_scn_riow();
+  curr_scn = create_scn_riow();
 
-  log("obj idx: %d, shape idx: %d, mat idx: %d",
-      curr_scn->obj_idx,
-      curr_scn->shape_idx,
-      curr_scn->mat_idx);
+  log("obj: %d, shape: %d, mat: %d",
+      curr_scn->obj_idx, curr_scn->shape_idx, curr_scn->mat_idx);
 
   double t = get_time();
   curr_bvh = bvh_create(curr_scn);
   t = get_time() - t;
 
-  log("bvh creation took: %6.3f ms", t);
-  log("bvh node cnt: %d", curr_bvh->node_cnt);
+  log("bvh create: %2.3f ms, node cnt: %d", t, curr_bvh->node_cnt);
 }
 
 __attribute__((visibility("default")))
 void release(void)
 {
-  log("release()");
-
   bvh_release(curr_bvh);
   scn_release(curr_scn);
 }

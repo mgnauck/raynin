@@ -43,7 +43,7 @@ split find_best_cost_interval_split(const scn *s, bvh_node *n)
     for(size_t i=0; i<n->obj_cnt; i++) {
       vec3 center = scn_get_obj_center(s, n->start_idx + i);
       uint32_t int_idx =
-        (uint32_t)min(INTERVAL_CNT - 1, (center.v[axis] - minc) / delta);
+        (uint32_t)min(INTERVAL_CNT - 1, (center.v[axis] - minc) * delta);
       intervals[int_idx].aabb = aabb_combine(
           intervals[int_idx].aabb, scn_get_obj_aabb(s, n->start_idx + i));
       intervals[int_idx].cnt++;
@@ -72,7 +72,7 @@ split find_best_cost_interval_split(const scn *s, bvh_node *n)
     }
 
     // Find best surface area cost for prepared interval planes
-    delta = (maxc - minc) / (float)INTERVAL_CNT;
+    delta = 1.0f / delta;
     for(size_t i=0; i<INTERVAL_CNT - 1; i++) {
       float cost = cnts_l[i] * areas_l[i] + cnts_r[i] * areas_r[i];
       if(cost < best.cost) {
@@ -91,22 +91,21 @@ bvh_node *bvh_add_node(bvh *b, const scn *s, int32_t start_idx, size_t obj_cnt)
   aabb node_aabb = aabb_init();
   for(size_t i=0; i<obj_cnt; i++) {
     aabb obj_aabb = scn_get_obj_aabb(s, start_idx + i);
-    log("obj aabb: %f, %f, %f / %f, %f, %f",
+    /*log("obj aabb: %f, %f, %f / %f, %f, %f",
         obj_aabb.min.x, obj_aabb.min.y, obj_aabb.min.z,
-        obj_aabb.max.x, obj_aabb.max.y, obj_aabb.max.z);
+        obj_aabb.max.x, obj_aabb.max.y, obj_aabb.max.z);*/
     node_aabb = aabb_combine(node_aabb, obj_aabb);
   }
 
-  log("node aabb: %f, %f, %f / %f, %f, %f",
+  /*log("node aabb: %f, %f, %f / %f, %f, %f",
       node_aabb.min.x, node_aabb.min.y, node_aabb.min.z,
       node_aabb.max.x, node_aabb.max.y, node_aabb.max.z);
   log("start_idx: %d, obj_cnt: %d", start_idx, obj_cnt);
-  log("---");
- 
+  log("---");*/
+
   return memcpy(&b->node_buf[b->node_cnt++],
       &(bvh_node){ node_aabb.min, start_idx, node_aabb.max, obj_cnt },
       sizeof(bvh_node));
-  //return &b->node_buf[b->node_cnt - 1];
 }
 
 void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
@@ -114,7 +113,7 @@ void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
   // Calculate if we need to split or not
   split split = find_best_cost_interval_split(s, n);
   float no_split_cost = n->obj_cnt * aabb_calc_area((aabb){ n->min, n->max });
-  if(no_split_cost < split.cost)
+  if(no_split_cost <= split.cost)
     return;
 
   // Partition object data into left and right of split pos
@@ -142,12 +141,12 @@ void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
 
   uint32_t left_child_node_idx = b->node_cnt;
 
+  bvh_node *left_child = bvh_add_node(b, s, n->start_idx, left_obj_cnt);
+  bvh_node *right_child = bvh_add_node(b, s, l, n->obj_cnt - left_obj_cnt);
+
   // Current node is not a leaf. Set index of left child node.
   n->start_idx = left_child_node_idx;
   n->obj_cnt = 0;
-
-  bvh_node *left_child = bvh_add_node(b, s, n->start_idx, left_obj_cnt);
-  bvh_node *right_child = bvh_add_node(b, s, l, n->obj_cnt - left_obj_cnt);
 
   // Recurse
   bvh_subdivide_node(b, s, left_child);

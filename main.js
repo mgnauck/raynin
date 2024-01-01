@@ -3,9 +3,9 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-const ACTIVE_SCENE = "SPHERES";
+//const ACTIVE_SCENE = "SPHERES";
 //const ACTIVE_SCENE = "QUADS";
-//const ACTIVE_SCENE = "RIOW";
+const ACTIVE_SCENE = "RIOW";
 
 const MAX_RECURSION = 5;
 const SAMPLES_PER_PIXEL = 5;
@@ -385,9 +385,9 @@ function addBvhNode(objStartIndex, objCount)
   bvhNodes.push(...nodeAabb.max);
   bvhNodes.push(objCount);
 
-  //console.log("node min: " + nodeAabb.min + ", max: " + nodeAabb.max);
-  //console.log("objStartIndex: " + objStartIndex + ", objCount: " + objCount);
-  //console.log("---");
+  /*console.log("node min: " + nodeAabb.min + ", max: " + nodeAabb.max);
+  console.log("objStartIndex: " + objStartIndex + ", objCount: " + objCount);
+  console.log("---");*/
 }
 
 function subdivideBvhNode(nodeIndex)
@@ -398,7 +398,7 @@ function subdivideBvhNode(nodeIndex)
 
   // Calc split pos/axis with best cost and compare to no split cost
   let split = findBestCostIntervalSplit(objStartIndex, objCount, BVH_INTERVAL_COUNT);
-  let noSplitCost = bvhNodes[nodeOfs + 7] * calcAabbArea({
+  let noSplitCost = objCount * calcAabbArea({
     min: vec3FromArr(bvhNodes, nodeOfs), max: vec3FromArr(bvhNodes, nodeOfs + 4) });
   if(noSplitCost <= split.cost)
     return;
@@ -941,7 +941,6 @@ async function main()
   let wa = new Wasm(module);
   await wa.instantiate();
 
-  //*
   wa.init();
 
   await createGpuResources(wa.get_bvh_node_buf_size(), wa.get_obj_buf_size(), wa.get_shape_buf_size(), wa.get_mat_buf_size());
@@ -952,7 +951,7 @@ async function main()
   device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.get_mat_buf(), wa.get_mat_buf_size());
   //*/
 
-  /* 
+  /*
   createScene();
   createBvh();
 
