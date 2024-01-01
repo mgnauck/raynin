@@ -3,8 +3,8 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-//const ACTIVE_SCENE = "SPHERES";
-const ACTIVE_SCENE = "QUADS";
+const ACTIVE_SCENE = "SPHERES";
+//const ACTIVE_SCENE = "QUADS";
 //const ACTIVE_SCENE = "RIOW";
 
 const MAX_RECURSION = 5;
@@ -506,10 +506,10 @@ async function createGpuResources(
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  /*bvhNodesBuffer = device.createBuffer({
+  bvhNodesBuffer = device.createBuffer({
     size: bvhNodesSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });*/
+  });
 
   objectsBuffer = device.createBuffer({
     size: objectsSize,
@@ -541,22 +541,22 @@ async function createGpuResources(
       { binding: 0, 
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: {type: "uniform"} },
-      /*{ binding: 1, 
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "read-only-storage"} },*/
-      { binding: 1,
+      { binding: 1, 
         visibility: GPUShaderStage.COMPUTE,
         buffer: {type: "read-only-storage"} },
       { binding: 2,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "read-only-storage"}},
+        buffer: {type: "read-only-storage"} },
       { binding: 3,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {type: "read-only-storage"}},
       { binding: 4,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "storage"}},
+        buffer: {type: "read-only-storage"}},
       { binding: 5,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {type: "storage"}},
+      { binding: 6,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: {type: "storage"}}
     ]
@@ -566,12 +566,12 @@ async function createGpuResources(
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: globalsBuffer } },
-      //{ binding: 1, resource: { buffer: bvhNodesBuffer } },
-      { binding: 1, resource: { buffer: objectsBuffer } },
-      { binding: 2, resource: { buffer: shapesBuffer } },
-      { binding: 3, resource: { buffer: materialsBuffer } },
-      { binding: 4, resource: { buffer: accumulationBuffer } },
-      { binding: 5, resource: { buffer: imageBuffer } }
+      { binding: 1, resource: { buffer: bvhNodesBuffer } },
+      { binding: 2, resource: { buffer: objectsBuffer } },
+      { binding: 3, resource: { buffer: shapesBuffer } },
+      { binding: 4, resource: { buffer: materialsBuffer } },
+      { binding: 5, resource: { buffer: accumulationBuffer } },
+      { binding: 6, resource: { buffer: imageBuffer } }
     ]
   });
 
@@ -607,26 +607,6 @@ async function createPipelines()
     shaderModule, pipelineLayout, "vertexMain", "fragmentMain");
 }
 
-function copyViewData()
-{
-  device.queue.writeBuffer(globalsBuffer, 8 * 4, new Float32Array([
-    ...eye, vertFov,
-    ...right, focDist,
-    ...up, focAngle,
-    ...pixelDeltaX, 0 /* pad */,
-    ...pixelDeltaY, 0 /* pad */,
-    ...pixelTopLeft, 0 /* pad */]));
-}
-
-function copyFrameData(time)
-{
-  device.queue.writeBuffer(globalsBuffer, 4 * 4, new Float32Array(
-    [ rand(),
-      SAMPLES_PER_PIXEL / (gatheredSamples + SAMPLES_PER_PIXEL),
-      time, 
-      /* pad */ 0 ]));
-}
-
 let last;
 
 function render(time)
@@ -645,8 +625,12 @@ function render(time)
 
   update(time);
 
-  copyFrameData(time);
- 
+  device.queue.writeBuffer(globalsBuffer, 4 * 4, new Float32Array(
+    [ rand(),
+      SAMPLES_PER_PIXEL / (gatheredSamples + SAMPLES_PER_PIXEL),
+      time, 
+      /* pad */ 0 ]));
+
   let commandEncoder = device.createCommandEncoder();
   encodeComputePassAndSubmit(commandEncoder, computePipeline, bindGroup,
     Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
@@ -723,7 +707,14 @@ function updateView()
   pixelTopLeft = vec3Add(viewportTopLeft, 
     vec3Scale(vec3Add(pixelDeltaX, pixelDeltaY), 0.5)); 
 
-  copyViewData();
+  device.queue.writeBuffer(globalsBuffer, 8 * 4, new Float32Array([
+    ...eye, vertFov,
+    ...right, focDist,
+    ...up, focAngle,
+    ...pixelDeltaX, 0 /* pad */,
+    ...pixelDeltaY, 0 /* pad */,
+    ...pixelTopLeft, 0 /* pad */]));
+
   resetAccumulationBuffer();
 }
 
@@ -924,13 +915,8 @@ function Wasm(module)
   this.instantiate = async function()
   {
     const res = await WebAssembly.instantiate(module, { env: this.environment });
-
     Object.assign(this, res.instance.exports);
-
     this.memUint8 = new Uint8Array(this.memory.buffer);
-    //this.memUint32 = new Uint32Array(this.memory.buffer);
-    //this.memFloat32 = new Float32Array(this.memory.buffer);
-    
     console.log(`Available memory in wasm module: ${(this.memory.buffer.byteLength / (1024 * 1024)).toFixed(2)} MiB`);
   }
 }
@@ -958,8 +944,9 @@ async function main()
   //*
   wa.init();
 
-  await createGpuResources(0, wa.get_obj_buf_size(), wa.get_shape_buf_size(), wa.get_mat_buf_size());
+  await createGpuResources(wa.get_bvh_node_buf_size(), wa.get_obj_buf_size(), wa.get_shape_buf_size(), wa.get_mat_buf_size());
  
+  device.queue.writeBuffer(bvhNodesBuffer, 0, wa.memUint8, wa.get_bvh_node_buf(), wa.get_bvh_node_buf_size()); 
   device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.get_obj_buf(), wa.get_obj_buf_size()); 
   device.queue.writeBuffer(shapesBuffer, 0, wa.memUint8, wa.get_shape_buf(), wa.get_shape_buf_size());
   device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.get_mat_buf(), wa.get_mat_buf_size());
@@ -967,9 +954,9 @@ async function main()
 
   /* 
   createScene();
-  //createBvh();
+  createBvh();
 
-  await createGpuResources(0, objects.length * 4, shapes.length * 4, materials.length * 4);
+  await createGpuResources(bvhNodes.length * 4, objects.length * 4, shapes.length * 4, materials.length * 4);
 
   //device.queue.writeBuffer(bvhNodesBuffer, 0, new Float32Array([...bvhNodes]));
   device.queue.writeBuffer(objectsBuffer, 0, new Uint32Array([...objects]));

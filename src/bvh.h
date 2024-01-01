@@ -2,17 +2,25 @@
 #define BVH_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include "util.h"
 #include "vec3.h"
 
 typedef struct scn scn;
-typedef struct bvh_node bvh_node;
+
+typedef struct bvh_node {
+  vec3      min;
+  uint32_t  start_idx; // obj start or node index
+  vec3      max;
+  uint32_t  obj_cnt;
+} bvh_node;
 
 typedef struct bvh {
-  bvh_node  *nodes;
+  bvh_node  *node_buf;
   size_t    node_cnt;
 } bvh;
 
-bvh *bvh_create(const scn *s);
+bvh   *bvh_create(const scn *s);
+void  bvh_release(bvh *b);
 
 #endif

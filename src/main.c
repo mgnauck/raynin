@@ -3,7 +3,8 @@
 #include "scn.h"
 #include "bvh.h"
 
-scn *curr_scn = NULL;
+scn *curr_scn;
+bvh *curr_bvh;
 
 scn *create_scn_spheres()
 {
@@ -203,14 +204,26 @@ size_t get_mat_buf_size()
 }
 
 __attribute__((visibility("default")))
+void *get_bvh_node_buf()
+{
+  return curr_bvh->node_buf;
+}
+
+__attribute__((visibility("default")))
+size_t get_bvh_node_buf_size()
+{
+  return curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf);
+}
+
+__attribute__((visibility("default")))
 void init(void)
 {
   log("init()");
 
   srand(42u, 54u);
 
-  //curr_scn = create_scn_spheres();
-  curr_scn = create_scn_quads();
+  curr_scn = create_scn_spheres();
+  //curr_scn = create_scn_quads();
   //curr_scn = create_scn_riow();
 
   log("obj idx: %d, shape idx: %d, mat idx: %d",
@@ -218,7 +231,12 @@ void init(void)
       curr_scn->shape_idx,
       curr_scn->mat_idx);
 
-  bvh *b = bvh_create(curr_scn);
+  double t = get_time();
+  curr_bvh = bvh_create(curr_scn);
+  t = get_time() - t;
+
+  log("bvh creation took: %6.3f ms", t);
+  log("bvh node cnt: %d", curr_bvh->node_cnt);
 }
 
 __attribute__((visibility("default")))
@@ -226,6 +244,6 @@ void release(void)
 {
   log("release()");
 
-  //bvh_release(curr_scn->bvh);
+  bvh_release(curr_bvh);
   scn_release(curr_scn);
 }
