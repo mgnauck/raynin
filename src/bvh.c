@@ -41,9 +41,8 @@ bvh_node *bvh_add_node(bvh *b, const scn *s, int32_t start_idx, size_t obj_cnt)
   log("---");
 
   bvh_node n = { node_aabb.min, start_idx, node_aabb.max, obj_cnt };
-  memcpy(&b->node_buf[b->node_cnt++], &n, sizeof(n));
-
-  return &b->node_buf[b->node_cnt - 1];
+  return memcpy(&b->node_buf[b->node_cnt++], &n, sizeof(n));
+  //return &b->node_buf[b->node_cnt - 1];
 }
 
 void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
