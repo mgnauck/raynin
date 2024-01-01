@@ -85,32 +85,48 @@ uint32_t scn_add_glass(scn *s, glass mat)
   return idx;
 }
 
-obj *scn_get_obj(scn *s, uint32_t idx)
+obj *scn_get_obj(const scn *s, uint32_t idx)
 {
   return (obj *)&s->obj_buf[idx * BUF_LINE_SIZE];
 }
 
-sphere *scn_get_sphere(scn *s, uint32_t idx)
+sphere *scn_get_sphere(const scn *s, uint32_t idx)
 {
   return (sphere *)&s->shape_buf[idx * BUF_LINE_SIZE];
 }
 
-quad *scn_get_quad(scn* s, uint32_t idx)
+quad *scn_get_quad(const scn* s, uint32_t idx)
 {
   return (quad *)&s->shape_buf[idx * BUF_LINE_SIZE];
 }
 
-lambert *scn_get_lambert(scn *s, uint32_t idx)
+lambert *scn_get_lambert(const scn *s, uint32_t idx)
 {
   return (lambert *)&s->mat_buf[idx * BUF_LINE_SIZE];
 }
 
-metal *scn_get_metal(scn *s, uint32_t idx)
+metal *scn_get_metal(const scn *s, uint32_t idx)
 {
   return (metal *)&s->mat_buf[idx * BUF_LINE_SIZE];
 }
 
-glass *scn_get_glass(scn *s, uint32_t idx)
+glass *scn_get_glass(const scn *s, uint32_t idx)
 {
   return (glass *)&s->mat_buf[idx * BUF_LINE_SIZE];
+}
+
+aabb scn_get_obj_aabb(const scn *s, uint32_t obj_idx)
+{
+  obj *o = scn_get_obj(s, obj_idx);
+  switch(o->shape_type) {
+    case SPHERE:
+      return sphere_aabb(scn_get_sphere(s, o->shape_idx));
+      break;
+    case QUAD: 
+      return quad_aabb(scn_get_quad(s, o->shape_idx));
+      break;
+    default:
+      // Unknown or unsupported shape
+      return aabb_init();
+  }
 }

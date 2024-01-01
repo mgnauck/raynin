@@ -18,8 +18,8 @@ typedef struct glass {
   float refr_idx;
 } glass;
 
-lambert   mat_create_lambert(vec3 albedo);
-metal     mat_create_metal(vec3 albedo, float fuzz_radius);
-glass     mat_create_glass(vec3 albedo, float refr_idx);
+lambert   lambert_create(vec3 albedo);
+metal     metal_create(vec3 albedo, float fuzz_radius);
+glass     glass_create(vec3 albedo, float refr_idx);
 
 #endif

@@ -2,6 +2,7 @@
 #define SHAPE_H
 
 #include "vec3.h"
+#include "aabb.h"
 
 typedef struct sphere {
   vec3  center;
@@ -17,7 +18,10 @@ typedef struct quad {
   float pad2;
 } quad;
 
-sphere    shape_create_sphere(vec3 center, float radius);
-quad      shape_create_quad(vec3 q, vec3 u, vec3 v);
+sphere    sphere_create(vec3 center, float radius);
+quad      quad_create(vec3 q, vec3 u, vec3 v);
+
+aabb      sphere_aabb(const sphere *s);
+aabb      quad_aabb(const quad *q);
 
 #endif

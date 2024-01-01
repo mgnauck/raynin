@@ -23,17 +23,23 @@ scn       *scn_init(size_t obj_buf_capacity, size_t shape_buf_capacity, size_t m
 void      scn_release(scn *s);
 
 uint32_t  scn_add_obj(scn *s, obj o); 
+
 uint32_t  scn_add_sphere(scn *s, sphere shape);
 uint32_t  scn_add_quad(scn *s, quad shape);
+
 uint32_t  scn_add_lambert(scn *s, lambert mat);
 uint32_t  scn_add_metal(scn *s, metal mat);
 uint32_t  scn_add_glass(scn *s, glass mat);
 
-obj       *scn_get_obj(scn *s, uint32_t idx);
-sphere    *scn_get_sphere(scn *s, uint32_t idx);
-quad      *scn_get_quad(scn *s, uint32_t idx);
-lambert   *scn_get_lambert(scn *s, uint32_t idx);
-metal     *scn_get_metal(scn *s, uint32_t idx);
-glass     *scn_get_glass(scn *s, uint32_t idx);
+obj       *scn_get_obj(const scn *s, uint32_t idx);
+
+sphere    *scn_get_sphere(const scn *s, uint32_t idx);
+quad      *scn_get_quad(const scn *s, uint32_t idx);
+
+lambert   *scn_get_lambert(const scn *s, uint32_t idx);
+metal     *scn_get_metal(const scn *s, uint32_t idx);
+glass     *scn_get_glass(const scn *s, uint32_t idx);
+
+aabb      scn_get_obj_aabb(const scn *s, uint32_t obj_idx);
 
 #endif
