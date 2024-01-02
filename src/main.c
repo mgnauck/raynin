@@ -2,10 +2,14 @@
 #include "mutil.h"
 #include "scn.h"
 #include "bvh.h"
+#include "cam.h"
+#include "view.h"
 #include "log.h"
 
-scn *curr_scn;
-bvh *curr_bvh;
+scn   *curr_scn;
+bvh   *curr_bvh;
+cam   curr_cam;
+view  curr_view;
 
 scn *create_scn_spheres()
 {

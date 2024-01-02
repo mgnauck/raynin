@@ -3,42 +3,9 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-//const ACTIVE_SCENE = "SPHERES";
-//const ACTIVE_SCENE = "QUADS";
-const ACTIVE_SCENE = "RIOW";
-
 const MAX_RECURSION = 5;
 const SAMPLES_PER_PIXEL = 5;
 const TEMPORAL_WEIGHT = 0.1;
-
-const BVH_INTERVAL_COUNT = 8;
-
-const MOVE_VELOCITY = 0.1;
-const LOOK_VELOCITY = 0.015;
-
-// Size of a bvh node
-// aabb min ext, (object/node) start index, aabb max ext, object count
-const BVH_NODE_SIZE = 8;
-
-// Size of a line of object data (4x uint32)
-// shapeType, shapeOfs, matType, matOfs
-const OBJECT_LINE_SIZE = 4;
-
-// Size of a line of shape data (= vec4f)
-const SHAPE_LINE_SIZE = 4;
-
-// Size of a line of material data (= vec4f)
-const MATERIAL_LINE_SIZE = 4;
-
-const SHAPE_TYPE_SPHERE = 1;
-const SHAPE_TYPE_BOX = 2;
-const SHAPE_TYPE_CYLINDER = 3;
-const SHAPE_TYPE_QUAD = 4;
-const SHAPE_TYPE_MESH = 5;
-
-const MAT_TYPE_LAMBERT = 1;
-const MAT_TYPE_METAL = 2;
-const MAT_TYPE_GLASS = 3;
 
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
@@ -60,6 +27,13 @@ let computePipeline;
 let renderPipeline;
 let renderPassDescriptor;
 
+//const ACTIVE_SCENE = "SPHERES";
+//const ACTIVE_SCENE = "QUADS";
+const ACTIVE_SCENE = "RIOW";
+
+const MOVE_VELOCITY = 0.1;
+const LOOK_VELOCITY = 0.015;
+
 let startTime;
 let gatheredSamples;
 
@@ -67,11 +41,6 @@ let phi, theta;
 let eye, right, up, fwd;
 let vertFov, focDist, focAngle;
 let pixelDeltaX, pixelDeltaY, pixelTopLeft;
-
-let bvhNodes = [];
-let objects = [];
-let shapes = [];
-let materials = [];
 
 let orbitCam = false;
 
@@ -155,300 +124,6 @@ function vec3FromSpherical(theta, phi)
     Math.sin(phi) * Math.sin(theta)];
 }
 
-function vec3Min(a, b)
-{
-  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])];
-}
-
-function vec3Max(a, b)
-{
-  return [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])];
-}
-
-function vec3FromArr(arr, index)
-{
-  return arr.slice(index, index + 3);
-}
-
-function addObject(shapeType, shapeOfs, matType, matOfs)
-{
-  objects.push(shapeType);
-  objects.push(shapeOfs);
-  objects.push(matType);
-  objects.push(matOfs);
-}
-
-function addSphere(center, radius)
-{
-  shapes.push(...center);
-  shapes.push(radius);
-  return shapes.length / SHAPE_LINE_SIZE - 1
-}
-
-function addQuad(q, u, v)
-{
-  shapes.push(...q);
-  shapes.push(0); // pad
-  shapes.push(...u);
-  shapes.push(0); // pad
-  shapes.push(...v);
-  shapes.push(0); // pad
-  return shapes.length / SHAPE_LINE_SIZE - 3
-}
-
-function addLambert(albedo)
-{
-  materials.push(...albedo);
-  materials.push(0); // pad to have full mat line
-  return materials.length / MATERIAL_LINE_SIZE - 1;
-}
-
-function addMetal(albedo, fuzzRadius)
-{
-  materials.push(...albedo);
-  materials.push(fuzzRadius);
-  return materials.length / MATERIAL_LINE_SIZE - 1;
-}
-
-function addGlass(albedo, refractionIndex)
-{
-  materials.push(...albedo);
-  materials.push(refractionIndex);
-  return materials.length / MATERIAL_LINE_SIZE - 1;
-}
-
-function getObjCenter(objIndex)
-{
-  let objOfs = objIndex * OBJECT_LINE_SIZE;
-  switch(objects[objOfs]) {
-    case SHAPE_TYPE_SPHERE: {
-      return vec3FromArr(shapes, objects[objOfs + 1] * SHAPE_LINE_SIZE);
-    }
-    case SHAPE_TYPE_QUAD: {
-      let shapeOfs = objects[objOfs + 1];
-      let q = vec3FromArr(shapes, shapeOfs * SHAPE_LINE_SIZE);
-      let u = vec3FromArr(shapes, (shapeOfs + 1) * SHAPE_LINE_SIZE);
-      let v = vec3FromArr(shapes, (shapeOfs + 2) * SHAPE_LINE_SIZE);
-      return vec3Add(vec3Add(q, vec3Scale(u, 0.5)), vec3Scale(v, 0.5));
-    }
-    default:
-      alert("Unknown shape type while retrieving object center");
-  }
-  return undefined;
-}
-
-function getObjAabb(objIndex)
-{
-  let objOfs = objIndex * OBJECT_LINE_SIZE;
-  switch(objects[objOfs]) {
-    case SHAPE_TYPE_SPHERE: {
-      let shapeOfs = objects[objOfs + 1] * SHAPE_LINE_SIZE; 
-      let center = vec3FromArr(shapes, shapeOfs);
-      let radius = shapes[shapeOfs + 3];
-      return { 
-        min: vec3Add(center, [-radius, -radius, -radius]),
-        max: vec3Add(center, [radius, radius, radius]) };
-    }
-    case SHAPE_TYPE_QUAD: {
-      let shapeOfs = objects[objOfs + 1];
-      let q = vec3FromArr(shapes, shapeOfs * SHAPE_LINE_SIZE);
-      let u = vec3FromArr(shapes, (shapeOfs + 1) * SHAPE_LINE_SIZE);
-      let v = vec3FromArr(shapes, (shapeOfs + 2) * SHAPE_LINE_SIZE);
-      let aabb = initAabb();
-      growAabb(aabb, q);
-      growAabb(aabb, vec3Add(vec3Add(q, u), v));
-      padAabb(aabb);
-      return aabb;
-    }
-    default:
-      alert("Unknown shape type while retrieving object center");
-  }
-  return undefined;
-}
-
-function initAabb()
-{
-  return {
-    min: [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY],
-    max: [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY] };
-}
-
-function combineAabbs(a, b)
-{
-  return { min: vec3Min(a.min, b.min), max: vec3Max(a.max, b.max) };
-}
-
-function growAabb(aabb, v)
-{
-  aabb.min = vec3Min(aabb.min, v);
-  aabb.max = vec3Max(aabb.max, v);
-}
-
-function padAabb(aabb)
-{
-  for(let i=0; i<3; i++) {
-    if(Math.abs(aabb.max[i] - aabb.min[i]) < Number.EPSILON) {
-      aabb.min[i] -= Number.EPSILON * 0.5;
-      aabb.max[i] += Number.EPSILON * 0.5;
-    }
-  }
-}
-
-function calcAabbArea(aabb)
-{
-  let d = vec3Add(aabb.max, vec3Negate(aabb.min));
-  return d[0] * d[1] + d[1] * d[2] + d[2] * d[0];
-}
-
-function calcCenterBounds(objStartIndex, objCount, axis)
-{
-  let min = Number.POSITIVE_INFINITY, max = Number.NEGATIVE_INFINITY;
-  for(let i=0; i<objCount; i++) {
-    let center = getObjCenter(objStartIndex + i)[axis];
-    min = Math.min(min, center);
-    max = Math.max(max, center);
-  }
-  return { min: min, max: max };
-}
-
-function findBestCostIntervalSplit(objStartIndex, objCount, intervalCount)
-{
-  let bestCost = Number.POSITIVE_INFINITY;
-  let bestPos, bestAxis;
-
-  for(let axis=0; axis<3; axis++) {
-    // Calculate bounds of object centers
-    let bounds = calcCenterBounds(objStartIndex, objCount, axis);
-    if(Math.abs(bounds.max - bounds.min) < Number.EPSILON)
-      continue;
-
-    // Initialize empty intervals
-    let intervals = [];
-    for(let i=0; i<intervalCount; i++)
-      intervals.push({ aabb: initAabb(), count: 0 });
-
-    // Count objects per interval and find their combined bounds
-    let delta = intervalCount / (bounds.max - bounds.min);
-    for(let i=0; i<objCount; i++) {
-      let center = getObjCenter(objStartIndex + i);
-      let intervalIndex = Math.min(intervalCount - 1, (center[axis] - bounds.min) * delta) >>> 0;
-      intervals[intervalIndex].aabb = combineAabbs(intervals[intervalIndex].aabb, getObjAabb(objStartIndex + i));
-      intervals[intervalIndex].count++;
-    }
-
-    // Calculate left/right area and count for each plane separating the intervals
-    let areasLeft = new Array(intervalCount - 1);
-    let areasRight = new Array(intervalCount - 1);
-    let countsLeft = new Array(intervalCount - 1);
-    let countsRight = new Array(intervalCount - 1);
-    let combinedAabbLeft = initAabb();
-    let combinedAabbRight = initAabb();
-    let combinedCountLeft = 0;
-    let combinedCountRight = 0;
-    for(let i=0; i<intervalCount - 1; i++) {
-      combinedCountLeft += intervals[i].count;
-      countsLeft[i] = combinedCountLeft;
-      combinedAabbLeft = combineAabbs(combinedAabbLeft, intervals[i].aabb);
-      areasLeft[i] = calcAabbArea(combinedAabbLeft);
-      combinedCountRight += intervals[intervalCount - 1 - i].count;
-      countsRight[intervalCount - 2 - i] = combinedCountRight;
-      combinedAabbRight = combineAabbs(combinedAabbRight, intervals[intervalCount - 1 - i].aabb);
-      areasRight[intervalCount - 2 - i] = calcAabbArea(combinedAabbRight);
-    }
-
-    // Find best surface area cost of the prepared interval planes
-    delta = (bounds.max - bounds.min) / intervalCount;
-    for(let i=0; i<intervalCount - 1; i++) {
-      let cost = countsLeft[i] * areasLeft[i] + countsRight[i] * areasRight[i];
-      if(cost < bestCost) {
-        bestCost = cost;
-        bestPos = bounds.min + (i + 1) * delta;
-        bestAxis = axis;
-      }
-    }
-  }
-
-  return { cost: bestCost, pos: bestPos, axis: bestAxis };
-}
-
-function addBvhNode(objStartIndex, objCount)
-{
-  let nodeAabb = initAabb(); 
-  for(let i=0; i<objCount; i++) {
-    let objAabb = getObjAabb(objStartIndex + i);
-    //console.log("obj min: " + objAabb.min + ", max: " + objAabb.max);
-    nodeAabb = combineAabbs(nodeAabb, objAabb);
-  }
-
-  bvhNodes.push(...nodeAabb.min);
-  bvhNodes.push(objStartIndex);
-  bvhNodes.push(...nodeAabb.max);
-  bvhNodes.push(objCount);
-
-  /*console.log("node min: " + nodeAabb.min + ", max: " + nodeAabb.max);
-  console.log("objStartIndex: " + objStartIndex + ", objCount: " + objCount);
-  console.log("---");*/
-}
-
-function subdivideBvhNode(nodeIndex)
-{
-  let nodeOfs = nodeIndex * BVH_NODE_SIZE;
-  let objCount = bvhNodes[nodeOfs + 7];
-  let objStartIndex = bvhNodes[nodeOfs + 3];
-
-  // Calc split pos/axis with best cost and compare to no split cost
-  let split = findBestCostIntervalSplit(objStartIndex, objCount, BVH_INTERVAL_COUNT);
-  let noSplitCost = objCount * calcAabbArea({
-    min: vec3FromArr(bvhNodes, nodeOfs), max: vec3FromArr(bvhNodes, nodeOfs + 4) });
-  if(noSplitCost <= split.cost)
-    return;
-
-  // Partition objects to left and right according to split axis/pos
-  let l = objStartIndex;
-  let r = objStartIndex + objCount - 1;
-  while(l <= r) {
-    let center = getObjCenter(l);
-    if(center[split.axis] < split.pos) {
-      l++;
-    } else {
-      // Swap object data l/r
-      let leftObjOfs = l * OBJECT_LINE_SIZE;
-      let rightObjOfs = r * OBJECT_LINE_SIZE;
-      for(let i=0; i<OBJECT_LINE_SIZE; i++) {
-        let t = objects[leftObjOfs + i];
-        objects[leftObjOfs + i] = objects[rightObjOfs + i];
-        objects[rightObjOfs + i] = t;
-      }
-      r--;
-    }
-  }
-
-  // Stop if one side is empty
-  let leftObjCount = l - objStartIndex;
-  if(leftObjCount == 0 || leftObjCount == objCount)
-    return;
-
-  let leftChildIndex = bvhNodes.length / BVH_NODE_SIZE;
-
-  // Not a leaf node, so link left child node
-  bvhNodes[nodeOfs + 3] = leftChildIndex;
-  bvhNodes[nodeOfs + 7] = 0; // Obj count
-
-  addBvhNode(objStartIndex, leftObjCount);
-  addBvhNode(l, objCount - leftObjCount);
-
-  subdivideBvhNode(leftChildIndex);
-  subdivideBvhNode(leftChildIndex + 1); // right child
-}
-
-function createBvh()
-{
-  let start = performance.now();
-  addBvhNode(0, objects.length / OBJECT_LINE_SIZE);
-  subdivideBvhNode(0);
-  console.log("Create BVH: " + (performance.now() - start).toFixed(3) + " ms, node count: " + bvhNodes.length / BVH_NODE_SIZE);
-}
-
 async function createComputePipeline(shaderModule, pipelineLayout, entryPoint)
 {
   return device.createComputePipelineAsync({
@@ -499,7 +174,7 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, view)
 }
 
 async function createGpuResources(
-  bvhNodesSize, objectsSize, shapesSize, materialsSize)
+  bvhBufSize, objectBufSize, shapeBufSize, materialBufSize)
 {
   globalsBuffer = device.createBuffer({
     size: 32 * 4,
@@ -507,22 +182,22 @@ async function createGpuResources(
   });
 
   bvhNodesBuffer = device.createBuffer({
-    size: bvhNodesSize,
+    size: bvhBufSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   objectsBuffer = device.createBuffer({
-    size: objectsSize,
+    size: objectBufSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   shapesBuffer = device.createBuffer({
-    size: shapesSize,
+    size: shapeBufSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   materialsBuffer = device.createBuffer({
-    size: materialsSize,
+    size: materialBufSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -656,11 +331,6 @@ function setPerformanceTimer()
     });
 }
 
-function resetAccumulationBuffer()
-{
-  gatheredSamples = TEMPORAL_WEIGHT * SAMPLES_PER_PIXEL;
-}
-
 function update(time)
 {
   if(orbitCam) {
@@ -715,10 +385,11 @@ function updateView()
     ...pixelDeltaY, 0 /* pad */,
     ...pixelTopLeft, 0 /* pad */]));
 
-  resetAccumulationBuffer();
+  // Reset accumulation buffer
+  gatheredSamples = TEMPORAL_WEIGHT * SAMPLES_PER_PIXEL;
 }
 
-function setView(lookFrom, lookAt)
+function setView(lookFrom, lookAt) //
 {
   eye = lookFrom;
   fwd = vec3Normalize(vec3Add(lookFrom, vec3Negate(lookAt)));
@@ -839,61 +510,6 @@ async function startRender()
   requestAnimationFrame(render);
 }
 
-function createScene()
-{
-  if(ACTIVE_SCENE == "SPHERES") {
-    addObject(SHAPE_TYPE_SPHERE, addSphere([0, -100.5, 0], 100), MAT_TYPE_LAMBERT, addLambert([0.5, 0.5, 0.5]));
-    addObject(SHAPE_TYPE_SPHERE, addSphere([-1, 0, 0], 0.5), MAT_TYPE_LAMBERT, addLambert([0.6, 0.3, 0.3]));
-
-    let glassMatOfs = addGlass([1, 1, 1], 1.5);
-    addObject(SHAPE_TYPE_SPHERE, addSphere([0, 0, 0], 0.5), MAT_TYPE_GLASS, glassMatOfs);
-    addObject(SHAPE_TYPE_SPHERE, addSphere([0, 0, 0], -0.45), MAT_TYPE_GLASS, glassMatOfs);
-
-    addObject(SHAPE_TYPE_SPHERE, addSphere([1, 0, 0], 0.5), MAT_TYPE_METAL, addMetal([0.3, 0.3, 0.6], 0));
-  }
-
-  if(ACTIVE_SCENE == "QUADS") {
-    addObject(SHAPE_TYPE_QUAD, addQuad([-3,-2, 5], [0, 0,-4], [0, 4, 0]), MAT_TYPE_LAMBERT, addLambert([1.0, 0.2, 0.2]));
-    addObject(SHAPE_TYPE_QUAD, addQuad([-2,-2, 0], [4, 0, 0], [0, 4, 0]), MAT_TYPE_LAMBERT, addLambert([0.2, 1.0, 0.2]));
-    addObject(SHAPE_TYPE_QUAD, addQuad([ 3,-2, 1], [0, 0, 4], [0, 4, 0]), MAT_TYPE_LAMBERT, addLambert([0.2, 0.2, 1.0]));
-    addObject(SHAPE_TYPE_QUAD, addQuad([-2, 3, 1], [4, 0, 0], [0, 0, 4]), MAT_TYPE_LAMBERT, addLambert([1.0, 0.5, 0.0]));
-    addObject(SHAPE_TYPE_QUAD, addQuad([-2,-3, 5], [4, 0, 0], [0, 0,-4]), MAT_TYPE_LAMBERT, addLambert([0.2, 0.8, 0.8]));
-    addObject(SHAPE_TYPE_SPHERE, addSphere([0, 0, 2.5], 1.5), MAT_TYPE_GLASS, addGlass([1, 1, 1], 1.5));
-    addObject(SHAPE_TYPE_SPHERE, addSphere([0, 0, 2.5], 1.0), MAT_TYPE_LAMBERT, addLambert([0.0, 0.0, 1.0]));
-  }
-
-  if(ACTIVE_SCENE == "RIOW") {
-    addObject(SHAPE_TYPE_SPHERE, addSphere([0, -1000, 0], 1000), MAT_TYPE_LAMBERT, addLambert([0.5, 0.5, 0.5]));
-    addObject(SHAPE_TYPE_SPHERE, addSphere([0, 1, 0], 1), MAT_TYPE_GLASS, addGlass([1, 1, 1], 1.5));
-    addObject(SHAPE_TYPE_SPHERE, addSphere([-4, 1, 0], 1), MAT_TYPE_LAMBERT, addLambert([0.4, 0.2, 0.1]));
-    addObject(SHAPE_TYPE_SPHERE, addSphere([4, 1, 0], 1), MAT_TYPE_METAL, addMetal([0.7, 0.6, 0.5], 0));
-
-    let SIZE = 11;
-    for(a=-SIZE; a<SIZE; a++) {
-      for(b=-SIZE; b<SIZE; b++) {
-        let matProb = rand();
-        let center = [a + 0.9 * rand(), 0.2, b + 0.9 * rand()];
-        if(vec3Length(vec3Add(center, [-4, -0.2, 0])) > 0.9) {
-          let matType, matOfs;
-          if(matProb < 0.8) {
-            matType = MAT_TYPE_LAMBERT;
-            matOfs = addLambert(vec3Mul(vec3Rand(), vec3Rand()));
-          } else if(matProb < 0.95) {
-            matType = MAT_TYPE_METAL;
-            matOfs = addMetal(vec3RandRange(0.5, 1), randRange(0, 0.5));
-          } else {
-            matType = MAT_TYPE_GLASS;
-            matOfs = addGlass([1, 1, 1], 1.5);
-          }
-          addObject(SHAPE_TYPE_SPHERE, addSphere(center, 0.2), matType, matOfs);
-        }
-      }
-    }
-  }
-
-  console.log("Object count: " + objects.length / OBJECT_LINE_SIZE);
-}
-
 function Wasm(module)
 {
   this.environment = {
@@ -907,6 +523,7 @@ function Wasm(module)
     sqrtf: (v) => Math.sqrt(v),
     sinf: (v) => Math.sin(v),
     cosf: (v) => Math.cos(v),
+    tanf: (v) => Math.tan(v),
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
     powf: (b, e) => Math.pow(b, e)
@@ -940,7 +557,6 @@ async function main()
 
   let wa = new Wasm(module);
   await wa.instantiate();
-
   wa.init();
 
   await createGpuResources(wa.get_bvh_node_buf_size(), wa.get_obj_buf_size(), wa.get_shape_buf_size(), wa.get_mat_buf_size());
@@ -949,22 +565,8 @@ async function main()
   device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.get_obj_buf(), wa.get_obj_buf_size()); 
   device.queue.writeBuffer(shapesBuffer, 0, wa.memUint8, wa.get_shape_buf(), wa.get_shape_buf_size());
   device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.get_mat_buf(), wa.get_mat_buf_size());
-  //*/
 
-  /*
-  createScene();
-  createBvh();
-
-  await createGpuResources(bvhNodes.length * 4, objects.length * 4, shapes.length * 4, materials.length * 4);
-
-  //device.queue.writeBuffer(bvhNodesBuffer, 0, new Float32Array([...bvhNodes]));
-  device.queue.writeBuffer(objectsBuffer, 0, new Uint32Array([...objects]));
-  device.queue.writeBuffer(shapesBuffer, 0, new Float32Array([...shapes]));
-  device.queue.writeBuffer(materialsBuffer, 0, new Float32Array([...materials]));
-  //*/
-
-  device.queue.writeBuffer(globalsBuffer, 0, new Uint32Array([
-    CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_RECURSION]));
+  device.queue.writeBuffer(globalsBuffer, 0, new Uint32Array([CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_RECURSION]));
 
   resetView();
   updateView();
