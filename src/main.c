@@ -1,7 +1,8 @@
-#include "log.h"
+#include "sutil.h"
 #include "mutil.h"
 #include "scn.h"
 #include "bvh.h"
+#include "log.h"
 
 scn *curr_scn;
 bvh *curr_bvh;

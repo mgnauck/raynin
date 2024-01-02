@@ -33,14 +33,14 @@ uint32_t  scn_add_glass(scn *s, glass mat);
 
 obj       *scn_get_obj(const scn *s, uint32_t idx);
 
+aabb      scn_get_obj_aabb(const scn *s, uint32_t idx);
+vec3      scn_get_obj_center(const scn *s, uint32_t idx);
+
 sphere    *scn_get_sphere(const scn *s, uint32_t idx);
 quad      *scn_get_quad(const scn *s, uint32_t idx);
 
 lambert   *scn_get_lambert(const scn *s, uint32_t idx);
 metal     *scn_get_metal(const scn *s, uint32_t idx);
 glass     *scn_get_glass(const scn *s, uint32_t idx);
-
-aabb      scn_get_obj_aabb(const scn *s, uint32_t obj_idx);
-vec3      scn_get_obj_center(const scn *s, uint32_t obj_idx);
 
 #endif

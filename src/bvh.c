@@ -1,8 +1,9 @@
 #include "bvh.h"
 #include <float.h>
+#include "sutil.h"
+#include "mutil.h"
 #include "scn.h"
 #include "aabb.h"
-#include "mutil.h"
 #include "log.h"
 
 #define INTERVAL_CNT 8

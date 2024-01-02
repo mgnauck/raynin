@@ -1,4 +1,4 @@
-#include "util.h"
+#include "sutil.h"
 
 extern unsigned char __heap_base;
 static unsigned long heap_pos = (unsigned long)&__heap_base;

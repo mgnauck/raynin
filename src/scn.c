@@ -1,5 +1,5 @@
 #include "scn.h"
-#include "util.h"
+#include "sutil.h"
 
 scn *scn_init(size_t obj_buf_capacity, size_t shape_buf_capacity, size_t mat_buf_capacity)
 {
@@ -90,6 +90,39 @@ obj *scn_get_obj(const scn *s, uint32_t idx)
   return (obj *)&s->obj_buf[idx * BUF_LINE_SIZE];
 }
 
+aabb scn_get_obj_aabb(const scn *s, uint32_t idx)
+{
+  obj *o = scn_get_obj(s, idx);
+  switch(o->shape_type) {
+    case SPHERE:
+      return sphere_get_aabb(scn_get_sphere(s, o->shape_idx));
+      break;
+    case QUAD:
+      return quad_get_aabb(scn_get_quad(s, o->shape_idx));
+      break;
+    default:
+      // Unknown or unsupported shape
+      // TODO Log/alert
+      return aabb_init();
+  }
+}
+
+vec3 scn_get_obj_center(const scn *s, uint32_t idx)
+{
+  obj *o = scn_get_obj(s, idx);
+  switch(o->shape_type) {
+    case SPHERE:
+      return scn_get_sphere(s, o->shape_idx)->center;
+      break;
+    case QUAD:
+      return quad_get_center(scn_get_quad(s, o->shape_idx));
+      break;
+    default:
+      // Unknown or unsupported shape
+      // TODO Log/alert
+      return (vec3){{{ 0.0f, 0.0f, 0.0f }}};
+  }
+}
 sphere *scn_get_sphere(const scn *s, uint32_t idx)
 {
   return (sphere *)&s->shape_buf[idx * BUF_LINE_SIZE];
@@ -113,36 +146,4 @@ metal *scn_get_metal(const scn *s, uint32_t idx)
 glass *scn_get_glass(const scn *s, uint32_t idx)
 {
   return (glass *)&s->mat_buf[idx * BUF_LINE_SIZE];
-}
-
-aabb scn_get_obj_aabb(const scn *s, uint32_t obj_idx)
-{
-  obj *o = scn_get_obj(s, obj_idx);
-  switch(o->shape_type) {
-    case SPHERE:
-      return sphere_get_aabb(scn_get_sphere(s, o->shape_idx));
-      break;
-    case QUAD:
-      return quad_get_aabb(scn_get_quad(s, o->shape_idx));
-      break;
-    default:
-      // Unknown or unsupported shape
-      return aabb_init();
-  }
-}
-
-vec3 scn_get_obj_center(const scn *s, uint32_t obj_idx)
-{
-  obj *o = scn_get_obj(s, obj_idx);
-  switch(o->shape_type) {
-    case SPHERE:
-      return scn_get_sphere(s, o->shape_idx)->center;
-      break;
-    case QUAD:
-      return quad_get_center(scn_get_quad(s, o->shape_idx));
-      break;
-    default:
-      // Unknown or unsupported shape
-      return (vec3){{{ 0.0f, 0.0f, 0.0f }}};
-  }
 }
