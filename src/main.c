@@ -1,15 +1,23 @@
 #include "sutil.h"
 #include "mutil.h"
+#include "cfg.h"
 #include "scn.h"
 #include "bvh.h"
 #include "cam.h"
 #include "view.h"
 #include "log.h"
 
-scn   *curr_scn;
-bvh   *curr_bvh;
-cam   curr_cam;
-view  curr_view;
+#define GLOBALS_BUF_SIZE 32 * 4
+
+cfg       config;
+uint32_t  gathered_smpls = 0;
+
+uint8_t   *globals_buf;
+scn       *curr_scn;
+bvh       *curr_bvh;
+
+view      curr_view;
+cam       curr_cam;
 
 scn *create_scn_spheres()
 {
@@ -45,6 +53,9 @@ scn *create_scn_spheres()
         sphere_create((vec3){{{ 1.0f, 0.0f, 0.0f }}}, 0.5f)),
       METAL, scn_add_metal(s,
         metal_create((vec3){{{ 0.3f, 0.3f, 0.6f }}}, 0.0f))));
+
+  curr_cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
+  cam_set(&curr_cam, (vec3){{{ 0.0f, 0.0f, 2.0f }}}, (vec3){{{ 0.0f, 0.0f, 0.0f }}});
 
   return s;
 }
@@ -110,6 +121,9 @@ scn *create_scn_quads()
       LAMBERT, scn_add_lambert(s,
         lambert_create((vec3){{{ 0.0f, 0.0f, 1.0f }}}))));
 
+  curr_cam = (cam){ .vert_fov = 680.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
+  cam_set(&curr_cam, (vec3){{{ 0.0f, 0.0f, 9.0f }}}, (vec3){{{ 0.0f, 0.0f, 0.0f }}});
+
   return s;
 }
 
@@ -169,6 +183,9 @@ scn *create_scn_riow()
     }
   }
 
+  curr_cam = (cam){ .vert_fov = 20.0f, .foc_dist = 10.0f, .foc_angle = 0.6f };
+  cam_set(&curr_cam, (vec3){{{ 13.0f, 2.0f, 3.0f }}}, (vec3){{{ 0.0f, 0.0f, 0.0f }}});
+
   return s;
 }
 
@@ -221,22 +238,55 @@ size_t get_bvh_node_buf_size()
 }
 
 __attribute__((visibility("default")))
-void init(void)
+void *get_globals_buf()
+{
+  return globals_buf;
+}
+
+__attribute__((visibility("default")))
+size_t get_globals_buf_size()
+{
+  return GLOBALS_BUF_SIZE;
+}
+
+__attribute__((visibility("default")))
+void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
 {
   srand(42u, 54u);
 
+  config = (cfg){ width, height, spp, bounces };
+
+  double t = get_time();
   //curr_scn = create_scn_spheres();
   //curr_scn = create_scn_quads();
   curr_scn = create_scn_riow();
+  t = get_time() - t;
+  log("scn create: %2.3f, obj cnt: %d, shape lines: %d, mat lines: %d",
+      t, curr_scn->obj_idx, curr_scn->shape_idx, curr_scn->mat_idx);
 
-  log("obj: %d, shape: %d, mat: %d",
-      curr_scn->obj_idx, curr_scn->shape_idx, curr_scn->mat_idx);
-
-  double t = get_time();
+  t = get_time();
   curr_bvh = bvh_create(curr_scn);
   t = get_time() - t;
-
   log("bvh create: %2.3f ms, node cnt: %d", t, curr_bvh->node_cnt);
+  
+  globals_buf = malloc(GLOBALS_BUF_SIZE * sizeof(*globals_buf));
+
+  view_calc(&curr_view, config.width, config.height, &curr_cam);
+  cfg_write(globals_buf, &config);
+}
+
+__attribute__((visibility("default")))
+void update(float time)
+{
+  // TODO Update cam etc.
+
+  // Write globals data (except cfg)
+  const float frame_data[4] = { randf(), (float)config.spp / (gathered_smpls + config.spp), time, 0.0f };
+  memcpy(globals_buf + 4 * 4, frame_data, 4 * sizeof(float));
+  size_t ofs = cam_write(globals_buf + 8 * 4, &curr_cam);
+  view_write(globals_buf + 8 * 4 + ofs, &curr_view);
+
+  gathered_smpls += config.spp;
 }
 
 __attribute__((visibility("default")))
@@ -244,4 +294,5 @@ void release(void)
 {
   bvh_release(curr_bvh);
   scn_release(curr_scn);
+  free(globals_buf);
 }

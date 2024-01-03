@@ -15,6 +15,7 @@
 extern float sqrtf(float a);
 extern float sinf(float a);
 extern float cosf(float a);
+extern float tanf(float a);
 extern float acosf(float a);
 extern float atan2f(float y, float x);
 extern float powf(float base, float exp);

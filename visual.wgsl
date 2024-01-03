@@ -7,7 +7,7 @@ struct Global
   rngSeed: f32,
   weight: f32,
   time: f32,
-  pad1: f32,
+  pad1: f32,  
   eye: vec3f,
   vertFov: f32,
   right: vec3f,

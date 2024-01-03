@@ -3,15 +3,17 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-const MAX_RECURSION = 5;
 const SAMPLES_PER_PIXEL = 5;
-const TEMPORAL_WEIGHT = 0.1;
+const MAX_BOUNCES = 5;
+//const TEMPORAL_WEIGHT = 0.1;
 
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
 
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
+
+let wa;
 
 let canvas;
 let context;
@@ -35,7 +37,7 @@ const MOVE_VELOCITY = 0.1;
 const LOOK_VELOCITY = 0.015;
 
 let startTime;
-let gatheredSamples;
+//let gatheredSamples = 0;
 
 let phi, theta;
 let eye, right, up, fwd;
@@ -174,10 +176,10 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, view)
 }
 
 async function createGpuResources(
-  bvhBufSize, objectBufSize, shapeBufSize, materialBufSize)
+  globalsBufSize, bvhBufSize, objectBufSize, shapeBufSize, materialBufSize)
 {
   globalsBuffer = device.createBuffer({
-    size: 32 * 4,
+    size: globalsBufSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
@@ -298,14 +300,15 @@ function render(time)
   time = (time - startTime) / 1000.0;
   //setPerformanceTimer();
 
-  update(time);
-
-  device.queue.writeBuffer(globalsBuffer, 4 * 4, new Float32Array(
+  wa.update(time);
+ 
+  device.queue.writeBuffer(globalsBuffer, 0, wa.memUint8, wa.get_globals_buf(), wa.get_globals_buf_size());
+ 
+  /*device.queue.writeBuffer(globalsBuffer, 4 * 4, new Float32Array(
     [ rand(),
       SAMPLES_PER_PIXEL / (gatheredSamples + SAMPLES_PER_PIXEL),
-      time, 
-      /* pad */ 0 ]));
-
+      time, 0 ]));*/
+  
   let commandEncoder = device.createCommandEncoder();
   encodeComputePassAndSubmit(commandEncoder, computePipeline, bindGroup,
     Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
@@ -315,7 +318,7 @@ function render(time)
 
   requestAnimationFrame(render);
 
-  gatheredSamples += SAMPLES_PER_PIXEL;
+  //gatheredSamples += SAMPLES_PER_PIXEL;
 }
 
 function setPerformanceTimer()
@@ -330,7 +333,7 @@ function setPerformanceTimer()
       console.log(err);
     });
 }
-
+/*
 function update(time)
 {
   if(orbitCam) {
@@ -381,15 +384,15 @@ function updateView()
     ...eye, vertFov,
     ...right, focDist,
     ...up, focAngle,
-    ...pixelDeltaX, 0 /* pad */,
-    ...pixelDeltaY, 0 /* pad */,
-    ...pixelTopLeft, 0 /* pad */]));
+    ...pixelDeltaX, 0,
+    ...pixelDeltaY, 0,
+    ...pixelTopLeft, 0]));
 
   // Reset accumulation buffer
   gatheredSamples = TEMPORAL_WEIGHT * SAMPLES_PER_PIXEL;
 }
 
-function setView(lookFrom, lookAt) //
+function setView(lookFrom, lookAt)
 {
   eye = lookFrom;
   fwd = vec3Normalize(vec3Add(lookFrom, vec3Negate(lookAt)));
@@ -477,6 +480,7 @@ function handleCameraMouseMoveEvent(e)
 
   updateView();
 }
+*/
 
 async function startRender()
 {
@@ -492,9 +496,10 @@ async function startRender()
 
   document.querySelector("button").removeEventListener("click", startRender);
 
+  /*
   canvas.addEventListener("click", async () => {
     if(!document.pointerLockElement)
-      await canvas.requestPointerLock(/*{unadjustedMovement: true}*/);
+      await canvas.requestPointerLock(); // {unadjustedMovement: true}
   });
 
   document.addEventListener("keydown", handleKeyEvent);
@@ -506,6 +511,7 @@ async function startRender()
       canvas.removeEventListener("mousemove", handleCameraMouseMoveEvent);
     }
   });
+  */
   
   requestAnimationFrame(render);
 }
@@ -555,21 +561,23 @@ async function main()
     await (await fetch("intro.wasm")).arrayBuffer() :
     Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))
 
-  let wa = new Wasm(module);
+  wa = new Wasm(module);
   await wa.instantiate();
-  wa.init();
+  
+  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_BOUNCES);
 
-  await createGpuResources(wa.get_bvh_node_buf_size(), wa.get_obj_buf_size(), wa.get_shape_buf_size(), wa.get_mat_buf_size());
+  await createGpuResources(wa.get_globals_buf_size(), wa.get_bvh_node_buf_size(), wa.get_obj_buf_size(), wa.get_shape_buf_size(), wa.get_mat_buf_size());
  
   device.queue.writeBuffer(bvhNodesBuffer, 0, wa.memUint8, wa.get_bvh_node_buf(), wa.get_bvh_node_buf_size()); 
   device.queue.writeBuffer(objectsBuffer, 0, wa.memUint8, wa.get_obj_buf(), wa.get_obj_buf_size()); 
   device.queue.writeBuffer(shapesBuffer, 0, wa.memUint8, wa.get_shape_buf(), wa.get_shape_buf_size());
   device.queue.writeBuffer(materialsBuffer, 0, wa.memUint8, wa.get_mat_buf(), wa.get_mat_buf_size());
 
-  device.queue.writeBuffer(globalsBuffer, 0, new Uint32Array([CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_RECURSION]));
+  //device.queue.writeBuffer(globalsBuffer, 0, wa.memUint8, wa.get_globals_buf(), wa.get_globals_buf_size());
+  //device.queue.writeBuffer(globalsBuffer, 0, new Uint32Array([CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_BOUNCES]));
 
-  resetView();
-  updateView();
+  //resetView();
+  //updateView();
 
   document.body.innerHTML = "<button>CLICK<canvas style='width:0;cursor:none'>";
   canvas = document.querySelector("canvas");
