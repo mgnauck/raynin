@@ -1,6 +1,5 @@
 #include "cam.h"
 #include "mutil.h"
-#include "sutil.h"
 
 void cam_calc_base(cam *c)
 {
@@ -27,22 +26,4 @@ void cam_set_dir(cam *c, float theta, float phi)
   c->fwd = vec3_spherical(theta, phi);
   
   cam_calc_base(c);
-}
-
-size_t cam_write(uint8_t *buf, const cam *c)
-{
-  uint8_t *p = buf;
-  memcpy(p, &c->eye, sizeof(c->eye));
-  p += sizeof(c->eye);
-  memcpy(p, &c->vert_fov, sizeof(c->vert_fov));
-  p += sizeof(c->vert_fov);
-  memcpy(p, &c->right, sizeof(c->right));
-  p += sizeof(c->right);
-  memcpy(p, &c->foc_dist, sizeof(c->foc_dist));
-  p += sizeof(c->foc_dist);
-  memcpy(p, &c->up, sizeof(c->up));
-  p += sizeof(c->up);
-  memcpy(p, &c->foc_angle, sizeof(c->foc_angle));
-  p += sizeof(c->foc_angle);
-  return p - buf;
 }

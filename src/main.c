@@ -9,17 +9,9 @@
 #include "view.h"
 #include "log.h"
 
-#define GLOB_BUF_SIZE     32 * 4
-
-#define TEMPORAL_WEIGHT   0.1f
-
-#define MOVE_VEL          0.1f
-#define LOOK_VELO         0.015f
-
 cfg       config;
 uint32_t  gathered_smpls = 0;
 
-uint8_t   *global_buf;
 scn       *curr_scn;
 bvh       *curr_bvh;
 
@@ -198,35 +190,26 @@ scn *create_scn_riow()
   return s;
 }
 
-void reset_accumulation()
+void update_cam_view()
 {
+  view_calc(&curr_view, config.width, config.height, &curr_cam);
+
+  gpu_write_buf(GLOB, 32, &curr_cam, CAM_BUF_SIZE);
+  gpu_write_buf(GLOB, 80, &curr_view, sizeof(view));
+  
   gathered_smpls = TEMPORAL_WEIGHT * config.spp;
 }
 
 __attribute__((visibility("default")))
 void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
 {
-  srand(42u, 54u);
+  srand(42u, 303u);
 
   config = (cfg){ width, height, spp, bounces };
 
-  double t = time();
-  //curr_scn = create_scn_spheres();
-  //curr_scn = create_scn_quads();
   curr_scn = create_scn_riow();
-  t = time() - t;
-  log("scn create: %2.3f, obj cnt: %d, shape lines: %d, mat lines: %d",
-      t, curr_scn->obj_idx, curr_scn->shape_idx, curr_scn->mat_idx);
-
-  t = time();
   curr_bvh = bvh_create(curr_scn);
-  t = time() - t;
-  log("bvh create: %2.3f ms, node cnt: %d", t, curr_bvh->node_cnt);
   
-  global_buf = malloc(GLOB_BUF_SIZE * sizeof(*global_buf));
-  
-  view_calc(&curr_view, config.width, config.height, &curr_cam);
-
   gpu_create_res(
       GLOB_BUF_SIZE,
       curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf),
@@ -234,12 +217,14 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
       curr_scn->shape_idx * BUF_LINE_SIZE * sizeof(*curr_scn->shape_buf),
       curr_scn->mat_idx * BUF_LINE_SIZE * sizeof(*curr_scn->mat_buf));
 
-  gpu_write_buf(GLOB, 0, &config, sizeof(cfg));
-  
   gpu_write_buf(BVH, 0, curr_bvh->node_buf, curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf));
   gpu_write_buf(OBJ, 0, curr_scn->obj_buf, curr_scn->obj_idx * BUF_LINE_SIZE * sizeof(*curr_scn->obj_buf));
   gpu_write_buf(SHAPE, 0, curr_scn->shape_buf, curr_scn->shape_idx * BUF_LINE_SIZE * sizeof(*curr_scn->shape_buf));
   gpu_write_buf(MAT, 0, curr_scn->mat_buf, curr_scn->mat_idx * BUF_LINE_SIZE * sizeof(*curr_scn->mat_buf));
+
+  gpu_write_buf(GLOB, 0, &config, sizeof(cfg));
+
+  update_cam_view();
 }
 
 __attribute__((visibility("default")))
@@ -250,23 +235,19 @@ void update(float time)
     float s = 0.3f;
     float r = 15.0f;
     float h = 2.5f;
+
     cam_set(&curr_cam, (vec3){{{
         r * sinf(time * s),
         h + 0.75 * h * sinf(time * s * 0.7f),
         r * cosf(time *s) }}},
         vec3_unit((vec3){{{ 13.0f, 2.0f, 3.0f }}}));
-    view_calc(&curr_view, config.width, config.height, &curr_cam);
-    reset_accumulation();
+
+    update_cam_view();    
   }
 
-  // Write global data (except cfg)
   float frame[4] = {
     randf(), config.spp / (float)(gathered_smpls + config.spp), time, 0.0f };
-  size_t ofs = cam_write(global_buf + 8 * 4, &curr_cam);
-
-  gpu_write_buf(GLOB, 4 * 4, frame, 4 * sizeof(float));
-  gpu_write_buf(GLOB, 8 * 4, global_buf + 8 * 4, ofs); // cam
-  gpu_write_buf(GLOB, 8 * 4 + ofs, &curr_view, sizeof(view));
+  gpu_write_buf(GLOB, 16, frame, 4 * sizeof(float));
 
   gathered_smpls += config.spp;
 }
@@ -276,14 +257,13 @@ void release(void)
 {
   bvh_release(curr_bvh);
   scn_release(curr_scn);
-  free(global_buf);
 }
-
-/////////////// Functions called from JS
 
 __attribute__((visibility("default")))
 void key_down(unsigned char key)
 {
+  #define MOVE_VEL 0.1f
+  
   switch(key) {
     case 'a':
       curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.right, -MOVE_VEL));
@@ -312,19 +292,23 @@ void key_down(unsigned char key)
     case 'o':
       orbit_cam = !orbit_cam;
       break;
+    case 'r':
+      // TODO hot reload shader
+      break;
   }
 
-  view_calc(&curr_view, config.width, config.height, &curr_cam);
-  reset_accumulation();
+  update_cam_view();
 }
 
 __attribute__((visibility("default")))
 void mouse_move(int32_t dx, int32_t dy)
 {
+  #define LOOK_VELO 0.015f
+  
   float theta = min(max(curr_cam.theta + (float)dy * LOOK_VELO, 0.01f), 0.99f * PI);
   float phi = fmodf(curr_cam.phi - (float)dx * LOOK_VELO, 2.0f * PI);
 
   cam_set_dir(&curr_cam, theta, phi);
-  view_calc(&curr_view, config.width, config.height, &curr_cam);
-  reset_accumulation();
+
+  update_cam_view();
 }

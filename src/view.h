@@ -2,7 +2,6 @@
 #define VIEW_H
 
 #include <stdint.h>
-#include <stddef.h>
 #include "vec3.h"
 
 typedef struct cam cam;
@@ -16,7 +15,6 @@ typedef struct view {
   float     pad2;
 } view;
 
-void    view_calc(view *v, uint32_t width, uint32_t height, cam *c);
-size_t  view_write(void *buf, const view *v);
+void view_calc(view *v, uint32_t width, uint32_t height, cam *c);
 
 #endif

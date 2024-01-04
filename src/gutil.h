@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#define GLOB_BUF_SIZE 128
+
 typedef enum buf_type {
   GLOB,
   BVH,

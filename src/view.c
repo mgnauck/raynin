@@ -1,7 +1,6 @@
 #include "view.h"
-#include "cam.h"
-#include "sutil.h"
 #include "mutil.h"
+#include "cam.h"
 
 void view_calc(view *v, uint32_t width, uint32_t height, cam *c)
 {
@@ -23,10 +22,4 @@ void view_calc(view *v, uint32_t width, uint32_t height, cam *c)
   // pixel_top_left = viewport_top_left + 0.5 * (pixel_delta_x + pixel_delta_y)
   v->pix_top_left = vec3_add(v_top_left, 
       vec3_scale(vec3_add(v->pix_delta_x, v->pix_delta_y), 0.5f));
-}
-
-size_t view_write(void *buf, const view *v)
-{
-  memcpy(buf, &v->pix_delta_x, sizeof(*v));
-  return sizeof(*v);
 }
