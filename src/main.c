@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include "sutil.h"
+#include "gutil.h"
 #include "mutil.h"
 #include "cfg.h"
 #include "scn.h"
@@ -8,12 +9,12 @@
 #include "view.h"
 #include "log.h"
 
-#define GLOBAL_BUF_SIZE   32 * 4
+#define GLOB_BUF_SIZE     32 * 4
 
-#define TEMPORAL_FACTOR   0.1f
+#define TEMPORAL_WEIGHT   0.1f
 
-#define MOVE_VELOCITY     0.1f
-#define LOOK_VELOCITY     0.015f
+#define MOVE_VEL          0.1f
+#define LOOK_VELO         0.015f
 
 cfg       config;
 uint32_t  gathered_smpls = 0;
@@ -199,7 +200,7 @@ scn *create_scn_riow()
 
 void reset_accumulation()
 {
-  gathered_smpls = TEMPORAL_FACTOR * config.spp;
+  gathered_smpls = TEMPORAL_WEIGHT * config.spp;
 }
 
 __attribute__((visibility("default")))
@@ -222,10 +223,23 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
   t = time() - t;
   log("bvh create: %2.3f ms, node cnt: %d", t, curr_bvh->node_cnt);
   
-  global_buf = malloc(GLOBAL_BUF_SIZE * sizeof(*global_buf));
-  cfg_write(global_buf, &config);
+  global_buf = malloc(GLOB_BUF_SIZE * sizeof(*global_buf));
   
   view_calc(&curr_view, config.width, config.height, &curr_cam);
+
+  gpu_create_res(
+      GLOB_BUF_SIZE,
+      curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf),
+      curr_scn->obj_idx * BUF_LINE_SIZE * sizeof(*curr_scn->obj_buf),
+      curr_scn->shape_idx * BUF_LINE_SIZE * sizeof(*curr_scn->shape_buf),
+      curr_scn->mat_idx * BUF_LINE_SIZE * sizeof(*curr_scn->mat_buf));
+
+  gpu_write_buf(GLOB, 0, &config, sizeof(cfg));
+  
+  gpu_write_buf(BVH, 0, curr_bvh->node_buf, curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf));
+  gpu_write_buf(OBJ, 0, curr_scn->obj_buf, curr_scn->obj_idx * BUF_LINE_SIZE * sizeof(*curr_scn->obj_buf));
+  gpu_write_buf(SHAPE, 0, curr_scn->shape_buf, curr_scn->shape_idx * BUF_LINE_SIZE * sizeof(*curr_scn->shape_buf));
+  gpu_write_buf(MAT, 0, curr_scn->mat_buf, curr_scn->mat_idx * BUF_LINE_SIZE * sizeof(*curr_scn->mat_buf));
 }
 
 __attribute__((visibility("default")))
@@ -236,20 +250,23 @@ void update(float time)
     float s = 0.3f;
     float r = 15.0f;
     float h = 2.5f;
-    cam_set(&curr_cam,
-        (vec3){{{ r * sinf(time * s), h + 0.75 * h * sinf(time * s * 0.7f), r * cosf(time *s) }}},
+    cam_set(&curr_cam, (vec3){{{
+        r * sinf(time * s),
+        h + 0.75 * h * sinf(time * s * 0.7f),
+        r * cosf(time *s) }}},
         vec3_unit((vec3){{{ 13.0f, 2.0f, 3.0f }}}));
     view_calc(&curr_view, config.width, config.height, &curr_cam);
     reset_accumulation();
   }
 
   // Write global data (except cfg)
-  const float frame_data[4] = {
-    randf(), (float)config.spp / (gathered_smpls + config.spp),
-    time, 0.0f };
-  memcpy(global_buf + 4 * 4, frame_data, 4 * sizeof(float));
+  float frame[4] = {
+    randf(), config.spp / (float)(gathered_smpls + config.spp), time, 0.0f };
   size_t ofs = cam_write(global_buf + 8 * 4, &curr_cam);
-  view_write(global_buf + 8 * 4 + ofs, &curr_view);
+
+  gpu_write_buf(GLOB, 4 * 4, frame, 4 * sizeof(float));
+  gpu_write_buf(GLOB, 8 * 4, global_buf + 8 * 4, ofs); // cam
+  gpu_write_buf(GLOB, 8 * 4 + ofs, &curr_view, sizeof(view));
 
   gathered_smpls += config.spp;
 }
@@ -269,16 +286,16 @@ void key_down(unsigned char key)
 {
   switch(key) {
     case 'a':
-      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.right, -MOVE_VELOCITY));
+      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.right, -MOVE_VEL));
       break;
     case 'd':
-      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.right, MOVE_VELOCITY));
+      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.right, MOVE_VEL));
       break;
     case 'w':
-      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.fwd, -MOVE_VELOCITY));
+      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.fwd, -MOVE_VEL));
      break;
     case 's':
-      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.fwd, MOVE_VELOCITY));
+      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.fwd, MOVE_VEL));
       break;
     case 'i':
       curr_cam.foc_dist += 0.1f;
@@ -304,70 +321,10 @@ void key_down(unsigned char key)
 __attribute__((visibility("default")))
 void mouse_move(int32_t dx, int32_t dy)
 {
-  float theta = min(max(curr_cam.theta + (float)dy * LOOK_VELOCITY, 0.01f), 0.99f * PI);
-  float phi = fmodf(curr_cam.phi - (float)dx * LOOK_VELOCITY, 2.0f * PI);
+  float theta = min(max(curr_cam.theta + (float)dy * LOOK_VELO, 0.01f), 0.99f * PI);
+  float phi = fmodf(curr_cam.phi - (float)dx * LOOK_VELO, 2.0f * PI);
 
   cam_set_dir(&curr_cam, theta, phi);
   view_calc(&curr_view, config.width, config.height, &curr_cam);
   reset_accumulation();
-}
-
-__attribute__((visibility("default")))
-void *obj_buf()
-{
-  return curr_scn->obj_buf;
-}
-
-__attribute__((visibility("default")))
-size_t obj_buf_size()
-{
-  return curr_scn->obj_idx * BUF_LINE_SIZE * sizeof(*curr_scn->obj_buf);
-}
-
-__attribute__((visibility("default")))
-void *shape_buf()
-{
-  return curr_scn->shape_buf;
-}
-
-__attribute__((visibility("default")))
-size_t shape_buf_size()
-{
-  return curr_scn->shape_idx * BUF_LINE_SIZE * sizeof(*curr_scn->shape_buf);
-}
-
-__attribute__((visibility("default")))
-void *mat_buf()
-{
-  return curr_scn->mat_buf;
-}
-
-__attribute__((visibility("default")))
-size_t mat_buf_size()
-{
-  return curr_scn->mat_idx * BUF_LINE_SIZE * sizeof(*curr_scn->mat_buf);
-}
-
-__attribute__((visibility("default")))
-void *bvh_buf()
-{
-  return curr_bvh->node_buf;
-}
-
-__attribute__((visibility("default")))
-size_t bvh_buf_size()
-{
-  return curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf);
-}
-
-__attribute__((visibility("default")))
-void *globals_buf()
-{
-  return global_buf;
-}
-
-__attribute__((visibility("default")))
-size_t globals_buf_size()
-{
-  return GLOBAL_BUF_SIZE;
 }

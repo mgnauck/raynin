@@ -12,7 +12,7 @@ CC=clang
 LD=wasm-ld
 DBGFLAGS=-DNDEBUG
 CCFLAGS=--target=wasm32 -std=c2x -pedantic-errors -Wall -Wextra -O3 -flto -nostdlib -Wno-unused-parameter -Wno-unused-variable
-CCFLAGS+=-DSILENT
+#CCFLAGS+=-DSILENT
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=67108864 -z stack-size=8388608
 WOPTFLAGS=-O3
 

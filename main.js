@@ -2,8 +2,15 @@ const FULLSCREEN = false;
 const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
+
 const SAMPLES_PER_PIXEL = 5;
 const MAX_BOUNCES = 5;
+
+const GLOB_BUF_ID = 0;
+const BVH_BUF_ID = 1;
+const OBJ_BUF_ID = 2;
+const SHAPE_BUF_ID = 3;
+const MAT_BUF_ID = 4;
 
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
@@ -16,12 +23,6 @@ let res = {};
 let wa;
 let start, last;
 
-function handleKeyEvent(e)
-{
-  // JS key codes do not map well to UTF-8. Only A-Z and 0-9 will work here. Convert A-Z to lower case.
-  wa.key_down((e.keyCode >= 65 && e.keyCode <= 90) ? e.keyCode + 32 : e.keyCode);
-}
-
 function handleMouseMoveEvent(e)
 {
   wa.mouse_move(e.movementX, e.movementY);
@@ -31,17 +32,18 @@ function installEventHandler()
 {
   canvas.addEventListener("click", async () => {
     if(!document.pointerLockElement)
-      await canvas.requestPointerLock(); // {unadjustedMovement: true}
+      await canvas.requestPointerLock(); // { unadjustedMovement: true }
   });
 
-  document.addEventListener("keydown", handleKeyEvent);
+  document.addEventListener("keydown",
+    // Key codes do not map well to UTF-8. Use A-Z and 0-9 only. Convert A-Z to lower case.
+    e => wa.key_down((e.keyCode >= 65 && e.keyCode <= 90) ? e.keyCode + 32 : e.keyCode));
 
   document.addEventListener("pointerlockchange", () => {
-    if(document.pointerLockElement === canvas) {
+    if(document.pointerLockElement === canvas)
       canvas.addEventListener("mousemove", handleMouseMoveEvent);
-    } else {
+    else
       canvas.removeEventListener("mousemove", handleMouseMoveEvent);
-    }
   });
 }
 
@@ -67,9 +69,9 @@ function createRenderPipeline(shaderModule, pipelineLayout, vertexEntry, fragmen
     fragment: {
       module: shaderModule,
       entryPoint: fragmentEntry,
-      targets: [{format: "bgra8unorm"}]
+      targets: [{ format: "bgra8unorm" }]
     },
-    primitive: {topology: "triangle-strip"}
+    primitive: { topology: "triangle-strip" }
   });
 }
 
@@ -94,37 +96,41 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
 
 function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, materialsSize)
 {
-  res.globalsBuffer = device.createBuffer({
+  res.buf = [];
+
+  res.buf[GLOB_BUF_ID] = device.createBuffer({
     size: globalsSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  res.bvhNodesBuffer = device.createBuffer({
+  res.buf[BVH_BUF_ID] = device.createBuffer({
     size: bvhSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.objectsBuffer = device.createBuffer({
+  res.buf[OBJ_BUF_ID] = device.createBuffer({
     size: objsSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.shapesBuffer = device.createBuffer({
+  res.buf[SHAPE_BUF_ID] = device.createBuffer({
     size: shapesSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.materialsBuffer = device.createBuffer({
+  res.buf[MAT_BUF_ID] = device.createBuffer({
     size: materialsSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  let accumulationBuffer = device.createBuffer({
+  // Accumulation buffer
+  res.buf[5] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
-  let imageBuffer = device.createBuffer({
+  // Image buffer
+  res.buf[6] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
   });
@@ -133,48 +139,47 @@ function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, material
     entries: [ 
       { binding: 0, 
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
-        buffer: {type: "uniform"} },
+        buffer: { type: "uniform" } },
       { binding: 1, 
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "read-only-storage"} },
+        buffer: { type: "read-only-storage" } },
       { binding: 2,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "read-only-storage"} },
+        buffer: { type: "read-only-storage" } },
       { binding: 3,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "read-only-storage"}},
+        buffer: { type: "read-only-storage" } },
       { binding: 4,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "read-only-storage"}},
+        buffer: { type: "read-only-storage" } },
       { binding: 5,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: {type: "storage"}},
+        buffer: { type: "storage" } },
       { binding: 6,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
-        buffer: {type: "storage"}}
+        buffer: { type: "storage" } }
     ]
   });
 
   res.bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.globalsBuffer } },
-      { binding: 1, resource: { buffer: res.bvhNodesBuffer } },
-      { binding: 2, resource: { buffer: res.objectsBuffer } },
-      { binding: 3, resource: { buffer: res.shapesBuffer } },
-      { binding: 4, resource: { buffer: res.materialsBuffer } },
-      { binding: 5, resource: { buffer: accumulationBuffer } },
-      { binding: 6, resource: { buffer: imageBuffer } }
+      { binding: 0, resource: { buffer: res.buf[GLOB_BUF_ID] } },
+      { binding: 1, resource: { buffer: res.buf[BVH_BUF_ID] } },
+      { binding: 2, resource: { buffer: res.buf[OBJ_BUF_ID] } },
+      { binding: 3, resource: { buffer: res.buf[SHAPE_BUF_ID] } },
+      { binding: 4, resource: { buffer: res.buf[MAT_BUF_ID] } },
+      { binding: 5, resource: { buffer: res.buf[5] } },
+      { binding: 6, resource: { buffer: res.buf[6] } }
     ]
   });
 
-  res.pipelineLayout = device.createPipelineLayout(
-    { bindGroupLayouts: [bindGroupLayout] } );
+  res.pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] } );
 
   res.renderPassDescriptor =
     { colorAttachments: [
       { undefined, // view
-        clearValue: {r: 1.0, g: 0.0, b: 0.0, a: 1.0},
+        clearValue: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
         loadOp: "clear",
         storeOp: "store"
       } ]
@@ -195,8 +200,6 @@ function render()
   last = performance.now();
 
   wa.update((performance.now() - start) / 1000);
- 
-  device.queue.writeBuffer(res.globalsBuffer, 0, wa.memUint8, wa.globals_buf(), wa.globals_buf_size());
  
   let commandEncoder = device.createCommandEncoder();
   encodeComputePassAndSubmit(commandEncoder, res.computePipeline, res.bindGroup, Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
@@ -219,7 +222,6 @@ function startRender()
   }
 
   document.querySelector("button").removeEventListener("click", startRender);
-
   installEventHandler();
 
   start = last = performance.now();
@@ -229,7 +231,7 @@ function startRender()
 function Wasm(module)
 {
   this.environment = {
-    console_log_buf: (addr, len) => {
+    log_buf: (addr, len) => {
       let s = "";
       for(let i=0; i<len; i++)
         s += String.fromCharCode(this.memUint8[addr + i]);
@@ -242,7 +244,9 @@ function Wasm(module)
     tanf: (v) => Math.tan(v),
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
-    powf: (b, e) => Math.pow(b, e)
+    powf: (b, e) => Math.pow(b, e),
+    gpu_create_res: (g, b, o, s, m) => createGpuResources(g, b, o, s, m),
+    gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz) 
   };
 
   this.instantiate = async function()
@@ -250,7 +254,6 @@ function Wasm(module)
     const res = await WebAssembly.instantiate(module, { env: this.environment });
     Object.assign(this, res.instance.exports);
     this.memUint8 = new Uint8Array(this.memory.buffer);
-    console.log(`Available memory in wasm module: ${(this.memory.buffer.byteLength / (1024 * 1024)).toFixed(2)} MiB`);
   }
 }
 
@@ -275,18 +278,11 @@ async function main()
   await wa.instantiate();
   
   wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_BOUNCES);
-
-  createGpuResources(wa.globals_buf_size(), wa.bvh_buf_size(), wa.obj_buf_size(), wa.shape_buf_size(), wa.mat_buf_size());
   
   if(VISUAL_SHADER.includes("END_visual_wgsl"))
     createPipelines(await (await fetch("visual.wgsl")).text());
   else
     createPipelines(VISUAL_SHADER);
-
-  device.queue.writeBuffer(res.bvhNodesBuffer, 0, wa.memUint8, wa.bvh_buf(), wa.bvh_buf_size()); 
-  device.queue.writeBuffer(res.objectsBuffer, 0, wa.memUint8, wa.obj_buf(), wa.obj_buf_size()); 
-  device.queue.writeBuffer(res.shapesBuffer, 0, wa.memUint8, wa.shape_buf(), wa.shape_buf_size());
-  device.queue.writeBuffer(res.materialsBuffer, 0, wa.memUint8, wa.mat_buf(), wa.mat_buf_size());
 
   document.body.innerHTML = "<button>CLICK<canvas style='width:0;cursor:none'>";
   canvas = document.querySelector("canvas");
