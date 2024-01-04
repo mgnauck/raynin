@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include "sutil.h"
 #include "mutil.h"
 #include "cfg.h"
@@ -7,17 +8,24 @@
 #include "view.h"
 #include "log.h"
 
-#define GLOBALS_BUF_SIZE 32 * 4
+#define GLOBAL_BUF_SIZE   32 * 4
+
+#define TEMPORAL_FACTOR   0.1f
+
+#define MOVE_VELOCITY     0.1f
+#define LOOK_VELOCITY     0.015f
 
 cfg       config;
 uint32_t  gathered_smpls = 0;
 
-uint8_t   *globals_buf;
+uint8_t   *global_buf;
 scn       *curr_scn;
 bvh       *curr_bvh;
 
 view      curr_view;
 cam       curr_cam;
+
+bool      orbit_cam = false;
 
 scn *create_scn_spheres()
 {
@@ -189,64 +197,9 @@ scn *create_scn_riow()
   return s;
 }
 
-__attribute__((visibility("default")))
-void *get_obj_buf()
+void reset_accumulation()
 {
-  return curr_scn->obj_buf;
-}
-
-__attribute__((visibility("default")))
-size_t get_obj_buf_size()
-{
-  return curr_scn->obj_idx * BUF_LINE_SIZE * sizeof(*curr_scn->obj_buf);
-}
-
-__attribute__((visibility("default")))
-void *get_shape_buf()
-{
-  return curr_scn->shape_buf;
-}
-
-__attribute__((visibility("default")))
-size_t get_shape_buf_size()
-{
-  return curr_scn->shape_idx * BUF_LINE_SIZE * sizeof(*curr_scn->shape_buf);
-}
-
-__attribute__((visibility("default")))
-void *get_mat_buf()
-{
-  return curr_scn->mat_buf;
-}
-
-__attribute__((visibility("default")))
-size_t get_mat_buf_size()
-{
-  return curr_scn->mat_idx * BUF_LINE_SIZE * sizeof(*curr_scn->mat_buf);
-}
-
-__attribute__((visibility("default")))
-void *get_bvh_node_buf()
-{
-  return curr_bvh->node_buf;
-}
-
-__attribute__((visibility("default")))
-size_t get_bvh_node_buf_size()
-{
-  return curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf);
-}
-
-__attribute__((visibility("default")))
-void *get_globals_buf()
-{
-  return globals_buf;
-}
-
-__attribute__((visibility("default")))
-size_t get_globals_buf_size()
-{
-  return GLOBALS_BUF_SIZE;
+  gathered_smpls = TEMPORAL_FACTOR * config.spp;
 }
 
 __attribute__((visibility("default")))
@@ -256,35 +209,47 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
 
   config = (cfg){ width, height, spp, bounces };
 
-  double t = get_time();
+  double t = time();
   //curr_scn = create_scn_spheres();
   //curr_scn = create_scn_quads();
   curr_scn = create_scn_riow();
-  t = get_time() - t;
+  t = time() - t;
   log("scn create: %2.3f, obj cnt: %d, shape lines: %d, mat lines: %d",
       t, curr_scn->obj_idx, curr_scn->shape_idx, curr_scn->mat_idx);
 
-  t = get_time();
+  t = time();
   curr_bvh = bvh_create(curr_scn);
-  t = get_time() - t;
+  t = time() - t;
   log("bvh create: %2.3f ms, node cnt: %d", t, curr_bvh->node_cnt);
   
-  globals_buf = malloc(GLOBALS_BUF_SIZE * sizeof(*globals_buf));
-
+  global_buf = malloc(GLOBAL_BUF_SIZE * sizeof(*global_buf));
+  cfg_write(global_buf, &config);
+  
   view_calc(&curr_view, config.width, config.height, &curr_cam);
-  cfg_write(globals_buf, &config);
 }
 
 __attribute__((visibility("default")))
 void update(float time)
 {
-  // TODO Update cam etc.
+  if(orbit_cam)
+  {
+    float s = 0.3f;
+    float r = 15.0f;
+    float h = 2.5f;
+    cam_set(&curr_cam,
+        (vec3){{{ r * sinf(time * s), h + 0.25 * h * sinf(time * s * 0.2f), r * cosf(time *s) }}},
+        vec3_unit((vec3){{{ 13.0f, 2.0f, 3.0f }}}));
+    view_calc(&curr_view, config.width, config.height, &curr_cam);
+    reset_accumulation();
+  }
 
-  // Write globals data (except cfg)
-  const float frame_data[4] = { randf(), (float)config.spp / (gathered_smpls + config.spp), time, 0.0f };
-  memcpy(globals_buf + 4 * 4, frame_data, 4 * sizeof(float));
-  size_t ofs = cam_write(globals_buf + 8 * 4, &curr_cam);
-  view_write(globals_buf + 8 * 4 + ofs, &curr_view);
+  // Write global data (except cfg)
+  const float frame_data[4] = {
+    randf(), (float)config.spp / (gathered_smpls + config.spp),
+    time, 0.0f };
+  memcpy(global_buf + 4 * 4, frame_data, 4 * sizeof(float));
+  size_t ofs = cam_write(global_buf + 8 * 4, &curr_cam);
+  view_write(global_buf + 8 * 4 + ofs, &curr_view);
 
   gathered_smpls += config.spp;
 }
@@ -294,5 +259,84 @@ void release(void)
 {
   bvh_release(curr_bvh);
   scn_release(curr_scn);
-  free(globals_buf);
+  free(global_buf);
+}
+
+/////////////// Functions called from JS
+
+__attribute__((visibility("default")))
+void key_down(char key)
+{
+  reset_accumulation();
+}
+
+__attribute__((visibility("default")))
+void mouse_move(int32_t dx, int32_t dy)
+{
+  float theta = min(max(curr_cam.theta + (float)dy * LOOK_VELOCITY, 0.01f), 0.99f * PI);
+  float phi = fmodf(curr_cam.phi - (float)dx * LOOK_VELOCITY, 2.0f * PI);
+
+  cam_set_dir(&curr_cam, theta, phi);
+  view_calc(&curr_view, config.width, config.height, &curr_cam);
+  reset_accumulation();
+}
+
+__attribute__((visibility("default")))
+void *obj_buf()
+{
+  return curr_scn->obj_buf;
+}
+
+__attribute__((visibility("default")))
+size_t obj_buf_size()
+{
+  return curr_scn->obj_idx * BUF_LINE_SIZE * sizeof(*curr_scn->obj_buf);
+}
+
+__attribute__((visibility("default")))
+void *shape_buf()
+{
+  return curr_scn->shape_buf;
+}
+
+__attribute__((visibility("default")))
+size_t shape_buf_size()
+{
+  return curr_scn->shape_idx * BUF_LINE_SIZE * sizeof(*curr_scn->shape_buf);
+}
+
+__attribute__((visibility("default")))
+void *mat_buf()
+{
+  return curr_scn->mat_buf;
+}
+
+__attribute__((visibility("default")))
+size_t mat_buf_size()
+{
+  return curr_scn->mat_idx * BUF_LINE_SIZE * sizeof(*curr_scn->mat_buf);
+}
+
+__attribute__((visibility("default")))
+void *bvh_buf()
+{
+  return curr_bvh->node_buf;
+}
+
+__attribute__((visibility("default")))
+size_t bvh_buf_size()
+{
+  return curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf);
+}
+
+__attribute__((visibility("default")))
+void *globals_buf()
+{
+  return global_buf;
+}
+
+__attribute__((visibility("default")))
+size_t globals_buf_size()
+{
+  return GLOBAL_BUF_SIZE;
 }

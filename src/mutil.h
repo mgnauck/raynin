@@ -22,6 +22,8 @@ extern float powf(float base, float exp);
 
 float     fabsf(float v);
 float     floorf(float v);
+float     truncf(float v);
+float     fmodf(float x, float y);
 
 void      srand(uint64_t seed, uint64_t seq);
 uint32_t  rand(void);
