@@ -16,14 +16,10 @@ let res = {};
 let wa;
 let start, last;
 
-function loadTextFile(url)
-{
-  return fetch(url).then(response => response.text());
-}
-
 function handleKeyEvent(e)
 {
-  wa.key_down(e.key);
+  // JS key codes do not map well to UTF-8. Only A-Z and 0-9 will work here. Convert A-Z to lower case.
+  wa.key_down((e.keyCode >= 65 && e.keyCode <= 90) ? e.keyCode + 32 : e.keyCode);
 }
 
 function handleMouseMoveEvent(e)
@@ -31,65 +27,27 @@ function handleMouseMoveEvent(e)
   wa.mouse_move(e.movementX, e.movementY);
 }
 
-/*
-function handleKeyEvent(e)
+function installEventHandler()
 {
-  switch (e.key) {
-    case "a":
-      eye = vec3Add(eye, vec3Scale(right, -MOVE_VELOCITY));
-      break;
-    case "d":
-      eye = vec3Add(eye, vec3Scale(right, MOVE_VELOCITY));
-      break;
-    case "w":
-      eye = vec3Add(eye, vec3Scale(fwd, -MOVE_VELOCITY));
-      break;
-    case "s":
-      eye = vec3Add(eye, vec3Scale(fwd, MOVE_VELOCITY));
-      break;
-    case ",":
-      focDist = Math.max(focDist - 0.1, 0.1);
-      break;
-    case ".":
-      focDist += 0.1;
-      break;
-    case "-":
-      focAngle = Math.max(focAngle - 0.1, 0);
-      break;
-    case "+":
-      focAngle += 0.1;
-      break;
-    case "r":
-      resetView();
-      break;
-    case "o":
-      orbitCam = !orbitCam;
-      break;
-    case "l":
-      createPipelines();
-      console.log("Visual shader reloaded");
-      break;
-  }
+  canvas.addEventListener("click", async () => {
+    if(!document.pointerLockElement)
+      await canvas.requestPointerLock(); // {unadjustedMovement: true}
+  });
 
-  updateView();
+  document.addEventListener("keydown", handleKeyEvent);
+
+  document.addEventListener("pointerlockchange", () => {
+    if(document.pointerLockElement === canvas) {
+      canvas.addEventListener("mousemove", handleMouseMoveEvent);
+    } else {
+      canvas.removeEventListener("mousemove", handleMouseMoveEvent);
+    }
+  });
 }
 
-function handleCameraMouseMoveEvent(e)
-{ 
-  theta = Math.min(Math.max(theta + e.movementY * LOOK_VELOCITY, 0.01), 0.99 * Math.PI);
-  
-  phi = (phi - e.movementX * LOOK_VELOCITY) % (2 * Math.PI);
-  phi += (phi < 0) ? 2.0 * Math.PI : 0;
-
-  fwd = vec3FromSpherical(theta, phi);
-
-  updateView();
-}
-*/
-
-async function createComputePipeline(shaderModule, pipelineLayout, entryPoint)
+function createComputePipeline(shaderModule, pipelineLayout, entryPoint)
 {
-  return device.createComputePipelineAsync({
+  return device.createComputePipeline({
     layout: pipelineLayout,
     compute: {
       module: shaderModule,
@@ -98,9 +56,9 @@ async function createComputePipeline(shaderModule, pipelineLayout, entryPoint)
   });
 }
 
-async function createRenderPipeline(shaderModule, pipelineLayout, vertexEntry, fragmentEntry)
+function createRenderPipeline(shaderModule, pipelineLayout, vertexEntry, fragmentEntry)
 {
-  return device.createRenderPipelineAsync({
+  return device.createRenderPipeline({
     layout: pipelineLayout,
     vertex: {
       module: shaderModule,
@@ -134,7 +92,7 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-async function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, materialsSize)
+function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, materialsSize)
 {
   res.globalsBuffer = device.createBuffer({
     size: globalsSize,
@@ -221,25 +179,13 @@ async function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, ma
         storeOp: "store"
       } ]
     };
-
-  await createPipelines();
 }
 
-async function createPipelines()
+function createPipelines(shaderCode)
 {
-  let shaderCode;
-  if(VISUAL_SHADER.includes("END_visual_wgsl"))
-    shaderCode = await loadTextFile("visual.wgsl");
-  else
-    shaderCode = VISUAL_SHADER;
-
-  let shaderModule = device.createShaderModule({code: shaderCode});
-
-  res.computePipeline = await createComputePipeline(
-    shaderModule, res.pipelineLayout, "computeMain");
-  
-  res.renderPipeline = await createRenderPipeline(
-    shaderModule, res.pipelineLayout, "vertexMain", "fragmentMain");
+  let shaderModule = device.createShaderModule({ code: shaderCode });
+  res.computePipeline = createComputePipeline(shaderModule, res.pipelineLayout, "computeMain");
+  res.renderPipeline = createRenderPipeline(shaderModule, res.pipelineLayout, "vertexMain", "fragmentMain");
 }
 
 function render()
@@ -260,7 +206,7 @@ function render()
   requestAnimationFrame(render);
 }
 
-async function startRender()
+function startRender()
 {
   if(FULLSCREEN)
     canvas.requestFullscreen();
@@ -274,20 +220,7 @@ async function startRender()
 
   document.querySelector("button").removeEventListener("click", startRender);
 
-  canvas.addEventListener("click", async () => {
-    if(!document.pointerLockElement)
-      await canvas.requestPointerLock(); // {unadjustedMovement: true}
-  });
-
-  document.addEventListener("keydown", handleKeyEvent);
-
-  document.addEventListener("pointerlockchange", () => {
-    if(document.pointerLockElement === canvas) {
-      canvas.addEventListener("mousemove", handleMouseMoveEvent);
-    } else {
-      canvas.removeEventListener("mousemove", handleMouseMoveEvent);
-    }
-  });
+  installEventHandler();
 
   start = last = performance.now();
   render();
@@ -343,7 +276,12 @@ async function main()
   
   wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_BOUNCES);
 
-  await createGpuResources(wa.globals_buf_size(), wa.bvh_buf_size(), wa.obj_buf_size(), wa.shape_buf_size(), wa.mat_buf_size());
+  createGpuResources(wa.globals_buf_size(), wa.bvh_buf_size(), wa.obj_buf_size(), wa.shape_buf_size(), wa.mat_buf_size());
+  
+  if(VISUAL_SHADER.includes("END_visual_wgsl"))
+    createPipelines(await (await fetch("visual.wgsl")).text());
+  else
+    createPipelines(VISUAL_SHADER);
 
   device.queue.writeBuffer(res.bvhNodesBuffer, 0, wa.memUint8, wa.bvh_buf(), wa.bvh_buf_size()); 
   device.queue.writeBuffer(res.objectsBuffer, 0, wa.memUint8, wa.obj_buf(), wa.obj_buf_size()); 

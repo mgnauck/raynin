@@ -237,7 +237,7 @@ void update(float time)
     float r = 15.0f;
     float h = 2.5f;
     cam_set(&curr_cam,
-        (vec3){{{ r * sinf(time * s), h + 0.25 * h * sinf(time * s * 0.2f), r * cosf(time *s) }}},
+        (vec3){{{ r * sinf(time * s), h + 0.75 * h * sinf(time * s * 0.2f), r * cosf(time *s) }}},
         vec3_unit((vec3){{{ 13.0f, 2.0f, 3.0f }}}));
     view_calc(&curr_view, config.width, config.height, &curr_cam);
     reset_accumulation();
@@ -265,8 +265,39 @@ void release(void)
 /////////////// Functions called from JS
 
 __attribute__((visibility("default")))
-void key_down(char key)
+void key_down(unsigned char key)
 {
+  switch(key) {
+    case 'a':
+      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.right, -MOVE_VELOCITY));
+      break;
+    case 'd':
+      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.right, MOVE_VELOCITY));
+      break;
+    case 'w':
+      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.fwd, -MOVE_VELOCITY));
+     break;
+    case 's':
+      curr_cam.eye = vec3_add(curr_cam.eye, vec3_scale(curr_cam.fwd, MOVE_VELOCITY));
+      break;
+    case 'i':
+      curr_cam.foc_dist += 0.1f;
+      break;
+    case 'k':
+      curr_cam.foc_dist = max(curr_cam.foc_dist - 0.1f, 0.1f);
+      break;
+    case 'j':
+      curr_cam.foc_angle = max(curr_cam.foc_angle - 0.1f, 0.1f);
+      break;
+    case 'l':
+      curr_cam.foc_angle += 0.1f;
+      break;
+    case 'o':
+      orbit_cam = !orbit_cam;
+      break;
+  }
+
+  view_calc(&curr_view, config.width, config.height, &curr_cam);
   reset_accumulation();
 }
 

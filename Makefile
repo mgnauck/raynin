@@ -12,7 +12,7 @@ CC=clang
 LD=wasm-ld
 DBGFLAGS=-DNDEBUG
 CCFLAGS=--target=wasm32 -std=c2x -pedantic-errors -Wall -Wextra -O3 -flto -nostdlib -Wno-unused-parameter -Wno-unused-variable
-#CCFLAGS+=-DSILENT
+CCFLAGS+=-DSILENT
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=67108864 -z stack-size=8388608
 WOPTFLAGS=-O3
 
@@ -25,7 +25,7 @@ $(OUTDIR)/$(LOADER_JS).2.js: $(OUTDIR)/$(LOADER_JS).1.js $(SHADER_OUT)
 	@#drop_console=true
 	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=true --toplevel > $@
 
-$(OUTDIR)/%.min.wgsl: %.wgsl
+$(OUTDIR)/%.min.wgsl: %.wgsl $(OUTDIR)/$(LOADER_JS).1.js
 	@mkdir -p `dirname $@`
 	wgslminify -e $(SHADER_EXCLUDES) $< > $@
 	@echo "$@:" `wc -c < $@` "bytes"
