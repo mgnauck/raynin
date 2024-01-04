@@ -237,7 +237,7 @@ void update(float time)
     float r = 15.0f;
     float h = 2.5f;
     cam_set(&curr_cam,
-        (vec3){{{ r * sinf(time * s), h + 0.75 * h * sinf(time * s * 0.2f), r * cosf(time *s) }}},
+        (vec3){{{ r * sinf(time * s), h + 0.75 * h * sinf(time * s * 0.7f), r * cosf(time *s) }}},
         vec3_unit((vec3){{{ 13.0f, 2.0f, 3.0f }}}));
     view_calc(&curr_view, config.width, config.height, &curr_cam);
     reset_accumulation();
