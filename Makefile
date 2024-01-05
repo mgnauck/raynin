@@ -18,7 +18,7 @@ WOPTFLAGS=-O3
 
 .PHONY: clean
 
-$(OUTDIR)/$(OUT): $(OUTDIR)/$(LOADER_JS).2.js
+$(OUTDIR)/$(OUT): $(OUTDIR)/$(LOADER_JS).2.js Makefile
 	js-payload-compress --zopfli-iterations=100 $< $@ 
 
 $(OUTDIR)/$(LOADER_JS).2.js: $(OUTDIR)/$(LOADER_JS).1.js $(SHADER_OUT)
