@@ -11,8 +11,8 @@ OUT=index.html
 CC=clang
 LD=wasm-ld
 DBGFLAGS=-DNDEBUG
-CCFLAGS=--target=wasm32 -std=c2x -pedantic-errors -Wall -Wextra -O3 -flto -nostdlib -Wno-unused-parameter -Wno-unused-variable
-#CCFLAGS+=-DSILENT
+CFLAGS=--target=wasm32 -std=c2x -pedantic-errors -Wall -Wextra -O3 -flto -nostdlib -Wno-unused-parameter -Wno-unused-variable
+#CFLAGS+=-DSILENT
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=67108864 -z stack-size=8388608
 WOPTFLAGS=-O3
 
@@ -46,7 +46,7 @@ $(WASM_OUT).wasm: $(OBJ)
 
 obj/%.o: src/%.c
 	@mkdir -p `dirname $@`
-	$(CC) $(DBGFLAGS) $(CCFLAGS) -c $< -o $@
+	$(CC) $(DBGFLAGS) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -rf obj $(OUTDIR) $(WASM_OUT).wasm
