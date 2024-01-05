@@ -11,7 +11,7 @@ OUT=index.html
 CC=clang
 LD=wasm-ld
 DBGFLAGS=-DNDEBUG
-CFLAGS=--target=wasm32 -std=c2x -pedantic-errors -Wall -Wextra -O3 -flto -nostdlib -Wno-unused-parameter -Wno-unused-variable
+CFLAGS=--target=wasm32 -std=c2x -nostdlib -O3 -Os -ffast-math -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable
 #CFLAGS+=-DSILENT
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=67108864 -z stack-size=8388608
 WOPTFLAGS=-O3
