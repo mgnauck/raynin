@@ -7,7 +7,9 @@ struct Global
   rngSeed: f32,
   weight: f32,
   time: f32,
-  pad1: f32,  
+  pad1: f32,
+  bgColor: vec3f,
+  pad2: f32,
   eye: vec3f,
   vertFov: f32,
   right: vec3f,
@@ -15,11 +17,11 @@ struct Global
   up: vec3f,
   focAngle: f32,
   pixelDeltaX: vec3f,
-  pad2: f32,
-  pixelDeltaY: vec3f,
   pad3: f32,
+  pixelDeltaY: vec3f,
+  pad4: f32,
   pixelTopLeft: vec3f,
-  pad4: f32
+  pad5: f32
 }
 
 struct Ray
@@ -67,6 +69,7 @@ const SHAPE_TYPE_MESH = 5;
 const MAT_TYPE_LAMBERT = 1;
 const MAT_TYPE_METAL = 2;
 const MAT_TYPE_GLASS = 3;
+const MAT_TYPE_EMITTER = 4;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> bvhNodes: array<BvhNode>;
@@ -398,11 +401,11 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
   return false;
 }
 
-fn sampleBackground(ray: Ray) -> vec3f
+/*fn sampleBackground(ray: Ray) -> vec3f
 {
   let t = (ray.dir.y + 1.0) * 0.5;
   return (1.0 - t) * vec3f(1.0) + t * vec3f(0.5, 0.7, 1.0);
-}
+}*/
 
 fn render(initialRay: Ray) -> vec3f
 {
@@ -421,7 +424,7 @@ fn render(initialRay: Ray) -> vec3f
         break;
       }
     } else {
-      col *= sampleBackground(ray);
+      col *= globals.bgColor;
       break;
     }
     bounce += 1;

@@ -3,10 +3,15 @@
 
 #include <stddef.h>
 
-#define GLOB_BUF_SIZE 128
+#define GLOB_BUF_OFS_CFG    0
+#define GLOB_BUF_OFS_FRAME  16
+#define GLOB_BUF_OFS_CAM    48
+#define GLOB_BUF_OFS_VIEW   96
+
+#define GLOB_BUF_SIZE       144
 
 typedef enum buf_type {
-  GLOB,
+  GLOB = 0,
   BVH,
   OBJ,
   SHAPE,

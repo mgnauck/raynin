@@ -16,11 +16,9 @@ typedef struct cam {
   float foc_angle;
   // Additional data
   vec3  fwd;
-  float theta;
-  float phi;
 } cam;
 
 void cam_set(cam *c, vec3 look_from, vec3 look_at);
-void cam_set_dir(cam *c, float theta, float phi);
+void cam_set_dir(cam *c, vec3 dir);
 
 #endif
