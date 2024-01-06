@@ -30,6 +30,7 @@ uint32_t  scn_add_quad(scn *s, quad shape);
 uint32_t  scn_add_lambert(scn *s, lambert mat);
 uint32_t  scn_add_metal(scn *s, metal mat);
 uint32_t  scn_add_glass(scn *s, glass mat);
+uint32_t  scn_add_emitter(scn *s, emitter mat);
 
 obj       *scn_get_obj(const scn *s, uint32_t idx);
 
@@ -42,5 +43,6 @@ quad      *scn_get_quad(const scn *s, uint32_t idx);
 lambert   *scn_get_lambert(const scn *s, uint32_t idx);
 metal     *scn_get_metal(const scn *s, uint32_t idx);
 glass     *scn_get_glass(const scn *s, uint32_t idx);
+emitter   *scn_get_emitter(const scn *s, uint32_t idx);
 
 #endif

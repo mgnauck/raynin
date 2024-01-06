@@ -5,7 +5,7 @@
 
 typedef struct lambert {
   vec3  albedo;
-  float pad0;
+  float pad;
 } lambert;
 
 typedef struct metal {
@@ -18,8 +18,14 @@ typedef struct glass {
   float refr_idx;
 } glass;
 
+typedef struct emitter {
+  vec3  albedo;
+  float pad;
+} emitter;
+
 lambert   lambert_create(vec3 albedo);
 metal     metal_create(vec3 albedo, float fuzz_radius);
 glass     glass_create(vec3 albedo, float refr_idx);
+emitter   emitter_create(vec3 albedo);
 
 #endif

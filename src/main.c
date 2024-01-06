@@ -128,6 +128,38 @@ scn *create_scn_quads()
   return s;
 }
 
+scn *create_scn_emitter()
+{
+  scn *s = scn_init(4, 6, 2);
+
+  uint32_t lmat = scn_add_lambert(s, lambert_create((vec3){{{ 0.5f, 0.5f, 0.5f }}}));
+  scn_add_obj(s, obj_create(
+        SPHERE, scn_add_sphere(s,
+          sphere_create((vec3){{{ 0.0f, -1000.0f, 0.0f}}}, 1000.0f)),
+        LAMBERT, lmat));
+  
+  scn_add_obj(s, obj_create(
+        SPHERE, scn_add_sphere(s,
+          sphere_create((vec3){{{ 0.0f, 2.0f, 0.0f}}}, 2.0f)),
+        LAMBERT, lmat));
+  
+  uint32_t emat = scn_add_emitter(s, emitter_create((vec3){{{ 4.0f, 4.0f, 4.0f }}}));
+  scn_add_obj(s, obj_create(
+        SPHERE, scn_add_sphere(s,
+          sphere_create((vec3){{{ 0.0f, 7.0f, 0.0f}}}, 2.0f)),
+        EMITTER, emat));
+ 
+  scn_add_obj(s, obj_create(
+        QUAD, scn_add_quad(s,
+          quad_create((vec3){{{ 3.0f, 1.0f, -2.0f}}}, (vec3){{{ 2.0f, 0.0f, 0.0f }}}, (vec3){{{ 0.0f, 2.0f, 0.0f }}})),
+        EMITTER, emat));
+
+  curr_cam = (cam){ .vert_fov = 20.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
+  cam_set(&curr_cam, (vec3){{{ 26.0f, 3.0f, 6.0f }}}, (vec3){{{ 0.0f, 2.0f, 0.0f }}});
+
+  return s;
+}
+
 scn *create_scn_riow()
 {
 #define SIZE 22
@@ -207,7 +239,7 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
 
   config = (cfg){ width, height, spp, bounces };
 
-  curr_scn = create_scn_riow();
+  curr_scn = create_scn_emitter();
   curr_bvh = bvh_create(curr_scn);
   
   gpu_create_res(
@@ -246,7 +278,7 @@ void update(float time)
   }
 
   float frame[8] = { randf(), config.spp / (float)(gathered_smpls + config.spp),
-    time, 0.0f, 0.7f, 0.8f, 1.0f, 0.0f };
+    time, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
   gpu_write_buf(GLOB, GLOB_BUF_OFS_FRAME, frame, 8 * sizeof(float));
 
   gathered_smpls += config.spp;

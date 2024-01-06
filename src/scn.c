@@ -85,6 +85,16 @@ uint32_t scn_add_glass(scn *s, glass mat)
   return idx;
 }
 
+uint32_t scn_add_emitter(scn *s, emitter mat)
+{  
+  memcpy(&s->mat_buf[s->mat_idx * BUF_LINE_SIZE], &mat, sizeof(emitter));
+
+  size_t idx = s->mat_idx;
+  s->mat_idx += sizeof(emitter) / (BUF_LINE_SIZE * sizeof(*s->mat_buf));
+
+  return idx;
+}
+
 obj *scn_get_obj(const scn *s, uint32_t idx)
 {
   return (obj *)&s->obj_buf[idx * BUF_LINE_SIZE];
@@ -146,4 +156,9 @@ metal *scn_get_metal(const scn *s, uint32_t idx)
 glass *scn_get_glass(const scn *s, uint32_t idx)
 {
   return (glass *)&s->mat_buf[idx * BUF_LINE_SIZE];
+}
+
+emitter *scn_get_emitter(const scn *s, uint32_t idx)
+{
+  return (emitter *)&s->mat_buf[idx * BUF_LINE_SIZE];
 }

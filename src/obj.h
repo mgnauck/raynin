@@ -14,7 +14,8 @@ typedef enum shape_type {
 typedef enum mat_type {
   LAMBERT = 1,
   METAL,
-  GLASS
+  GLASS,
+  EMITTER
 } mat_type;
 
 typedef struct obj {

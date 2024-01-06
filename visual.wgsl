@@ -219,22 +219,24 @@ fn completeHitQuad(ray: Ray, q: vec3f, u: vec3f, v: vec3f, h: ptr<function, Hit>
   (*h).nrm = normalize(cross(u, v));
 }
 
-fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, outCol: ptr<function, vec3f>, outDir: ptr<function, vec3f>) -> bool
+fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let nrm = select(h.nrm, -h.nrm, dot(in.dir, h.nrm) > 0);
-  let dir = nrm + rand3UnitSphere(); 
-  *outDir = select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
-  *outCol = albedo;
+  let dir = nrm + rand3UnitSphere();
+
+  *scatterDir = select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
+  *attenuation = albedo;
   return true;
 }
 
-fn evalMaterialMetal(in: Ray, h: Hit, albedo: vec3f, fuzzRadius: f32, outCol: ptr<function, vec3f>, outDir: ptr<function, vec3f>) -> bool
+fn evalMaterialMetal(in: Ray, h: Hit, albedo: vec3f, fuzzRadius: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let nrm = select(h.nrm, -h.nrm, dot(in.dir, h.nrm) > 0);
   let dir = reflect(in.dir, nrm);
-  *outDir = normalize(dir + fuzzRadius * rand3UnitSphere());
-  *outCol = albedo;
-  return dot(*outDir, nrm) > 0;
+
+  *scatterDir = normalize(dir + fuzzRadius * rand3UnitSphere());
+  *attenuation = albedo;
+  return dot(*scatterDir, nrm) > 0;
 }
 
 fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
@@ -244,7 +246,7 @@ fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
   return r0 + (1 - r0) * pow(1 - cosTheta, 5);
 }
 
-fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, outCol: ptr<function, vec3f>, outDir: ptr<function, vec3f>) -> bool
+fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let inside = dot(in.dir, h.nrm) > 0;
   let nrm = select(h.nrm, -h.nrm, inside);
@@ -265,28 +267,32 @@ fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, outCo
     dir = reflect(in.dir, nrm);
   }
 
-  *outDir = dir;
-  *outCol = albedo;
+  *scatterDir = dir;
+  *attenuation = albedo;
   return true;
 }
 
-fn evalMaterial(in: Ray, h: Hit, outCol: ptr<function, vec3f>, outDir: ptr<function, vec3f>) -> bool
+fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let data = materials[h.matIndex];
   switch(h.matType)
   {
     case MAT_TYPE_LAMBERT: {
-      return evalMaterialLambert(in, h, data.xyz, outCol, outDir);
+      return evalMaterialLambert(in, h, data.xyz, attenuation, scatterDir);
     }
     case MAT_TYPE_METAL: {
-      return evalMaterialMetal(in, h, data.xyz, data.w, outCol, outDir);
+      return evalMaterialMetal(in, h, data.xyz, data.w, attenuation, scatterDir);
     }
     case MAT_TYPE_GLASS: {
-      return evalMaterialGlass(in, h, data.xyz, data.w, outCol, outDir);
+      return evalMaterialGlass(in, h, data.xyz, data.w, attenuation, scatterDir);
+    }
+    case MAT_TYPE_EMITTER: {
+      *emission = data.xyz;
+      return false;
     }
     default: {
       // Error material
-      *outCol = vec3f(99999, 0, 0);
+      *emission = vec3f(99999, 0, 0);
       return false;
     }
   }
@@ -327,7 +333,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
   var objId: u32; 
   
   //intersectObjects(ray, 0, arrayLength(&objects), &objId);
-  
+
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
@@ -401,12 +407,6 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
   return false;
 }
 
-/*fn sampleBackground(ray: Ray) -> vec3f
-{
-  let t = (ray.dir.y + 1.0) * 0.5;
-  return (1.0 - t) * vec3f(1.0) + t * vec3f(0.5, 0.7, 1.0);
-}*/
-
 fn render(initialRay: Ray) -> vec3f
 {
   var ray = initialRay;
@@ -416,11 +416,13 @@ fn render(initialRay: Ray) -> vec3f
     var hit: Hit;
     if(intersectScene(&ray, &hit)) {
       var att: vec3f;
+      var emit: vec3f;
       var newDir: vec3f;
-      if(evalMaterial(ray, hit, &att, &newDir)) {
+      if(evalMaterial(ray, hit, &att, &emit, &newDir)) {
         col *= att;
         ray = createRay(hit.pos, newDir, MAX_DISTANCE);
       } else {
+        col += emit;
         break;
       }
     } else {

@@ -14,3 +14,8 @@ glass glass_create(vec3 albedo, float refr_idx)
 {
   return (glass){ .albedo = albedo, .refr_idx = refr_idx };
 }
+
+emitter emitter_create(vec3 albedo)
+{
+  return (emitter){ .albedo = albedo };
+}
