@@ -3,6 +3,7 @@
 #include "sutil.h"
 #include "mutil.h"
 #include "scn.h"
+#include "obj.h"
 #include "aabb.h"
 
 #define INTERVAL_CNT 8
@@ -156,10 +157,10 @@ void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
 bvh *bvh_create(const scn *s)
 {
   bvh *b = malloc(sizeof(*b));
-  b->node_buf = malloc((2 * s->obj_idx - 1) * sizeof(*b->node_buf));
+  b->node_buf = malloc((2 * s->obj_cnt - 1) * sizeof(*b->node_buf));
   b->node_cnt = 0;
  
-  bvh_node *n = bvh_add_node(b, s, 0, s->obj_idx);
+  bvh_node *n = bvh_add_node(b, s, 0, s->obj_cnt);
   bvh_subdivide_node(b, s, n);
 
   return b;

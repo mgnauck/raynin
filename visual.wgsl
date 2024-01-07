@@ -422,7 +422,7 @@ fn render(initialRay: Ray) -> vec3f
         col *= att;
         ray = createRay(hit.pos, newDir, MAX_DISTANCE);
       } else {
-        col += emit;
+        col *= emit;
         break;
       }
     } else {

@@ -1,81 +1,78 @@
 #include "scn.h"
 #include "sutil.h"
+#include "obj.h"
 #include "shape.h"
 #include "mat.h"
 
-size_t scn_shape_capacity(size_t sphere_cnt, size_t quad_cnt)
+size_t scn_calc_shape_lines(size_t sphere_cnt, size_t quad_cnt)
 {
   return sphere_cnt * sizeof(sphere) / (BUF_LINE_SIZE * sizeof(float)) +
     quad_cnt * sizeof(quad) / (BUF_LINE_SIZE * sizeof(float));
 }
 
-scn *scn_init(size_t obj_buf_capacity, size_t shape_buf_capacity, size_t mat_buf_capacity)
+scn *scn_init(size_t obj_cnt, size_t shape_line_cnt, size_t mat_line_cnt)
 {
   scn *s = malloc(sizeof(*s));
 
-  s->obj_buf = malloc(obj_buf_capacity * BUF_LINE_SIZE * sizeof(*s->obj_buf));
-  s->obj_idx = 0;
+  s->objs = malloc(obj_cnt * sizeof(*s->objs));
+  s->obj_cnt = 0;
   
-  s->shape_buf = malloc(shape_buf_capacity * BUF_LINE_SIZE * sizeof(*s->shape_buf));
-  s->shape_idx = 0;
+  s->shape_lines = malloc(shape_line_cnt * BUF_LINE_SIZE * sizeof(*s->shape_lines));
+  s->shape_line_cnt = 0;
   
-  s->mat_buf = malloc(mat_buf_capacity * BUF_LINE_SIZE * sizeof(*s->mat_buf));
-  s->mat_idx = 0;
+  s->mat_lines = malloc(mat_line_cnt * BUF_LINE_SIZE * sizeof(*s->mat_lines));
+  s->mat_line_cnt = 0;
   
   return s;
 }
 
 void scn_release(scn *s)
 {
-  free(s->obj_buf);
-  free(s->shape_buf);
-  free(s->mat_buf);
+  free(s->objs);
+  free(s->shape_lines);
+  free(s->mat_lines);
   free(s);
 }
 
-uint32_t scn_add_obj(scn *s, obj obj)
+uint32_t scn_add_obj(scn *s, const obj *obj)
 {
-  memcpy(&s->obj_buf[s->obj_idx * BUF_LINE_SIZE], &obj, sizeof(obj));
-
-  size_t idx = s->obj_idx;
-  s->obj_idx += sizeof(obj) / (BUF_LINE_SIZE * sizeof(*s->obj_buf));
-  
-  return idx;
+  memcpy(&s->objs[s->obj_cnt], obj, sizeof(*obj));
+  return s->obj_cnt++;
 }
 
 uint32_t scn_add_shape(scn *s, const void *shape, size_t size)
 {
-  memcpy(&s->shape_buf[s->shape_idx * BUF_LINE_SIZE], shape, size);
+  memcpy(&s->shape_lines[s->shape_line_cnt * BUF_LINE_SIZE], shape, size);
   
-  size_t idx = s->shape_idx;
-  s->shape_idx += size / (BUF_LINE_SIZE * sizeof(*s->shape_buf));
+  size_t cnt = s->shape_line_cnt;
+  s->shape_line_cnt += size / (BUF_LINE_SIZE * sizeof(*s->shape_lines));
 
-  return idx;
+  return cnt;
 }
 
 uint32_t scn_add_mat(scn *s, const void *mat, size_t size)
 {
-  memcpy(&s->mat_buf[s->mat_idx * BUF_LINE_SIZE], mat, size);
+  memcpy(&s->mat_lines[s->mat_line_cnt * BUF_LINE_SIZE], mat, size);
   
-  size_t idx = s->mat_idx;
-  s->mat_idx += size / (BUF_LINE_SIZE * sizeof(*s->mat_buf));
+  size_t cnt = s->mat_line_cnt;
+  s->mat_line_cnt += size / (BUF_LINE_SIZE * sizeof(*s->mat_lines));
 
-  return idx;
+  return cnt;
 }
 
 obj *scn_get_obj(const scn *s, uint32_t idx)
 {
-  return (obj *)&s->obj_buf[idx * BUF_LINE_SIZE];
+  return &s->objs[idx];
 }
 
 void *scn_get_shape(const scn *s, uint32_t idx)
 {
-  return &s->shape_buf[idx * BUF_LINE_SIZE];
+  return &s->shape_lines[idx * BUF_LINE_SIZE];
 }
 
 void *scn_get_mat(const scn *s, uint32_t idx)
 {
-  return &s->mat_buf[idx * BUF_LINE_SIZE];
+  return &s->mat_lines[idx * BUF_LINE_SIZE];
 }
 
 aabb scn_get_obj_aabb(const scn *s, uint32_t idx)
