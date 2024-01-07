@@ -1,15 +1,5 @@
 #include "shape.h"
 
-sphere sphere_create(vec3 center, float radius)
-{
-  return (sphere){ .center = center, .radius = radius };
-}
-
-quad quad_create(vec3 q, vec3 u, vec3 v)
-{
-  return (quad){ .q = q, .u = u, .v = v };
-}
-
 aabb sphere_get_aabb(const sphere *s)
 {
   float r = s->radius;

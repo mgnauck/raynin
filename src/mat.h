@@ -23,9 +23,4 @@ typedef struct emitter {
   float pad;
 } emitter;
 
-lambert   lambert_create(vec3 albedo);
-metal     metal_create(vec3 albedo, float fuzz_radius);
-glass     glass_create(vec3 albedo, float refr_idx);
-emitter   emitter_create(vec3 albedo);
-
 #endif
