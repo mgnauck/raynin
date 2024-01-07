@@ -26,7 +26,7 @@ bool      orbit_cam = false;
 
 scn *create_scn_spheres()
 {
-  scn *s = scn_init(5, scn_calc_shape_lines(5, 0), 4);
+  scn *s = scn_init(5, scn_calc_shape_buf_size(5, 0), scn_calc_mat_buf_size(2, 1, 1, 0));
 
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
@@ -40,7 +40,7 @@ scn *create_scn_spheres()
       LAMBERT, scn_add_mat(s,
         &(lambert){ .albedo = (vec3){{{ 0.6f, 0.3f, 0.3f }}} }, sizeof(lambert)) });
 
-  uint32_t glass_mat = scn_add_mat(s,
+  size_t glass_mat = scn_add_mat(s,
       &(glass){ (vec3){{{ 1.0f, 1.0f, 1.0f }}}, 1.5f }, sizeof(glass));
 
   scn_add_obj(s, &(obj){ SPHERE,
@@ -67,7 +67,7 @@ scn *create_scn_spheres()
 
 scn *create_scn_quads()
 {
-  scn *s = scn_init(7, scn_calc_shape_lines(2, 5), 7);
+  scn *s = scn_init(7, scn_calc_shape_buf_size(2, 5), scn_calc_mat_buf_size(6, 0, 1, 0));
 
   scn_add_obj(s, &(obj){ 
         QUAD, scn_add_shape(s,
@@ -134,9 +134,9 @@ scn *create_scn_quads()
 
 scn *create_scn_emitter()
 {
-  scn *s = scn_init(4, scn_calc_shape_lines(3, 1), 2);
+  scn *s = scn_init(4, scn_calc_shape_buf_size(3, 1), scn_calc_mat_buf_size(1, 0, 0, 1));
 
-  uint32_t lmat = scn_add_mat(s, &(lambert){ .albedo = (vec3){{{ 0.5f, 0.5f, 0.5f }}} }, sizeof(lambert));
+  size_t lmat = scn_add_mat(s, &(lambert){ .albedo = (vec3){{{ 0.5f, 0.5f, 0.5f }}} }, sizeof(lambert));
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 0.0f, -1000.0f, 0.0f}}}, 1000.0f }, sizeof(sphere)),
@@ -147,7 +147,7 @@ scn *create_scn_emitter()
           &(sphere){ (vec3){{{ 0.0f, 2.0f, 0.0f}}}, 2.0f }, sizeof(sphere)),
         LAMBERT, lmat });
   
-  uint32_t emat = scn_add_mat(s, &(emitter){ .albedo = (vec3){{{ 4.0f, 4.0f, 4.0f }}} }, sizeof(emitter));
+  size_t emat = scn_add_mat(s, &(emitter){ .albedo = (vec3){{{ 4.0f, 4.0f, 4.0f }}} }, sizeof(emitter));
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 0.0f, 7.0f, 0.0f}}}, 2.0f }, sizeof(sphere)),
@@ -169,7 +169,8 @@ scn *create_scn_emitter()
 scn *create_scn_riow()
 {
 #define SIZE 22
-  scn *s = scn_init(SIZE * SIZE + 4, scn_calc_shape_lines(SIZE * SIZE + 4, 0), SIZE * SIZE + 4);
+  scn *s = scn_init(SIZE * SIZE + 4, scn_calc_shape_buf_size(SIZE * SIZE + 4, 0),
+      scn_calc_mat_buf_size(SIZE * SIZE + 4, 0, 0, 0));
 
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
@@ -201,7 +202,7 @@ scn *create_scn_riow()
       vec3 center = {{{
         (float)a + 0.9f * randf(), 0.2f, (float)b + 0.9f * randf() }}};
       if(vec3_len(vec3_add(center, (vec3){{{ -4.0f, -0.2f, 0.0f}}})) > 0.9f) {
-        uint32_t t, m;
+        size_t t, m;
         if(mat_p < 0.8f) {
           t = LAMBERT;
           m = scn_add_mat(s,
@@ -245,20 +246,19 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
 
   config = (cfg){ width, height, spp, bounces };
 
-  curr_scn = create_scn_quads();
+  curr_scn = create_scn_riow();
   curr_bvh = bvh_create(curr_scn);
-  
+
   gpu_create_res(
       GLOB_BUF_SIZE,
       curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf),
       curr_scn->obj_cnt * sizeof(*curr_scn->objs),
-      curr_scn->shape_line_cnt * BUF_LINE_SIZE * sizeof(*curr_scn->shape_lines),
-      curr_scn->mat_line_cnt * BUF_LINE_SIZE * sizeof(*curr_scn->mat_lines));
+      curr_scn->shape_buf_size, curr_scn->mat_buf_size);
 
   gpu_write_buf(BVH, 0, curr_bvh->node_buf, curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf));
   gpu_write_buf(OBJ, 0, curr_scn->objs, curr_scn->obj_cnt * sizeof(*curr_scn->objs));
-  gpu_write_buf(SHAPE, 0, curr_scn->shape_lines, curr_scn->shape_line_cnt * BUF_LINE_SIZE * sizeof(*curr_scn->shape_lines));
-  gpu_write_buf(MAT, 0, curr_scn->mat_lines, curr_scn->mat_line_cnt * BUF_LINE_SIZE * sizeof(*curr_scn->mat_lines));
+  gpu_write_buf(SHAPE, 0, curr_scn->shape_buf, curr_scn->shape_buf_size);
+  gpu_write_buf(MAT, 0, curr_scn->mat_buf, curr_scn->mat_buf_size);
 
   gpu_write_buf(GLOB, GLOB_BUF_OFS_CFG, &config, sizeof(cfg));
 

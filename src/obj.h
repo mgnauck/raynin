@@ -20,9 +20,9 @@ typedef enum mat_type {
 
 typedef struct obj {
   shape_type  shape_type;
-  uint32_t    shape_idx;
+  size_t      shape_ofs;
   mat_type    mat_type;
-  uint32_t    mat_idx;
+  size_t      mat_ofs;
 } obj;
 
 #endif
