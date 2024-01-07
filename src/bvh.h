@@ -15,7 +15,7 @@ typedef struct bvh_node {
 } bvh_node;
 
 typedef struct bvh {
-  bvh_node  *node_buf;
+  bvh_node  *nodes;
   size_t    node_cnt;
 } bvh;
 

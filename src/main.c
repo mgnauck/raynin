@@ -251,11 +251,11 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
 
   gpu_create_res(
       GLOB_BUF_SIZE,
-      curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf),
+      curr_bvh->node_cnt * sizeof(*curr_bvh->nodes),
       curr_scn->obj_cnt * sizeof(*curr_scn->objs),
       curr_scn->shape_buf_size, curr_scn->mat_buf_size);
 
-  gpu_write_buf(BVH, 0, curr_bvh->node_buf, curr_bvh->node_cnt * sizeof(*curr_bvh->node_buf));
+  gpu_write_buf(BVH, 0, curr_bvh->nodes, curr_bvh->node_cnt * sizeof(*curr_bvh->nodes));
   gpu_write_buf(OBJ, 0, curr_scn->objs, curr_scn->obj_cnt * sizeof(*curr_scn->objs));
   gpu_write_buf(SHAPE, 0, curr_scn->shape_buf, curr_scn->shape_buf_size);
   gpu_write_buf(MAT, 0, curr_scn->mat_buf, curr_scn->mat_buf_size);

@@ -104,7 +104,7 @@ bvh_node *bvh_add_node(bvh *b, const scn *s, int32_t start_idx, size_t obj_cnt)
   log("start_idx: %d, obj_cnt: %d", start_idx, obj_cnt);
   log("---");*/
 
-  return memcpy(&b->node_buf[b->node_cnt++],
+  return memcpy(&b->nodes[b->node_cnt++],
       &(bvh_node){ node_aabb.min, start_idx, node_aabb.max, obj_cnt },
       sizeof(bvh_node));
 }
@@ -157,7 +157,7 @@ void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
 bvh *bvh_create(const scn *s)
 {
   bvh *b = malloc(sizeof(*b));
-  b->node_buf = malloc((2 * s->obj_cnt - 1) * sizeof(*b->node_buf));
+  b->nodes = malloc((2 * s->obj_cnt - 1) * sizeof(*b->nodes));
   b->node_cnt = 0;
  
   bvh_node *n = bvh_add_node(b, s, 0, s->obj_cnt);
@@ -168,6 +168,6 @@ bvh *bvh_create(const scn *s)
 
 void bvh_release(bvh *b)
 {
-  free(b->node_buf);
+  free(b->nodes);
   free(b);
 }
