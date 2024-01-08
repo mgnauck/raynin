@@ -8,14 +8,16 @@ typedef enum shape_type {
   BOX,
   CYLINDER,
   QUAD,
-  MESH
+  MESH,
+  CONST_MED,
 } shape_type;
 
 typedef enum mat_type {
   LAMBERT = 1,
   METAL,
   GLASS,
-  EMITTER
+  EMITTER,
+  ISOTROPIC
 } mat_type;
 
 typedef struct obj {
@@ -23,6 +25,7 @@ typedef struct obj {
   size_t      shape_ofs;
   mat_type    mat_type;
   size_t      mat_ofs;
+  size_t      ref_idx;
 } obj;
 
 #endif

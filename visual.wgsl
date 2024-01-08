@@ -43,9 +43,10 @@ struct BvhNode
 struct Object
 {
   shapeType: u32,
-  shapeIndex: u32,
+  shapeOfs: u32,
   matType: u32,
-  matIndex: u32
+  matOfs: u32,
+  refIdx: u32
 }
 
 struct Hit
@@ -53,7 +54,7 @@ struct Hit
   pos: vec3f,
   nrm: vec3f,
   matType: u32,
-  matIndex: u32
+  matOfs: u32
 }
 
 const EPSILON = 0.001;
@@ -65,6 +66,7 @@ const SHAPE_TYPE_BOX = 2;
 const SHAPE_TYPE_CYLINDER = 3;
 const SHAPE_TYPE_QUAD = 4;
 const SHAPE_TYPE_MESH = 5;
+const SHAPE_TYPE_CONSTANT_MEDIUM = 6;
 
 const MAT_TYPE_LAMBERT = 1;
 const MAT_TYPE_METAL = 2;
@@ -274,7 +276,7 @@ fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, atten
 
 fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let data = materials[h.matIndex];
+  let data = materials[h.matOfs];
   switch(h.matType)
   {
     case MAT_TYPE_LAMBERT: {
@@ -303,14 +305,14 @@ fn intersectObjects(ray: ptr<function, Ray>, objStartIndex: u32, objCount: u32, 
   for(var i=objStartIndex; i<objStartIndex + objCount; i++) {
     var currDist: f32;
     let obj = &objects[i];
-    let data = shapes[(*obj).shapeIndex];
+    let data = shapes[(*obj).shapeOfs];
     switch((*obj).shapeType) {
       case SHAPE_TYPE_SPHERE: {
         currDist = intersectSphere(*ray, data.xyz, data.w);
       }
       case SHAPE_TYPE_QUAD: {
-        let u = shapes[(*obj).shapeIndex + 1];
-        let v = shapes[(*obj).shapeIndex + 2];
+        let u = shapes[(*obj).shapeOfs + 1];
+        let v = shapes[(*obj).shapeOfs + 2];
         currDist = intersectQuad(*ray, data.xyz, u.xyz, v.xyz);
       }
       case SHAPE_TYPE_MESH: {
@@ -382,14 +384,14 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
 
   if((*ray).t < MAX_DISTANCE) {
     let obj = &objects[objId];
-    let data = shapes[(*obj).shapeIndex];
+    let data = shapes[(*obj).shapeOfs];
     switch((*obj).shapeType) {
       case SHAPE_TYPE_SPHERE: {
         completeHitSphere(*ray, data.xyz, data.w, hit);
       }
       case SHAPE_TYPE_QUAD: {
-        let u = shapes[(*obj).shapeIndex + 1];
-        let v = shapes[(*obj).shapeIndex + 2];
+        let u = shapes[(*obj).shapeOfs + 1];
+        let v = shapes[(*obj).shapeOfs + 2];
         completeHitQuad(*ray, data.xyz, u.xyz, v.xyz, hit);
       }
       case SHAPE_TYPE_MESH: {
@@ -400,7 +402,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
       }
     }
     (*hit).matType = (*obj).matType;
-    (*hit).matIndex = (*obj).matIndex; 
+    (*hit).matOfs = (*obj).matOfs; 
     return true;
   }
 

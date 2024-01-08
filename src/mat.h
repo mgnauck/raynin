@@ -3,10 +3,11 @@
 
 #include "vec3.h"
 
-typedef struct lambert {
+// Use with mat types: LAMBERT, EMITTER, ISOTROPIC
+typedef struct basic {
   vec3  albedo;
   float pad;
-} lambert;
+} basic;
 
 typedef struct metal {
   vec3  albedo;
@@ -17,10 +18,5 @@ typedef struct glass {
   vec3  albedo;
   float refr_idx;
 } glass;
-
-typedef struct emitter {
-  vec3  albedo;
-  float pad;
-} emitter;
 
 #endif

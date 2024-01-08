@@ -18,6 +18,7 @@ uint32_t  gathered_smpls = 0;
 scn       *curr_scn;
 bvh       *curr_bvh;
 
+//vec3      bg_col = {{{ 0.7f, 0.8f, 1.0f }}};
 vec3      bg_col = {{{ 0.7f, 0.8f, 1.0f }}};
 view      curr_view;
 cam       curr_cam;
@@ -26,19 +27,19 @@ bool      orbit_cam = false;
 
 scn *create_scn_spheres()
 {
-  scn *s = scn_init(5, scn_calc_shape_buf_size(5, 0), scn_calc_mat_buf_size(2, 1, 1, 0));
+  scn *s = scn_init(5, scn_calc_shape_buf_size(5, 0), scn_calc_mat_buf_size(2, 1, 1));
 
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 0.0f, -100.5f, 0.0f }}}, 100.0f }, sizeof(sphere)),
         LAMBERT, scn_add_mat(s,
-          &(lambert){ .albedo = (vec3){{{ 0.5f, 0.5f, 0.5f }}} }, sizeof(lambert)) });
+          &(basic){ .albedo = (vec3){{{ 0.5f, 0.5f, 0.5f }}} }, sizeof(basic)), 0 });
 
   scn_add_obj(s, &(obj){ 
       SPHERE, scn_add_shape(s,
         &(sphere){ (vec3){{{ -1.0f, 0.0f, 0.0f }}}, 0.5f }, sizeof(sphere)),
       LAMBERT, scn_add_mat(s,
-        &(lambert){ .albedo = (vec3){{{ 0.6f, 0.3f, 0.3f }}} }, sizeof(lambert)) });
+        &(basic){ .albedo = (vec3){{{ 0.6f, 0.3f, 0.3f }}} }, sizeof(basic)), 0 });
 
   size_t glass_mat = scn_add_mat(s,
       &(glass){ (vec3){{{ 1.0f, 1.0f, 1.0f }}}, 1.5f }, sizeof(glass));
@@ -46,18 +47,18 @@ scn *create_scn_spheres()
   scn_add_obj(s, &(obj){ SPHERE,
       scn_add_shape(s,
         &(sphere){ (vec3){{{ 0.0f, 0.0f, 0.0f }}}, 0.5f }, sizeof(sphere)),
-      GLASS, glass_mat });
+      GLASS, glass_mat, 0 });
 
   scn_add_obj(s, &(obj){ 
       SPHERE, scn_add_shape(s,
         &(sphere){ (vec3){{{ 0.0f, 0.0f, 0.0f }}}, -0.45f }, sizeof(sphere)),
-      GLASS, glass_mat });
+      GLASS, glass_mat, 0 });
 
   scn_add_obj(s, &(obj){ 
       SPHERE, scn_add_shape(s,
         &(sphere){ (vec3){{{ 1.0f, 0.0f, 0.0f }}}, 0.5f }, sizeof(sphere)),
       METAL, scn_add_mat(s,
-        &(metal){ (vec3){{{ 0.3f, 0.3f, 0.6f }}}, 0.0f }, sizeof(metal)) });
+        &(metal){ (vec3){{{ 0.3f, 0.3f, 0.6f }}}, 0.0f }, sizeof(metal)), 0 });
 
   curr_cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
   cam_set(&curr_cam, (vec3){{{ 0.0f, 0.0f, 2.0f }}}, (vec3){{{ 0.0f, 0.0f, 0.0f }}});
@@ -67,7 +68,7 @@ scn *create_scn_spheres()
 
 scn *create_scn_quads()
 {
-  scn *s = scn_init(7, scn_calc_shape_buf_size(2, 5), scn_calc_mat_buf_size(6, 0, 1, 0));
+  scn *s = scn_init(7, scn_calc_shape_buf_size(2, 5), scn_calc_mat_buf_size(6, 0, 1));
 
   scn_add_obj(s, &(obj){ 
         QUAD, scn_add_shape(s,
@@ -76,7 +77,7 @@ scn *create_scn_quads()
             .u = (vec3){{{ 0.0f, 0.0f, -4.0f }}},
             .v = (vec3){{{ 0.0f, 4.0f, 0.0f }}} }, sizeof(quad)),
         LAMBERT, scn_add_mat(s,
-          &(lambert){ .albedo = (vec3){{{ 1.0f, 0.2f, 0.2f }}} }, sizeof(lambert)) });
+          &(basic){ .albedo = (vec3){{{ 1.0f, 0.2f, 0.2f }}} }, sizeof(basic)), 0 });
   
   scn_add_obj(s, &(obj){ 
         QUAD, scn_add_shape(s,
@@ -85,7 +86,7 @@ scn *create_scn_quads()
             .u = (vec3){{{ 4.0f, 0.0f, 0.0f }}},
             .v = (vec3){{{ 0.0f, 4.0f, 0.0f }}} }, sizeof(quad)),
         LAMBERT, scn_add_mat(s,
-          &(lambert){ .albedo = (vec3){{{ 0.2f, 1.0f, 0.2f }}} }, sizeof(lambert)) });
+          &(basic){ .albedo = (vec3){{{ 0.2f, 1.0f, 0.2f }}} }, sizeof(basic)), 0 });
   
   scn_add_obj(s, &(obj){ 
         QUAD, scn_add_shape(s,
@@ -94,7 +95,7 @@ scn *create_scn_quads()
             .u = (vec3){{{ 0.0f, 0.0f, 4.0f }}},
             .v = (vec3){{{ 0.0f, 4.0f, 0.0f }}} }, sizeof(quad)),
         LAMBERT, scn_add_mat(s,
-          &(lambert){ .albedo = (vec3){{{ 0.2f, 0.2f, 1.0f }}} }, sizeof(lambert)) });
+          &(basic){ .albedo = (vec3){{{ 0.2f, 0.2f, 1.0f }}} }, sizeof(basic)), 0 });
 
   scn_add_obj(s, &(obj){ 
         QUAD, scn_add_shape(s,
@@ -103,7 +104,7 @@ scn *create_scn_quads()
             .u = (vec3){{{ 4.0f, 0.0f, 0.0f }}}, 
             .v = (vec3){{{ 0.0f, 0.0f, 4.0f }}} }, sizeof(quad)),
         LAMBERT, scn_add_mat(s,
-          &(lambert){ .albedo = (vec3){{{ 1.0f, 0.5f, 0.0f }}} }, sizeof(lambert)) });
+          &(basic){ .albedo = (vec3){{{ 1.0f, 0.5f, 0.0f }}} }, sizeof(basic)), 0 });
   
   scn_add_obj(s, &(obj){ 
         QUAD, scn_add_shape(s,
@@ -112,19 +113,19 @@ scn *create_scn_quads()
             .u = (vec3){{{ 4.0f, 0.0f, 0.0f }}},
             .v = (vec3){{{ 0.0f, 0.0f, -4.0f }}} }, sizeof(quad)),
         LAMBERT, scn_add_mat(s,
-          &(lambert){ .albedo = (vec3){{{ 0.2f, 0.8f, 0.8f }}} }, sizeof(lambert)) });
+          &(basic){ .albedo = (vec3){{{ 0.2f, 0.8f, 0.8f }}} }, sizeof(basic)), 0 });
 
   scn_add_obj(s, &(obj){ SPHERE,
       scn_add_shape(s,
         &(sphere){ (vec3){{{ 0.0f, 0.0f, 2.5f }}}, 1.5f }, sizeof(sphere)),
       GLASS, scn_add_mat(s,
-        &(glass){ (vec3){{{ 1.0f, 1.0f, 1.0f }}}, 1.5f }, sizeof(glass)) });
+        &(glass){ (vec3){{{ 1.0f, 1.0f, 1.0f }}}, 1.5f }, sizeof(glass)), 0 });
 
   scn_add_obj(s, &(obj){ 
       SPHERE, scn_add_shape(s,
         &(sphere){ (vec3){{{ 0.0f, 0.0f, 2.5f }}}, 1.0f }, sizeof(sphere)),
       LAMBERT, scn_add_mat(s,
-        &(lambert){ .albedo = (vec3){{{ 0.0f, 0.0f, 1.0f }}} }, sizeof(lambert)) });
+        &(basic){ .albedo = (vec3){{{ 0.0f, 0.0f, 1.0f }}} }, sizeof(basic)), 0 });
 
   curr_cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
   cam_set(&curr_cam, (vec3){{{ 0.0f, 0.0f, 9.0f }}}, (vec3){{{ 0.0f, 0.0f, 0.0f }}});
@@ -134,31 +135,51 @@ scn *create_scn_quads()
 
 scn *create_scn_emitter()
 {
-  scn *s = scn_init(4, scn_calc_shape_buf_size(3, 1), scn_calc_mat_buf_size(1, 0, 0, 1));
+  scn *s = scn_init(8, scn_calc_shape_buf_size(7, 1), scn_calc_mat_buf_size(4, 1, 1));
 
-  size_t lmat = scn_add_mat(s, &(lambert){ .albedo = (vec3){{{ 0.5f, 0.5f, 0.5f }}} }, sizeof(lambert));
+  size_t lmat = scn_add_mat(s, &(basic){ .albedo = (vec3){{{ 0.5f, 0.5f, 0.5f }}} }, sizeof(basic));
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 0.0f, -1000.0f, 0.0f}}}, 1000.0f }, sizeof(sphere)),
-        LAMBERT, lmat });
+        LAMBERT, lmat, 0 });
+ 
+  scn_add_obj(s, &(obj){
+        SPHERE, scn_add_shape(s,
+          &(sphere){ (vec3){{{ -5.0f, 3.0f, 3.0f}}}, 1.0f }, sizeof(sphere)),
+        LAMBERT, scn_add_mat(s, &(basic){ .albedo = (vec3){{{ 0.0f, 1.0f, 0.0f }}} }, sizeof(basic)), 0 });
   
+  scn_add_obj(s, &(obj){
+        SPHERE, scn_add_shape(s,
+          &(sphere){ (vec3){{{ -5.0f, 4.0f, 0.0f}}}, 2.0f }, sizeof(sphere)),
+        METAL, scn_add_mat(s, &(metal){ (vec3){{{ 0.5f, 0.5f, 0.6f }}}, 0.02 }, sizeof(metal)), 0 });
+ 
+  scn_add_obj(s, &(obj){
+        SPHERE, scn_add_shape(s,
+          &(sphere){ (vec3){{{ -5.0f, 3.0f, -3.0f}}}, 1.0f }, sizeof(sphere)),
+        LAMBERT, scn_add_mat(s, &(basic){ .albedo = (vec3){{{ 1.0f, 0.0f, 0.0f }}} }, sizeof(basic)), 0 });
+
+  size_t gmat = scn_add_mat(s, &(glass){ (vec3){{{ 1.0f, 1.0f, 1.0f }}}, 1.5f }, sizeof(glass));
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 0.0f, 2.0f, 0.0f}}}, 2.0f }, sizeof(sphere)),
-        LAMBERT, lmat });
-  
-  size_t emat = scn_add_mat(s, &(emitter){ .albedo = (vec3){{{ 4.0f, 4.0f, 4.0f }}} }, sizeof(emitter));
+        GLASS, gmat, 0 });
+   scn_add_obj(s, &(obj){ 
+        SPHERE, scn_add_shape(s,
+          &(sphere){ (vec3){{{ 0.0f, 2.0f, 0.0f}}}, -1.8f }, sizeof(sphere)),
+        GLASS, gmat, 0 });
+ 
+  size_t emat = scn_add_mat(s, &(basic){ .albedo = (vec3){{{ 4.0f, 4.0f, 4.0f }}} }, sizeof(basic));
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 0.0f, 7.0f, 0.0f}}}, 2.0f }, sizeof(sphere)),
-        EMITTER, emat });
+        EMITTER, emat, 0 });
  
   scn_add_obj(s, &(obj){ 
         QUAD, scn_add_shape(s, &(quad){ 
           .q = (vec3){{{ 3.0f, 1.0f, -2.0f}}},
           .u = (vec3){{{ 2.0f, 0.0f, 0.0f }}},
           .v = (vec3){{{ 0.0f, 2.0f, 0.0f }}} }, sizeof(quad)),
-        EMITTER, emat });
+        EMITTER, emat, 0 });
 
   curr_cam = (cam){ .vert_fov = 20.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
   cam_set(&curr_cam, (vec3){{{ 26.0f, 3.0f, 6.0f }}}, (vec3){{{ 0.0f, 2.0f, 0.0f }}});
@@ -170,31 +191,31 @@ scn *create_scn_riow()
 {
 #define SIZE 22
   scn *s = scn_init(SIZE * SIZE + 4, scn_calc_shape_buf_size(SIZE * SIZE + 4, 0),
-      scn_calc_mat_buf_size(SIZE * SIZE + 4, 0, 0, 0));
+      scn_calc_mat_buf_size(SIZE * SIZE + 4, 0, 0));
 
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 0.0f, -1000.0f, 0.0f}}}, 1000.0f }, sizeof(sphere)),
         LAMBERT, scn_add_mat(s,
-          &(lambert){ .albedo = (vec3){{{ 0.5f, 0.5f, 0.5f }}} }, sizeof(lambert)) });
+          &(basic){ .albedo = (vec3){{{ 0.5f, 0.5f, 0.5f }}} }, sizeof(basic)), 0 });
  
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 4.0f, 1.0f, 0.0f}}}, 1.0f }, sizeof(sphere)),
         METAL, scn_add_mat(s,
-          &(metal){ (vec3){{{ 0.7f, 0.6f, 0.5f }}}, 0.0f }, sizeof(metal)) });
+          &(metal){ (vec3){{{ 0.7f, 0.6f, 0.5f }}}, 0.0f }, sizeof(metal)), 0 });
 
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ 0.0f, 1.0f, 0.0f}}}, 1.0f }, sizeof(sphere)),
         GLASS, scn_add_mat(s,
-          &(glass){ (vec3){{{ 1.0f, 1.0f, 1.0f }}}, 1.5f }, sizeof(glass)) });
+          &(glass){ (vec3){{{ 1.0f, 1.0f, 1.0f }}}, 1.5f }, sizeof(glass)), 0 });
   
   scn_add_obj(s, &(obj){ 
         SPHERE, scn_add_shape(s,
           &(sphere){ (vec3){{{ -4.0f, 1.0f, 0.0f}}}, 1.0f }, sizeof(sphere)),
         LAMBERT, scn_add_mat(s,
-          &(lambert){ .albedo = (vec3){{{ 0.4f, 0.2f, 0.1f }}} }, sizeof(lambert)) });
+          &(basic){ .albedo = (vec3){{{ 0.4f, 0.2f, 0.1f }}} }, sizeof(basic)), 0 });
   
    for(int a=-SIZE/2; a<SIZE/2; a++) {
     for(int b=-SIZE/2; b<SIZE/2; b++) {
@@ -206,7 +227,7 @@ scn *create_scn_riow()
         if(mat_p < 0.8f) {
           t = LAMBERT;
           m = scn_add_mat(s,
-              &(lambert){ .albedo = vec3_mul(vec3_rand(), vec3_rand()) }, sizeof(lambert));
+              &(basic){ .albedo = vec3_mul(vec3_rand(), vec3_rand()) }, sizeof(basic));
         } else if(mat_p < 0.95f) {
           t = METAL;
           m = scn_add_mat(s,
@@ -218,7 +239,7 @@ scn *create_scn_riow()
         }
         scn_add_obj(s, &(obj){ 
               SPHERE, scn_add_shape(s,
-                &(sphere){ center, 0.2f }, sizeof(sphere)), t, m });
+                &(sphere){ center, 0.2f }, sizeof(sphere)), t, m, 0 });
       }
     }
   }
@@ -244,9 +265,9 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
 {
   srand(42u, 303u);
 
-  config = (cfg){ width, height, spp, bounces };
+  config = (cfg){ width, height, spp, 10 /*bounces*/ };
 
-  curr_scn = create_scn_riow();
+  curr_scn = create_scn_emitter();
   curr_bvh = bvh_create(curr_scn);
 
   gpu_create_res(
@@ -274,11 +295,9 @@ void update(float time)
     float r = 15.0f;
     float h = 2.5f;
 
-    cam_set(&curr_cam, (vec3){{{
-        r * sinf(time * s),
-        h + 0.75 * h * sinf(time * s * 0.7f),
-        r * cosf(time *s) }}},
-        vec3_unit((vec3){{{ 13.0f, 2.0f, 3.0f }}}));
+    vec3 pos = (vec3){{{ r * sinf(time * s), h + 0.75 * h * sinf(time * s * 0.7f), r * cosf(time *s) }}};
+    vec3 tgt = vec3_unit((vec3){{{ 13.0f, 2.0f, 3.0f }}});
+    cam_set(&curr_cam, pos, tgt);
 
     update_cam_view();    
   }

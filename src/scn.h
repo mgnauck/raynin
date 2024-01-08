@@ -20,13 +20,12 @@ typedef struct scn {
 } scn;
 
 size_t    scn_calc_shape_buf_size(size_t sphere_cnt, size_t quad_cnt);
-size_t    scn_calc_mat_buf_size(size_t lambert_cnt, size_t metal_cnt,
-            size_t glass_cnt, size_t emitter_cnt);
+size_t    scn_calc_mat_buf_size(size_t basic_cnt, size_t metal_cnt, size_t glass_cnt);
 
 scn       *scn_init(size_t obj_cnt, size_t shape_buf_size, size_t mat_buf_size);
 void      scn_release(scn *s);
 
-void      scn_add_obj(scn *s, const obj *o); 
+size_t    scn_add_obj(scn *s, const obj *o); 
 size_t    scn_add_shape(scn *s, const void *shape, size_t size);
 size_t    scn_add_mat(scn *s, const void *mat, size_t size);
 
