@@ -65,17 +65,17 @@ size_t scn_add_mat(scn *s, const void *mat, size_t size)
 
 obj *scn_get_obj(const scn *s, size_t idx)
 {
-  return &s->objs[idx];
+  return s->objs + idx;
 }
 
 void *scn_get_shape(const scn *s, size_t ofs)
 {
-  return &s->shape_buf[ofs * BUF_LINE_SIZE];
+  return s->shape_buf + ofs * BUF_LINE_SIZE;
 }
 
 void *scn_get_mat(const scn *s, size_t ofs)
 {
-  return &s->mat_buf[ofs * BUF_LINE_SIZE];
+  return s->mat_buf + ofs * BUF_LINE_SIZE;
 }
 
 aabb scn_get_obj_aabb(const scn *s, size_t idx)
