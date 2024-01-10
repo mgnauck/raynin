@@ -17,6 +17,7 @@ typedef struct bvh_node {
 typedef struct bvh {
   bvh_node  *nodes;
   size_t    node_cnt;
+  size_t    *indices;
 } bvh;
 
 bvh   *bvh_create(const scn *s);

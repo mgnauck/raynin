@@ -29,6 +29,7 @@ struct Ray
   ori: vec3f,
   dir: vec3f,
   invDir: vec3f,
+  tmin: f32,
   t: f32
 }
 
@@ -46,7 +47,6 @@ struct Object
   shapeOfs: u32,
   matType: u32,
   matOfs: u32,
-  refIdx: u32
 }
 
 struct Hit
@@ -66,25 +66,26 @@ const SHAPE_TYPE_BOX = 2;
 const SHAPE_TYPE_CYLINDER = 3;
 const SHAPE_TYPE_QUAD = 4;
 const SHAPE_TYPE_MESH = 5;
-const SHAPE_TYPE_CONSTANT_MEDIUM = 6;
 
 const MAT_TYPE_LAMBERT = 1;
 const MAT_TYPE_METAL = 2;
 const MAT_TYPE_GLASS = 3;
 const MAT_TYPE_EMITTER = 4;
+const MAT_TYPE_ISOTROPIC = 5;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> bvhNodes: array<BvhNode>;
-@group(0) @binding(2) var<storage, read> objects: array<Object>;
-@group(0) @binding(3) var<storage, read> shapes: array<vec4f>;
-@group(0) @binding(4) var<storage, read> materials: array<vec4f>;
-@group(0) @binding(5) var<storage, read_write> buffer: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> image: array<vec4f>;
+@group(0) @binding(2) var<storage, read> indices: array<u32>;
+@group(0) @binding(3) var<storage, read> objects: array<Object>;
+@group(0) @binding(4) var<storage, read> shapes: array<vec4f>;
+@group(0) @binding(5) var<storage, read> materials: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(7) var<storage, read_write> image: array<vec4f>;
 
 var<private> nodeStack: array<u32, 32>; // Fixed size
 var<private> rngState: u32;
 
-// https://jcgt.org/published/0009/03/02/
+// PCG from https://jcgt.org/published/0009/03/02/
 fn rand() -> f32
 {
   rngState = rngState * 747796405u + 2891336453u;
@@ -140,11 +141,12 @@ fn maxComp(v: vec3f) -> f32
   return max(v.x, max(v.y, v.z));
 }
 
-fn createRay(ori: vec3f, dir: vec3f, tmax: f32) -> Ray
+fn createRay(ori: vec3f, dir: vec3f, tmin: f32, tmax: f32) -> Ray
 {
   var r: Ray;
   r.ori = ori;
   r.dir = dir;
+  r.tmin = tmin;
   r.t = tmax;
   r.invDir = 1 / r.dir;
   return r;
@@ -158,7 +160,7 @@ fn intersectAabb(ray: Ray, minExt: vec3f, maxExt: vec3f) -> f32
   let tmin = maxComp(min(t0, t1));
   let tmax = minComp(max(t0, t1));
   
-  return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < ray.t && tmax > 0);
+  return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < ray.t && tmax > ray.tmin);
 }
 
 fn intersectSphere(ray: Ray, center: vec3f, radius: f32) -> f32
@@ -175,9 +177,9 @@ fn intersectSphere(ray: Ray, center: vec3f, radius: f32) -> f32
 
   let sqrtd = sqrt(d);
   var t = (-b - sqrtd) / a;
-  if(t <= EPSILON || ray.t <= t) {
+  if(t <= ray.tmin || ray.t <= t) {
     t = (-b + sqrtd) / a;
-    if(t <= EPSILON || ray.t <= t) {
+    if(t <= ray.tmin || ray.t <= t) {
       return MAX_DISTANCE;
     }
   }
@@ -202,7 +204,7 @@ fn intersectQuad(ray: Ray, q: vec3f, u: vec3f, v: vec3f) -> f32
   }
 
   let t = (dot(nrm, q) - dot(nrm, ray.ori)) / denom;
-  if(t < EPSILON || t > ray.t) {
+  if(t < ray.tmin || t > ray.t) {
     return MAX_DISTANCE;
   }
 
@@ -220,6 +222,52 @@ fn completeHitQuad(ray: Ray, q: vec3f, u: vec3f, v: vec3f, h: ptr<function, Hit>
   (*h).pos = ray.ori + ray.t * ray.dir;
   (*h).nrm = normalize(cross(u, v));
 }
+
+/*fn intersectConstantMedium(ray: Ray, negInvDensity: f32, refIndex: u32) -> f32
+{
+  var newRay = ray;
+  newRay.tmin = -MAX_DISTANCE;
+  newRay.t = MAX_DISTANCE;
+  var t1 = intersectObjectNonRecursive(newRay, refIndex);
+  if(t1 >= MAX_DISTANCE) {
+    return MAX_DISTANCE;
+  }
+
+  newRay.tmin = t1 + EPSILON;
+  var t2 = intersectObjectNonRecursive(newRay, refIndex);
+  if(t2 >= MAX_DISTANCE) {
+    return MAX_DISTANCE;
+  }
+
+  if(t1 < ray.tmin) {
+    t1 = ray.tmin;
+  }
+
+  if(t2 > ray.t) {
+    t2 = ray.t;
+  }
+
+  if(t1 >= t2) {
+    return MAX_DISTANCE;
+  }
+
+  if(t1 < 0) {
+    t1 = 0;
+  }
+
+  let rayLen = length(ray.dir);
+  let dist = negInvDensity * log(rand());
+  if(dist > (t2 - t1) * rayLen) {
+    return MAX_DISTANCE;
+  }
+
+  return t1 + dist / rayLen;
+}
+
+fn completeHitConstantMedium(ray: Ray, h: ptr<function, Hit>)
+{
+  (*h).pos = ray.ori + ray.t * ray.dir;
+}*/
 
 fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
@@ -274,6 +322,13 @@ fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, atten
   return true;
 }
 
+fn evalMaterialIsotropic(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+{
+  *scatterDir = rand3UnitSphere();
+  *attenuation = albedo;
+  return true;
+}
+
 fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let data = materials[h.matOfs];
@@ -288,6 +343,9 @@ fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: pt
     case MAT_TYPE_GLASS: {
       return evalMaterialGlass(in, h, data.xyz, data.w, attenuation, scatterDir);
     }
+    case MAT_TYPE_ISOTROPIC: {
+      return evalMaterialIsotropic(in, h, data.xyz, attenuation, scatterDir);
+    }
     case MAT_TYPE_EMITTER: {
       *emission = data.xyz;
       return false;
@@ -300,29 +358,30 @@ fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: pt
   }
 }
 
-fn intersectObjects(ray: ptr<function, Ray>, objStartIndex: u32, objCount: u32, objId: ptr<function, u32>)
-{ 
-  for(var i=objStartIndex; i<objStartIndex + objCount; i++) {
-    var currDist: f32;
-    let obj = &objects[i];
-    let data = shapes[(*obj).shapeOfs];
-    switch((*obj).shapeType) {
-      case SHAPE_TYPE_SPHERE: {
-        currDist = intersectSphere(*ray, data.xyz, data.w);
-      }
-      case SHAPE_TYPE_QUAD: {
-        let u = shapes[(*obj).shapeOfs + 1];
-        let v = shapes[(*obj).shapeOfs + 2];
-        currDist = intersectQuad(*ray, data.xyz, u.xyz, v.xyz);
-      }
-      case SHAPE_TYPE_MESH: {
-        return;
-      }
-      default: {
-        return;
-      }
+fn intersectObject(ray: Ray, objIndex: u32) -> f32
+{
+  let obj = &objects[indices[objIndex]];
+  let data = shapes[(*obj).shapeOfs];
+  
+  switch((*obj).shapeType) {
+    case SHAPE_TYPE_SPHERE: {
+      return intersectSphere(ray, data.xyz, data.w);
     }
+    case SHAPE_TYPE_QUAD: {
+      let u = shapes[(*obj).shapeOfs + 1];
+      let v = shapes[(*obj).shapeOfs + 2];
+      return intersectQuad(ray, data.xyz, u.xyz, v.xyz);
+    }
+    default: {
+      return ray.t;
+    }
+  }
+}
 
+fn intersectObjects(ray: ptr<function, Ray>, objStartIndex: u32, objCount: u32, objId: ptr<function, u32>)
+{
+  for(var i=objStartIndex; i<objStartIndex + objCount; i++) {
+    let currDist = intersectObject(*ray, i);
     if(currDist < (*ray).t) {
       (*ray).t = currDist;
       *objId = i;
@@ -332,7 +391,7 @@ fn intersectObjects(ray: ptr<function, Ray>, objStartIndex: u32, objCount: u32, 
 
 fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
 {
-  var objId: u32; 
+  var objId: u32;
   
   //intersectObjects(ray, 0, arrayLength(&objects), &objId);
 
@@ -383,7 +442,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
   }
 
   if((*ray).t < MAX_DISTANCE) {
-    let obj = &objects[objId];
+    let obj = &objects[indices[objId]];
     let data = shapes[(*obj).shapeOfs];
     switch((*obj).shapeType) {
       case SHAPE_TYPE_SPHERE: {
@@ -402,7 +461,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
       }
     }
     (*hit).matType = (*obj).matType;
-    (*hit).matOfs = (*obj).matOfs; 
+    (*hit).matOfs = (*obj).matOfs;
     return true;
   }
 
@@ -422,7 +481,7 @@ fn render(initialRay: Ray) -> vec3f
       var newDir: vec3f;
       if(evalMaterial(ray, hit, &att, &emit, &newDir)) {
         col *= att;
-        ray = createRay(hit.pos, newDir, MAX_DISTANCE);
+        ray = createRay(hit.pos, newDir, EPSILON, MAX_DISTANCE);
       } else {
         col *= emit;
         break;
@@ -452,7 +511,7 @@ fn createPrimaryRay(pixelPos: vec2f) -> Ray
     eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
   }
 
-  return createRay(eyeSample, normalize(pixelSample - eyeSample), MAX_DISTANCE);
+  return createRay(eyeSample, normalize(pixelSample - eyeSample), EPSILON, MAX_DISTANCE);
 }
 
 @compute @workgroup_size(8,8)

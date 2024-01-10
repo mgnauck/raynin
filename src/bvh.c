@@ -4,7 +4,8 @@
 #include "mutil.h"
 #include "scn.h"
 #include "obj.h"
-#include "aabb.h"
+#include "shape.h"
+#include "log.h"
 
 #define INTERVAL_CNT 8
 
@@ -19,7 +20,41 @@ typedef struct split {
   uint8_t axis;
 } split;
 
-split find_best_cost_interval_split(const scn *s, bvh_node *n)
+aabb get_obj_aabb(const bvh * b, const scn *s, size_t idx)
+{
+  obj *o = scn_get_obj(s, b->indices[idx]);
+  switch(o->shape_type) {
+    case SPHERE:
+      return sphere_get_aabb((sphere *)scn_get_shape(s, o->shape_ofs));
+      break;
+    case QUAD:
+      return quad_get_aabb((quad *)scn_get_shape(s, o->shape_ofs));
+      break;
+    default:
+      // Unknown or unsupported shape
+      // TODO Log/alert
+      return aabb_init();
+  }
+}
+
+vec3 get_obj_center(const bvh *b, const scn *s, size_t idx)
+{
+  obj *o = scn_get_obj(s, b->indices[idx]);
+  switch(o->shape_type) {
+    case SPHERE:
+      return ((sphere *)scn_get_shape(s, o->shape_ofs))->center;
+      break;
+    case QUAD:
+      return quad_get_center((quad *)scn_get_shape(s, o->shape_ofs));
+      break;
+   default:
+      // Unknown or unsupported shape
+      // TODO Log/alert
+      return (vec3){{{ 0.0f, 0.0f, 0.0f }}};
+  }
+}
+
+split find_best_cost_interval_split(const bvh *b, const scn *s, bvh_node *n)
 {
   split best = { .cost = FLT_MAX };
   for(uint8_t axis=0; axis<3; axis++) {
@@ -27,7 +62,7 @@ split find_best_cost_interval_split(const scn *s, bvh_node *n)
     float minc = FLT_MAX;
     float maxc = -FLT_MAX;
     for(size_t i=0; i<n->obj_cnt; i++) {
-      float c = scn_get_obj_center(s, n->start_idx + i).v[axis];
+      float c = get_obj_center(b, s, n->start_idx + i).v[axis];
       minc = min(minc, c);
       maxc = max(maxc, c);
     }
@@ -42,11 +77,11 @@ split find_best_cost_interval_split(const scn *s, bvh_node *n)
     // Count objects per interval and find their combined bounds
     float delta = INTERVAL_CNT / (maxc - minc);
     for(size_t i=0; i<n->obj_cnt; i++) {
-      vec3 center = scn_get_obj_center(s, n->start_idx + i);
+      vec3 center = get_obj_center(b, s, n->start_idx + i);
       uint32_t int_idx =
         (uint32_t)min(INTERVAL_CNT - 1, (center.v[axis] - minc) * delta);
       intervals[int_idx].aabb = aabb_combine(
-          intervals[int_idx].aabb, scn_get_obj_aabb(s, n->start_idx + i));
+          intervals[int_idx].aabb, get_obj_aabb(b, s, n->start_idx + i));
       intervals[int_idx].cnt++;
     }
 
@@ -91,18 +126,19 @@ bvh_node *bvh_add_node(bvh *b, const scn *s, int32_t start_idx, size_t obj_cnt)
 {
   aabb node_aabb = aabb_init();
   for(size_t i=0; i<obj_cnt; i++) {
-    aabb obj_aabb = scn_get_obj_aabb(s, start_idx + i);
-    /*log("obj aabb: %f, %f, %f / %f, %f, %f",
+    aabb obj_aabb = get_obj_aabb(b, s, start_idx + i);
+    /*log("obj: %d, with aabb: %f, %f, %f / %f, %f, %f",
+        b->indices[start_idx + i],
         obj_aabb.min.x, obj_aabb.min.y, obj_aabb.min.z,
         obj_aabb.max.x, obj_aabb.max.y, obj_aabb.max.z);*/
     node_aabb = aabb_combine(node_aabb, obj_aabb);
   }
 
-  /*log("node aabb: %f, %f, %f / %f, %f, %f",
+  /*log("node: %d, with aabb: %f, %f, %f / %f, %f, %f, start_idx: %d, obj_cnt: %d",
+      b->node_cnt,
       node_aabb.min.x, node_aabb.min.y, node_aabb.min.z,
-      node_aabb.max.x, node_aabb.max.y, node_aabb.max.z);
-  log("start_idx: %d, obj_cnt: %d", start_idx, obj_cnt);
-  log("---");*/
+      node_aabb.max.x, node_aabb.max.y, node_aabb.max.z,
+      start_idx, obj_cnt);*/
 
   return memcpy(&b->nodes[b->node_cnt++],
       &(bvh_node){ node_aabb.min, start_idx, node_aabb.max, obj_cnt },
@@ -112,7 +148,7 @@ bvh_node *bvh_add_node(bvh *b, const scn *s, int32_t start_idx, size_t obj_cnt)
 void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
 {
   // Calculate if we need to split or not
-  split split = find_best_cost_interval_split(s, n);
+  split split = find_best_cost_interval_split(b, s, n);
   float no_split_cost = n->obj_cnt * aabb_calc_area((aabb){ n->min, n->max });
   if(no_split_cost <= split.cost)
     return;
@@ -121,16 +157,14 @@ void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
   int32_t l = n->start_idx;
   int32_t r = n->start_idx + n->obj_cnt - 1;
   while(l <= r) {
-    vec3 center = scn_get_obj_center(s, l);
+    vec3 center = get_obj_center(b, s, l);
     if(center.v[split.axis] < split.pos) {
       l++;
     } else {
-      // Swap object data left/right
-      obj *lo = scn_get_obj(s, l);
-      obj *ro = scn_get_obj(s, r);
-      obj t = *lo;
-      memcpy(lo, ro, sizeof(obj));
-      memcpy(ro, &t, sizeof(obj));
+      // Swap object index left/right
+      size_t t = b->indices[l];
+      b->indices[l] = b->indices[r];
+      b->indices[r] = t;
       r--;
     }
   }
@@ -159,7 +193,11 @@ bvh *bvh_create(const scn *s)
   bvh *b = malloc(sizeof(*b));
   b->nodes = malloc((2 * s->obj_cnt - 1) * sizeof(*b->nodes));
   b->node_cnt = 0;
- 
+  b->indices = malloc(s->obj_cnt * sizeof(*b->indices));
+
+  for(size_t i=0; i<s->obj_cnt; i++)
+    b->indices[i] = i;
+
   bvh_node *n = bvh_add_node(b, s, 0, s->obj_cnt);
   bvh_subdivide_node(b, s, n);
 
@@ -168,6 +206,7 @@ bvh *bvh_create(const scn *s)
 
 void bvh_release(bvh *b)
 {
+  free(b->indices);
   free(b->nodes);
   free(b);
 }

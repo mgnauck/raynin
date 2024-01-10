@@ -9,7 +9,6 @@ typedef enum shape_type {
   CYLINDER,
   QUAD,
   MESH,
-  CONST_MED,
 } shape_type;
 
 typedef enum mat_type {
@@ -25,7 +24,6 @@ typedef struct obj {
   size_t      shape_ofs;
   mat_type    mat_type;
   size_t      mat_ofs;
-  size_t      ref_idx;
 } obj;
 
 #endif

@@ -8,9 +8,12 @@ const MAX_BOUNCES = 5;
 
 const GLOB_BUF_ID = 0;
 const BVH_BUF_ID = 1;
-const OBJ_BUF_ID = 2;
-const SHAPE_BUF_ID = 3;
-const MAT_BUF_ID = 4;
+const INDEX_BUF_ID = 2;
+const OBJ_BUF_ID = 3;
+const SHAPE_BUF_ID = 4;
+const MAT_BUF_ID = 5;
+const ACC_BUF_ID = 6;
+const IMG_BUF_ID = 7;
 
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
@@ -94,7 +97,7 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, materialsSize)
+function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesSize, matsSize)
 {
   res.buf = [];
 
@@ -105,6 +108,11 @@ function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, material
 
   res.buf[BVH_BUF_ID] = device.createBuffer({
     size: bvhSize,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[INDEX_BUF_ID] = device.createBuffer({
+    size: indicesSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -119,43 +127,44 @@ function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, material
   });
 
   res.buf[MAT_BUF_ID] = device.createBuffer({
-    size: materialsSize,
+    size: matsSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  // Accumulation buffer
-  res.buf[5] = device.createBuffer({
+  res.buf[ACC_BUF_ID] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
-  // Image buffer
-  res.buf[6] = device.createBuffer({
+  res.buf[IMG_BUF_ID] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
   let bindGroupLayout = device.createBindGroupLayout({
     entries: [ 
-      { binding: 0, 
+      { binding: GLOB_BUF_ID,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "uniform" } },
-      { binding: 1, 
+      { binding: BVH_BUF_ID,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: 2,
+      { binding: INDEX_BUF_ID,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: 3,
+      { binding: OBJ_BUF_ID,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: 4,
+      { binding: SHAPE_BUF_ID,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: 5,
+      { binding: MAT_BUF_ID,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage" } },
+      { binding: ACC_BUF_ID,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
-      { binding: 6,
+      { binding: IMG_BUF_ID,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } }
     ]
@@ -164,13 +173,14 @@ function createGpuResources(globalsSize, bvhSize, objsSize, shapesSize, material
   res.bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[GLOB_BUF_ID] } },
-      { binding: 1, resource: { buffer: res.buf[BVH_BUF_ID] } },
-      { binding: 2, resource: { buffer: res.buf[OBJ_BUF_ID] } },
-      { binding: 3, resource: { buffer: res.buf[SHAPE_BUF_ID] } },
-      { binding: 4, resource: { buffer: res.buf[MAT_BUF_ID] } },
-      { binding: 5, resource: { buffer: res.buf[5] } },
-      { binding: 6, resource: { buffer: res.buf[6] } }
+      { binding: GLOB_BUF_ID, resource: { buffer: res.buf[GLOB_BUF_ID] } },
+      { binding: BVH_BUF_ID, resource: { buffer: res.buf[BVH_BUF_ID] } },
+      { binding: INDEX_BUF_ID, resource: { buffer: res.buf[INDEX_BUF_ID] } },
+      { binding: OBJ_BUF_ID, resource: { buffer: res.buf[OBJ_BUF_ID] } },
+      { binding: SHAPE_BUF_ID, resource: { buffer: res.buf[SHAPE_BUF_ID] } },
+      { binding: MAT_BUF_ID, resource: { buffer: res.buf[MAT_BUF_ID] } },
+      { binding: ACC_BUF_ID, resource: { buffer: res.buf[ACC_BUF_ID] } },
+      { binding: IMG_BUF_ID, resource: { buffer: res.buf[IMG_BUF_ID] } }
     ]
   });
 
@@ -245,7 +255,7 @@ function Wasm(module)
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
     powf: (b, e) => Math.pow(b, e),
-    gpu_create_res: (g, b, o, s, m) => createGpuResources(g, b, o, s, m),
+    gpu_create_res: (g, b, i, o, s, m) => createGpuResources(g, b, i, o, s, m),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz) 
   };
 

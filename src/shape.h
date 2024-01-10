@@ -18,13 +18,6 @@ typedef struct quad {
   float pad2;
 } quad;
 
-typedef struct const_med {
-  float density;
-  float pad0;
-  float pad1;
-  float pad2;
-} const_med;
-
 aabb      sphere_get_aabb(const sphere *s);
 aabb      quad_get_aabb(const quad *q);
 vec3      quad_get_center(const quad *q);

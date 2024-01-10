@@ -3,7 +3,7 @@
 
 #include "vec3.h"
 
-// Use with mat types: LAMBERT, EMITTER, ISOTROPIC
+// LAMBERT, ISOTROPIC, EMITTER
 typedef struct basic {
   vec3  albedo;
   float pad;

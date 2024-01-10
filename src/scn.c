@@ -11,9 +11,11 @@ size_t scn_calc_shape_buf_size(size_t sphere_cnt, size_t quad_cnt)
   return sphere_cnt * sizeof(sphere) + quad_cnt * sizeof(quad);
 }
 
-size_t scn_calc_mat_buf_size(size_t basic_cnt, size_t metal_cnt, size_t glass_cnt)
+size_t scn_calc_mat_buf_size(
+    size_t basic_cnt, size_t metal_cnt, size_t glass_cnt)
 {
-  return basic_cnt * sizeof(basic) + metal_cnt * sizeof(metal) + glass_cnt * sizeof(glass);
+  return basic_cnt * sizeof(basic) + metal_cnt * sizeof(metal) +
+    glass_cnt * sizeof(glass);
 }
 
 scn *scn_init(size_t obj_cnt, size_t shape_buf_size, size_t mat_buf_size)
@@ -75,44 +77,4 @@ void *scn_get_shape(const scn *s, size_t ofs)
 void *scn_get_mat(const scn *s, size_t ofs)
 {
   return s->mat_buf + ofs * BUF_LINE_SIZE;
-}
-
-aabb scn_get_obj_aabb(const scn *s, size_t idx)
-{
-  obj *o = scn_get_obj(s, idx);
-  switch(o->shape_type) {
-    case SPHERE:
-      return sphere_get_aabb((sphere *)scn_get_shape(s, o->shape_ofs));
-      break;
-    case QUAD:
-      return quad_get_aabb((quad *)scn_get_shape(s, o->shape_ofs));
-      break;
-    case CONST_MED:
-      return scn_get_obj_aabb(s, o->ref_idx);
-      break;
-    default:
-      // Unknown or unsupported shape
-      // TODO Log/alert
-      return aabb_init();
-  }
-}
-
-vec3 scn_get_obj_center(const scn *s, size_t idx)
-{
-  obj *o = scn_get_obj(s, idx);
-  switch(o->shape_type) {
-    case SPHERE:
-      return ((sphere *)scn_get_shape(s, o->shape_ofs))->center;
-      break;
-    case QUAD:
-      return quad_get_center((quad *)scn_get_shape(s, o->shape_ofs));
-      break;
-    case CONST_MED:
-      return scn_get_obj_center(s, o->ref_idx);
-      break;
-   default:
-      // Unknown or unsupported shape
-      // TODO Log/alert
-      return (vec3){{{ 0.0f, 0.0f, 0.0f }}};
-  }
 }

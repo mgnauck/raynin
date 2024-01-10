@@ -3,8 +3,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "vec3.h"
-#include "aabb.h"
 
 typedef struct obj obj;
 typedef struct shape shape;
@@ -32,8 +30,5 @@ size_t    scn_add_mat(scn *s, const void *mat, size_t size);
 obj       *scn_get_obj(const scn *s, size_t idx);
 void      *scn_get_shape(const scn *s, size_t ofs);
 void      *scn_get_mat(const scn *s, size_t ofs);
-
-aabb      scn_get_obj_aabb(const scn *s, size_t idx);
-vec3      scn_get_obj_center(const scn *s, size_t idx);
 
 #endif
