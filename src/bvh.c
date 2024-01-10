@@ -50,7 +50,7 @@ vec3 get_obj_center(const bvh *b, const scn *s, size_t idx)
    default:
       // Unknown or unsupported shape
       // TODO Log/alert
-      return (vec3){{{ 0.0f, 0.0f, 0.0f }}};
+      return (vec3){ 0.0f, 0.0f, 0.0f };
   }
 }
 
@@ -62,7 +62,7 @@ split find_best_cost_interval_split(const bvh *b, const scn *s, bvh_node *n)
     float minc = FLT_MAX;
     float maxc = -FLT_MAX;
     for(size_t i=0; i<n->obj_cnt; i++) {
-      float c = get_obj_center(b, s, n->start_idx + i).v[axis];
+      float c = vec3_get(get_obj_center(b, s, n->start_idx + i), axis);
       minc = min(minc, c);
       maxc = max(maxc, c);
     }
@@ -79,7 +79,7 @@ split find_best_cost_interval_split(const bvh *b, const scn *s, bvh_node *n)
     for(size_t i=0; i<n->obj_cnt; i++) {
       vec3 center = get_obj_center(b, s, n->start_idx + i);
       uint32_t int_idx =
-        (uint32_t)min(INTERVAL_CNT - 1, (center.v[axis] - minc) * delta);
+        (uint32_t)min(INTERVAL_CNT - 1, (vec3_get(center, axis) - minc) * delta);
       intervals[int_idx].aabb = aabb_combine(
           intervals[int_idx].aabb, get_obj_aabb(b, s, n->start_idx + i));
       intervals[int_idx].cnt++;
@@ -158,7 +158,7 @@ void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
   int32_t r = n->start_idx + n->obj_cnt - 1;
   while(l <= r) {
     vec3 center = get_obj_center(b, s, l);
-    if(center.v[split.axis] < split.pos) {
+    if(vec3_get(center, split.axis) < split.pos) {
       l++;
     } else {
       // Swap object index left/right

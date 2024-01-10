@@ -5,8 +5,8 @@
 aabb aabb_init()
 {
   return (aabb){
-    (vec3){{{ FLT_MAX, FLT_MAX, FLT_MAX }}},
-    (vec3){{{ -FLT_MAX, -FLT_MAX, -FLT_MAX }}}
+    (vec3){ FLT_MAX, FLT_MAX, FLT_MAX },
+    (vec3){ -FLT_MAX, -FLT_MAX, -FLT_MAX }
   };
 }
 
@@ -24,9 +24,11 @@ void aabb_grow(aabb *a, vec3 v)
 void aabb_pad(aabb *a)
 {
   for(uint8_t i=0; i<3; i++) {
-    if(fabsf(a->max.v[i] - a->min.v[i]) < EPSILON) {
-      a->min.v[i] -= EPSILON * 0.5;
-      a->max.v[i] += EPSILON * 0.5;
+    float mi = vec3_get(a->min, i);
+    float ma = vec3_get(a->max, i);
+    if(fabsf(ma - mi) < EPSILON) {
+      vec3_set(&a->min, i, mi - EPSILON * 0.5);
+      vec3_set(&a->max, i, ma + EPSILON * 0.5);
     }
   }
 }

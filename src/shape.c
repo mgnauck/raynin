@@ -4,8 +4,8 @@ aabb sphere_get_aabb(const sphere *s)
 {
   float r = s->radius;
   return (aabb){
-    vec3_sub(s->center, (vec3){{{ r, r, r }}}),
-    vec3_add(s->center, (vec3){{{ r, r, r }}}) };
+    vec3_sub(s->center, (vec3){ r, r, r }),
+    vec3_add(s->center, (vec3){ r, r, r }) };
 }
 
 aabb quad_get_aabb(const quad *q)

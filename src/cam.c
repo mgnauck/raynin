@@ -3,7 +3,7 @@
 
 void cam_calc_base(cam *c)
 {
-  c->right = vec3_cross((vec3){{{ 0.0f, 1.0f, 0.0f }}}, c->fwd);
+  c->right = vec3_cross((vec3){ 0.0f, 1.0f, 0.0f }, c->fwd);
   c->up = vec3_cross(c->fwd, c->right);
 }
 

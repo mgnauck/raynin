@@ -1,12 +1,14 @@
 #ifndef VEC3_H
 #define VEC3_H
 
+#include <stdint.h>
+
 typedef struct vec3 {
-  union {
-    struct { float x, y, z; };
-    float v[3];
-  };
+  float x, y, z;
 } vec3;
+
+void  vec3_set(vec3 *v, uint8_t idx, float val);
+float vec3_get(vec3 v, uint8_t idx);
 
 vec3  vec3_rand();
 vec3  vec3_rand_rng(float min, float max);
