@@ -78,8 +78,8 @@ split find_best_cost_interval_split(const bvh *b, const scn *s, bvh_node *n)
     float delta = INTERVAL_CNT / (maxc - minc);
     for(size_t i=0; i<n->obj_cnt; i++) {
       vec3 center = get_obj_center(b, s, n->start_idx + i);
-      uint32_t int_idx =
-        (uint32_t)min(INTERVAL_CNT - 1, (vec3_get(center, axis) - minc) * delta);
+      size_t int_idx =
+        (size_t)min(INTERVAL_CNT - 1, (vec3_get(center, axis) - minc) * delta);
       intervals[int_idx].aabb = aabb_combine(
           intervals[int_idx].aabb, get_obj_aabb(b, s, n->start_idx + i));
       intervals[int_idx].cnt++;
@@ -122,30 +122,18 @@ split find_best_cost_interval_split(const bvh *b, const scn *s, bvh_node *n)
   return best;
 }
 
-bvh_node *bvh_add_node(bvh *b, const scn *s, int32_t start_idx, size_t obj_cnt)
+void update_node_bounds(const bvh *b, const scn *s, bvh_node *n)
 {
-  aabb node_aabb = aabb_init();
-  for(size_t i=0; i<obj_cnt; i++) {
-    aabb obj_aabb = get_obj_aabb(b, s, start_idx + i);
-    /*log("obj: %d, with aabb: %f, %f, %f / %f, %f, %f",
-        b->indices[start_idx + i],
-        obj_aabb.min.x, obj_aabb.min.y, obj_aabb.min.z,
-        obj_aabb.max.x, obj_aabb.max.y, obj_aabb.max.z);*/
-    node_aabb = aabb_combine(node_aabb, obj_aabb);
+  n->min = (vec3){ FLT_MAX, FLT_MAX, FLT_MAX };
+  n->max = (vec3){ -FLT_MAX, -FLT_MAX, -FLT_MAX };
+  for(size_t i=0; i<n->obj_cnt; i++) {
+    aabb obj_aabb = get_obj_aabb(b, s, n->start_idx + i);
+    n->min = vec3_min(n->min, obj_aabb.min);
+    n->max = vec3_max(n->max, obj_aabb.max);
   }
-
-  /*log("node: %d, with aabb: %f, %f, %f / %f, %f, %f, start_idx: %d, obj_cnt: %d",
-      b->node_cnt,
-      node_aabb.min.x, node_aabb.min.y, node_aabb.min.z,
-      node_aabb.max.x, node_aabb.max.y, node_aabb.max.z,
-      start_idx, obj_cnt);*/
-
-  return memcpy(&b->nodes[b->node_cnt++],
-      &(bvh_node){ node_aabb.min, start_idx, node_aabb.max, obj_cnt },
-      sizeof(bvh_node));
 }
 
-void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
+void subdivide_node(bvh *b, const scn *s, bvh_node *n)
 {
   // Calculate if we need to split or not
   split split = find_best_cost_interval_split(b, s, n);
@@ -170,22 +158,29 @@ void bvh_subdivide_node(bvh *b, const scn *s, bvh_node *n)
   }
 
   // Stop if one side of the l/r partition is empty
-  uint32_t left_obj_cnt = l - n->start_idx;
+  size_t left_obj_cnt = l - n->start_idx;
   if(left_obj_cnt == 0 || left_obj_cnt == n->obj_cnt)
     return;
 
-  uint32_t left_child_node_idx = b->node_cnt;
+  // Init child nodes
+  bvh_node *left_child = &b->nodes[b->node_cnt++];
+  left_child->start_idx = n->start_idx;
+  left_child->obj_cnt = left_obj_cnt;
 
-  bvh_node *left_child = bvh_add_node(b, s, n->start_idx, left_obj_cnt);
-  bvh_node *right_child = bvh_add_node(b, s, l, n->obj_cnt - left_obj_cnt);
+  update_node_bounds(b, s, left_child);
 
-  // Current node is not a leaf. Set index of left child node.
-  n->start_idx = left_child_node_idx;
-  n->obj_cnt = 0;
+  bvh_node *right_child = &b->nodes[b->node_cnt++];
+  right_child->start_idx = l;
+  right_child->obj_cnt = n->obj_cnt - left_obj_cnt;
 
-  // Recurse
-  bvh_subdivide_node(b, s, left_child);
-  bvh_subdivide_node(b, s, right_child);
+  update_node_bounds(b, s, right_child);
+
+  // Update current node with child link
+  n->start_idx = b->node_cnt - 2; // Right child implicitly + 1
+  n->obj_cnt = 0; // No leaf
+
+  subdivide_node(b, s, left_child);
+  subdivide_node(b, s, right_child);
 }
 
 bvh *bvh_create(const scn *s)
@@ -198,10 +193,32 @@ bvh *bvh_create(const scn *s)
   for(size_t i=0; i<s->obj_cnt; i++)
     b->indices[i] = i;
 
-  bvh_node *n = bvh_add_node(b, s, 0, s->obj_cnt);
-  bvh_subdivide_node(b, s, n);
+  bvh_node *root = &b->nodes[b->node_cnt++];
+  root->start_idx = 0;
+  root->obj_cnt = s->obj_cnt;
+
+  update_node_bounds(b, s, root);
+
+  subdivide_node(b, s, root);
 
   return b;
+}
+
+void bvh_refit(bvh *b, const scn *s)
+{
+  for(size_t i=b->node_cnt - 1; i>=0; i--) {
+    bvh_node *n = &b->nodes[i];
+    if(n->obj_cnt > 0) {
+      // Leaf with objects
+      update_node_bounds(b, s, n);
+    } else {
+      // Interior node. Just update bounds as per child bounds.
+      bvh_node *l = &b->nodes[n->start_idx];
+      bvh_node *r = &b->nodes[n->start_idx + 1];
+      n->min = vec3_min(l->min, r->min);
+      n->max = vec3_max(l->max, r->max);
+    }
+  }
 }
 
 void bvh_release(bvh *b)

@@ -8,10 +8,10 @@
 typedef struct scn scn;
 
 typedef struct bvh_node {
-  vec3      min;
-  uint32_t  start_idx; // obj start or node index
-  vec3      max;
-  uint32_t  obj_cnt;
+  vec3    min;
+  size_t  start_idx; // obj start or node index
+  vec3    max;
+  size_t  obj_cnt;
 } bvh_node;
 
 typedef struct bvh {
@@ -21,6 +21,7 @@ typedef struct bvh {
 } bvh;
 
 bvh   *bvh_create(const scn *s);
+void  bvh_refit(bvh *b, const scn *s);
 void  bvh_release(bvh *b);
 
 #endif
