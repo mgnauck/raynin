@@ -6,14 +6,14 @@ void vec3_set(vec3 *v, uint8_t idx, float val)
 {
   uint8_t ofs = ((idx == 0) ? offsetof(vec3, x) :
     ((idx == 1) ? offsetof(vec3, y) : offsetof(vec3, z)));
-  *(float *)((char *)v + ofs) = val;
+  *(float *)((unsigned char *)v + ofs) = val;
 }
 
 float vec3_get(vec3 v, uint8_t idx)
 {
   uint8_t ofs = ((idx == 0) ? offsetof(vec3, x) :
     ((idx == 1) ? offsetof(vec3, y) : offsetof(vec3, z)));
-  return *(float *)((char *)&v + ofs);
+  return *(float *)((unsigned char *)&v + ofs);
 }
 
 vec3 vec3_rand()
