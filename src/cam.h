@@ -1,7 +1,6 @@
 #ifndef CAM_H
 #define CAM_H
 
-#include <stdint.h>
 #include "vec3.h"
 
 #define CAM_BUF_SIZE 12 * 4
