@@ -4,7 +4,6 @@ OBJ=$(patsubst %.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=visual.wgsl
 SHADER_EXCLUDES=computeMain,vertexMain,fragmentMain
-SHADER_OUT=$(patsubst %.wgsl,$(OUTDIR)/%.min.wgsl,$(SHADER))
 LOADER_JS=main
 OUT=index.html
 
@@ -18,18 +17,19 @@ WOPTFLAGS=-Oz --enable-bulk-memory
 
 .PHONY: clean
 
-$(OUTDIR)/$(OUT): $(OUTDIR)/$(LOADER_JS).2.js Makefile
+$(OUTDIR)/$(OUT): $(OUTDIR)/$(LOADER_JS).3.js
 	js-payload-compress --zopfli-iterations=100 $< $@ 
 
-$(OUTDIR)/$(LOADER_JS).2.js: $(OUTDIR)/$(LOADER_JS).1.js $(SHADER_OUT)
-	@#drop_console=true
+$(OUTDIR)/$(LOADER_JS).3.js: $(OUTDIR)/$(LOADER_JS).2.js
 	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=true --toplevel > $@
 
-$(OUTDIR)/%.min.wgsl: %.wgsl $(OUTDIR)/$(LOADER_JS).1.js
+$(OUTDIR)/$(LOADER_JS).2.js: $(OUTDIR)/$(subst .,.min.,$(SHADER)) $(OUTDIR)/$(LOADER_JS).1.js
+	./embed.sh $(OUTDIR)/$(LOADER_JS).1.js BEGIN_$(subst $(OUTDIR)/,,$(subst .min.,_,$<)) END_$(subst $(OUTDIR)/,,$(subst .min.,_,$<)) $< $(OUTDIR)/$(LOADER_JS).2.js
+
+$(OUTDIR)/%.min.wgsl: ./%.wgsl
 	@mkdir -p `dirname $@`
-	wgslminify -e $(SHADER_EXCLUDES) $< > $@
-	@echo "$@:" `wc -c < $@` "bytes"
-	./embed.sh $(OUTDIR)/$(LOADER_JS).1.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $@ $(OUTDIR)/$(LOADER_JS).1.js
+	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUTDIR)/$(subst .,.min.,$<)
+	@echo "$(OUTDIR)/$(subst .,.min.,$<):" `wc -c < $(OUTDIR)/$(subst .,.min.,$<)` "bytes"
 
 $(OUTDIR)/$(LOADER_JS).1.js: $(OUTDIR)/$(WASM_OUT).base64.wasm $(LOADER_JS).js
 	./embed.sh $(LOADER_JS).js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUTDIR)/$(WASM_OUT).base64.wasm $@
