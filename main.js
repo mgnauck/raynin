@@ -3,17 +3,16 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-const bufType = { GLB: 0, BVH: 1, IDX: 2, OBJ: 3, SHP: 4, MAT: 5, ACC: 6, IMG: 7 };
-
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
 
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
+const bufType = { GLB: 0, BVH: 1, IDX: 2, OBJ: 3, SHP: 4, MAT: 5, ACC: 6, IMG: 7 };
+
 let canvas, context, device;
-let res = {};
-let wa;
+let wa, res = {};
 let start, last;
 
 function handleMouseMoveEvent(e)
@@ -38,6 +37,35 @@ function installEventHandler()
     else
       canvas.removeEventListener("mousemove", handleMouseMoveEvent);
   });
+}
+
+function Wasm(module)
+{
+  this.environment = {
+    log_buf: (addr, len) => {
+      let s = "";
+      for(let i=0; i<len; i++)
+        s += String.fromCharCode(this.memUint8[addr + i]);
+      console.log(s);
+    },
+    time: () => performance.now(),
+    sqrtf: (v) => Math.sqrt(v),
+    sinf: (v) => Math.sin(v),
+    cosf: (v) => Math.cos(v),
+    tanf: (v) => Math.tan(v),
+    acosf: (v) => Math.acos(v),
+    atan2f: (y, x) => Math.atan2(y, x),
+    powf: (b, e) => Math.pow(b, e),
+    gpu_create_res: (g, b, i, o, s, m) => createGpuResources(g, b, i, o, s, m),
+    gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz)
+  };
+
+  this.instantiate = async function()
+  {
+    const res = await WebAssembly.instantiate(module, { env: this.environment });
+    Object.assign(this, res.instance.exports);
+    this.memUint8 = new Uint8Array(this.memory.buffer);
+  }
 }
 
 function createComputePipeline(shaderModule, pipelineLayout, entryPoint)
@@ -227,37 +255,9 @@ function startRender()
   render();
 }
 
-function Wasm(module)
-{
-  this.environment = {
-    log_buf: (addr, len) => {
-      let s = "";
-      for(let i=0; i<len; i++)
-        s += String.fromCharCode(this.memUint8[addr + i]);
-      console.log(s);
-    },
-    time: () => performance.now(),
-    sqrtf: (v) => Math.sqrt(v),
-    sinf: (v) => Math.sin(v),
-    cosf: (v) => Math.cos(v),
-    tanf: (v) => Math.tan(v),
-    acosf: (v) => Math.acos(v),
-    atan2f: (y, x) => Math.atan2(y, x),
-    powf: (b, e) => Math.pow(b, e),
-    gpu_create_res: (g, b, i, o, s, m) => createGpuResources(g, b, i, o, s, m),
-    gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz) 
-  };
-
-  this.instantiate = async function()
-  {
-    const res = await WebAssembly.instantiate(module, { env: this.environment });
-    Object.assign(this, res.instance.exports);
-    this.memUint8 = new Uint8Array(this.memory.buffer);
-  }
-}
-
 async function main()
 {
+  // WebGPU
   if(!navigator.gpu)
     throw new Error("WebGPU is not supported on this browser.");
 
@@ -269,21 +269,8 @@ async function main()
   if(!device)
     throw new Error("Failed to request logical device.");
 
-  let module = WASM.includes("END_") ?
-    await (await fetch("intro.wasm")).arrayBuffer() :
-    Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))
-
-  wa = new Wasm(module);
-  await wa.instantiate();
-  
-  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT);
-  
-  if(VISUAL_SHADER.includes("END_visual_wgsl"))
-    createPipelines(await (await fetch("visual.wgsl")).text());
-  else
-    createPipelines(VISUAL_SHADER);
-
-  document.body.innerHTML = "<button>CLICK<canvas style='width:0;cursor:none'>";
+  // Canvas/context
+  document.body.innerHTML = "CLICK<canvas style='width:0;cursor:none'>";
   canvas = document.querySelector("canvas");
   canvas.width = CANVAS_WIDTH;
   canvas.height = CANVAS_HEIGHT;
@@ -295,8 +282,25 @@ async function main()
   context = canvas.getContext("webgpu");
   context.configure({ device, format: presentationFormat, alphaMode: "opaque" });
 
+  // Load actual code
+  let module = WASM.includes("END_") ?
+    await (await fetch("intro.wasm")).arrayBuffer() :
+    Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))
+
+  wa = new Wasm(module);
+  await wa.instantiate();
+  
+  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT);
+  
+  // Pipelines
+  if(VISUAL_SHADER.includes("END_visual_wgsl"))
+    createPipelines(await (await fetch("visual.wgsl")).text());
+  else
+    createPipelines(VISUAL_SHADER);
+
+  // Start
   if(FULLSCREEN)
-    document.querySelector("button").addEventListener("click", startRender, { once: true });
+    document.addEventListener("click", startRender, { once: true });
   else
     startRender();
 }
