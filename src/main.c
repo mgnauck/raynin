@@ -290,11 +290,11 @@ void update_cam_view()
 }
 
 __attribute__((visibility("default")))
-void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t bounces)
+void init(uint32_t width, uint32_t height)
 {
   srand(42u, 303u);
 
-  config = (cfg){ width, height, spp, bounces };
+  config = (cfg){ width, height, 5, 5 };
 
   curr_scn = create_scn_riow();
   curr_bvh = bvh_create(curr_scn);

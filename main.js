@@ -3,17 +3,7 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-const SAMPLES_PER_PIXEL = 5;
-const MAX_BOUNCES = 5;
-
-const GLOB_BUF_ID = 0;
-const BVH_BUF_ID = 1;
-const INDEX_BUF_ID = 2;
-const OBJ_BUF_ID = 3;
-const SHAPE_BUF_ID = 4;
-const MAT_BUF_ID = 5;
-const ACC_BUF_ID = 6;
-const IMG_BUF_ID = 7;
+const bufType = { GLB: 0, BVH: 1, IDX: 2, OBJ: 3, SHP: 4, MAT: 5, ACC: 6, IMG: 7 };
 
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
@@ -101,70 +91,70 @@ function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesS
 {
   res.buf = [];
 
-  res.buf[GLOB_BUF_ID] = device.createBuffer({
+  res.buf[bufType.GLB] = device.createBuffer({
     size: globalsSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[BVH_BUF_ID] = device.createBuffer({
+  res.buf[bufType.BVH] = device.createBuffer({
     size: bvhSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[INDEX_BUF_ID] = device.createBuffer({
+  res.buf[bufType.IDX] = device.createBuffer({
     size: indicesSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[OBJ_BUF_ID] = device.createBuffer({
+  res.buf[bufType.OBJ] = device.createBuffer({
     size: objsSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[SHAPE_BUF_ID] = device.createBuffer({
+  res.buf[bufType.SHP] = device.createBuffer({
     size: shapesSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[MAT_BUF_ID] = device.createBuffer({
+  res.buf[bufType.MAT] = device.createBuffer({
     size: matsSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[ACC_BUF_ID] = device.createBuffer({
+  res.buf[bufType.ACC] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[IMG_BUF_ID] = device.createBuffer({
+  res.buf[bufType.IMG] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
   let bindGroupLayout = device.createBindGroupLayout({
     entries: [ 
-      { binding: GLOB_BUF_ID,
+      { binding: bufType.GLB,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "uniform" } },
-      { binding: BVH_BUF_ID,
+      { binding: bufType.BVH,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: INDEX_BUF_ID,
+      { binding: bufType.IDX,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: OBJ_BUF_ID,
+      { binding: bufType.OBJ,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: SHAPE_BUF_ID,
+      { binding: bufType.SHP,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: MAT_BUF_ID,
+      { binding: bufType.MAT,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: ACC_BUF_ID,
+      { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
-      { binding: IMG_BUF_ID,
+      { binding: bufType.IMG,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } }
     ]
@@ -173,14 +163,14 @@ function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesS
   res.bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: GLOB_BUF_ID, resource: { buffer: res.buf[GLOB_BUF_ID] } },
-      { binding: BVH_BUF_ID, resource: { buffer: res.buf[BVH_BUF_ID] } },
-      { binding: INDEX_BUF_ID, resource: { buffer: res.buf[INDEX_BUF_ID] } },
-      { binding: OBJ_BUF_ID, resource: { buffer: res.buf[OBJ_BUF_ID] } },
-      { binding: SHAPE_BUF_ID, resource: { buffer: res.buf[SHAPE_BUF_ID] } },
-      { binding: MAT_BUF_ID, resource: { buffer: res.buf[MAT_BUF_ID] } },
-      { binding: ACC_BUF_ID, resource: { buffer: res.buf[ACC_BUF_ID] } },
-      { binding: IMG_BUF_ID, resource: { buffer: res.buf[IMG_BUF_ID] } }
+      { binding: bufType.GLB, resource: { buffer: res.buf[bufType.GLB] } },
+      { binding: bufType.BVH, resource: { buffer: res.buf[bufType.BVH] } },
+      { binding: bufType.IDX, resource: { buffer: res.buf[bufType.IDX] } },
+      { binding: bufType.OBJ, resource: { buffer: res.buf[bufType.OBJ] } },
+      { binding: bufType.SHP, resource: { buffer: res.buf[bufType.SHP] } },
+      { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },
+      { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
+      { binding: bufType.IMG, resource: { buffer: res.buf[bufType.IMG] } }
     ]
   });
 
@@ -231,7 +221,6 @@ function startRender()
     canvas.style.top = 0;
   }
 
-  document.querySelector("button").removeEventListener("click", startRender);
   installEventHandler();
 
   start = last = performance.now();
@@ -287,7 +276,7 @@ async function main()
   wa = new Wasm(module);
   await wa.instantiate();
   
-  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SAMPLES_PER_PIXEL, MAX_BOUNCES);
+  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT);
   
   if(VISUAL_SHADER.includes("END_visual_wgsl"))
     createPipelines(await (await fetch("visual.wgsl")).text());
@@ -307,7 +296,7 @@ async function main()
   context.configure({ device, format: presentationFormat, alphaMode: "opaque" });
 
   if(FULLSCREEN)
-    document.querySelector("button").addEventListener("click", startRender);
+    document.querySelector("button").addEventListener("click", startRender, { once: true });
   else
     startRender();
 }
