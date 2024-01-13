@@ -20,7 +20,8 @@ typedef struct bvh {
   size_t    *indices;
 } bvh;
 
-bvh   *bvh_create(const scn *s);
+bvh   *bvh_init(size_t obj_cnt);
+void  bvh_create(bvh *b, const scn *s);
 void  bvh_refit(bvh *b, const scn *s);
 void  bvh_release(bvh *b);
 

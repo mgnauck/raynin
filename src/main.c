@@ -297,7 +297,9 @@ void init(uint32_t width, uint32_t height)
   config = (cfg){ width, height, 5, 5 };
 
   curr_scn = create_scn_riow();
-  curr_bvh = bvh_create(curr_scn);
+
+  curr_bvh = bvh_init(curr_scn->obj_cnt);
+  bvh_create(curr_bvh, curr_scn);
 
   gpu_create_res(
       GLOB_BUF_SIZE,
@@ -330,7 +332,7 @@ void update(float time)
     vec3 tgt = vec3_unit((vec3){ 13.0f, 2.0f, 3.0f });
     cam_set(&curr_cam, pos, tgt);
 
-    update_cam_view();    
+    update_cam_view();
   }
 
   float frame[8] = { randf(), config.spp / (float)(gathered_smpls + config.spp),

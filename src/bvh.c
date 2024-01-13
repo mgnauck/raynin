@@ -183,12 +183,18 @@ void subdivide_node(bvh *b, const scn *s, bvh_node *n)
   subdivide_node(b, s, right_child);
 }
 
-bvh *bvh_create(const scn *s)
+bvh *bvh_init(size_t obj_cnt)
 {
   bvh *b = malloc(sizeof(*b));
-  b->nodes = malloc((2 * s->obj_cnt - 1) * sizeof(*b->nodes));
+  b->nodes = malloc((2 * obj_cnt - 1) * sizeof(*b->nodes));
+  b->indices = malloc(obj_cnt * sizeof(*b->indices));
+
+  return b;
+}
+
+void bvh_create(bvh *b, const scn *s)
+{
   b->node_cnt = 0;
-  b->indices = malloc(s->obj_cnt * sizeof(*b->indices));
 
   for(size_t i=0; i<s->obj_cnt; i++)
     b->indices[i] = i;
@@ -198,15 +204,12 @@ bvh *bvh_create(const scn *s)
   root->obj_cnt = s->obj_cnt;
 
   update_node_bounds(b, s, root);
-
   subdivide_node(b, s, root);
-
-  return b;
 }
 
 void bvh_refit(bvh *b, const scn *s)
 {
-  for(size_t i=b->node_cnt - 1; i>=0; i--) {
+  for(int32_t i=b->node_cnt - 1; i>=0; i--) {
     bvh_node *n = &b->nodes[i];
     if(n->obj_cnt > 0) {
       // Leaf with objects
