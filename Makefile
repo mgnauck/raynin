@@ -1,5 +1,5 @@
 OUTDIR=output
-SRC=main.c sutil.c mutil.c printf.c log.c vec3.c cfg.c aabb.c scn.c bvh.c shape.c cam.c view.c
+SRC=sutil.c mutil.c printf.c log.c cfg.c vec3.c tri.c aabb.c mesh.c bvh.c cam.c view.c main.c 
 OBJ=$(patsubst %.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=visual.wgsl
@@ -17,7 +17,7 @@ WOPTFLAGS=-Oz --enable-bulk-memory
 
 .PHONY: clean
 
-$(OUTDIR)/$(OUT): $(OUTDIR)/$(LOADER_JS).3.js
+$(OUTDIR)/$(OUT): $(OUTDIR)/$(LOADER_JS).3.js Makefile
 	js-payload-compress --zopfli-iterations=100 $< $@ 
 
 $(OUTDIR)/$(LOADER_JS).3.js: $(OUTDIR)/$(LOADER_JS).2.js

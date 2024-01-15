@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "vec3.h"
 
-typedef struct scn scn;
+typedef struct mesh mesh;
 
 typedef struct bvh_node {
   vec3    min;
@@ -18,11 +18,12 @@ typedef struct bvh {
   size_t    node_cnt;
   bvh_node  *nodes;
   size_t    *indices;
+  mesh      *mesh;
 } bvh;
 
-bvh   *bvh_init(size_t obj_cnt);
-void  bvh_create(bvh *b, const scn *s);
-void  bvh_refit(bvh *b, const scn *s);
+bvh   *bvh_init(mesh *m);
+void  bvh_create(bvh *b);
+void  bvh_refit(bvh *b);
 void  bvh_release(bvh *b);
 
 #endif

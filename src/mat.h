@@ -3,6 +3,14 @@
 
 #include "vec3.h"
 
+typedef enum mat_type {
+  LAMBERT,
+  ISOTROPIC,
+  EMITTER,
+  METAL,
+  DIELECTRIC
+} mat_type;
+
 // LAMBERT, ISOTROPIC, EMITTER
 typedef struct basic {
   vec3  albedo;
@@ -14,7 +22,7 @@ typedef struct metal {
   float fuzz_radius;
 } metal;
 
-typedef struct glass {
+typedef struct dielectric {
   vec3  albedo;
   float refr_idx;
 } glass;
