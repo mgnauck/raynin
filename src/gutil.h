@@ -12,11 +12,9 @@
 
 typedef enum buf_type {
   GLOB = 0,
-  BVH,
+  /*BVH,
   INDEX,
-  OBJ,
-  SHAPE,
-  MAT
+  MAT*/
 } buf_type;
 
 extern void gpu_create_res(size_t glob_sz, size_t bvh_sz, size_t indices_sz,

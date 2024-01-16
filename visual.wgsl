@@ -41,18 +41,25 @@ struct BvhNode
   objCount: u32
 }
 
-struct Object
+struct Tri
 {
-  shapeType: u32,
-  shapeOfs: u32,
+  v0: vec3f,
+  v1: vec3f,
+  v2: vec3f
+}
+
+/*struct Mesh
+{
   matType: u32,
   matOfs: u32,
-}
+  triOfs: u32
+}*/
 
 struct Hit
 {
   pos: vec3f,
   nrm: vec3f,
+  //meshId: u32,
   matType: u32,
   matOfs: u32
 }
@@ -61,12 +68,6 @@ const EPSILON = 0.001;
 const PI = 3.141592;
 const MAX_DISTANCE = 3.402823466e+38;
 
-const SHAPE_TYPE_SPHERE = 1;
-const SHAPE_TYPE_BOX = 2;
-const SHAPE_TYPE_CYLINDER = 3;
-const SHAPE_TYPE_QUAD = 4;
-const SHAPE_TYPE_MESH = 5;
-
 const MAT_TYPE_LAMBERT = 1;
 const MAT_TYPE_METAL = 2;
 const MAT_TYPE_GLASS = 3;
@@ -74,13 +75,13 @@ const MAT_TYPE_EMITTER = 4;
 const MAT_TYPE_ISOTROPIC = 5;
 
 @group(0) @binding(0) var<uniform> globals: Global;
+/*
 @group(0) @binding(1) var<storage, read> bvhNodes: array<BvhNode>;
 @group(0) @binding(2) var<storage, read> indices: array<u32>;
-@group(0) @binding(3) var<storage, read> objects: array<Object>;
-@group(0) @binding(4) var<storage, read> shapes: array<vec4f>;
-@group(0) @binding(5) var<storage, read> materials: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> buffer: array<vec4f>;
-@group(0) @binding(7) var<storage, read_write> image: array<vec4f>;
+@group(0) @binding(3) var<storage, read> triangles: array<u32>;
+@group(0) @binding(4) var<storage, read> materials: array<vec4f>;*/
+@group(0) @binding(1) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> image: array<vec4f>;
 
 var<private> nodeStack: array<u32, 32>; // Fixed size
 var<private> rngState: u32;
@@ -161,6 +162,46 @@ fn intersectAabb(ray: Ray, minExt: vec3f, maxExt: vec3f) -> f32
   let tmax = minComp(max(t0, t1));
   
   return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < ray.t && tmax > ray.tmin);
+}
+
+// MT ray-triangle: https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
+fn intersectTriangle(ray: Ray, tri: Tri, u: ptr<function, f32>, v: ptr<function, f32>) -> f32
+{
+  // Vectors of two edges sharing vertex 0
+  let edge1 = tri.v1 - tri.v0;
+  let edge2 = tri.v2 - tri.v0;
+
+  // Calculate determinant and u parameter later on
+  let pvec = cross(ray.dir, edge2);
+  let det = dot(edge1, pvec);
+
+  if(abs(det) < EPSILON) {
+    // Ray in plane of triangle
+    return MAX_DISTANCE;
+  }
+
+  let invDet = 1 / det;
+
+  // Distance vertex 0 to origin
+  let tvec = ray.ori - tri.v0;
+
+  // Calculate parameter u and test bounds
+  *u = dot(tvec, pvec) * invDet;
+  if(*u < 0 || *u > 1) {
+    return MAX_DISTANCE;
+  }
+
+  // Prepare to test for v
+  let qvec = cross(tvec, edge1);
+
+  // Calculate parameter u and test bounds
+  *v = dot(ray.dir, qvec) * invDet;
+  if(*v < 0 || *u + *v > 1) {
+    return MAX_DISTANCE;
+  }
+
+  // Calc distance
+  return dot(edge2, qvec) * invDet;
 }
 
 fn intersectSphere(ray: Ray, center: vec3f, radius: f32) -> f32
@@ -303,14 +344,14 @@ fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, atten
   let refracIndexRatio = select(1 / refractionIndex, refractionIndex, inside);
   
   let cosTheta = min(dot(-in.dir, nrm), 1);
-  /*let sinTheta = sqrt(1 - cosTheta * cosTheta);
-
-  var dir: vec3f;
-  if(refracIndexRatio * sinTheta > 1 || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
-    dir = reflect(in.dir, nrm);
-  } else {
-    dir = refract(in.dir, nrm, refracIndexRatio);
-  }*/
+  //let sinTheta = sqrt(1 - cosTheta * cosTheta);
+  //
+  //var dir: vec3f;
+  //if(refracIndexRatio * sinTheta > 1 || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
+  //  dir = reflect(in.dir, nrm);
+  //} else {
+  //  dir = refract(in.dir, nrm, refracIndexRatio);
+  //}
 
   var dir = refract(in.dir, nrm, refracIndexRatio);
   if(all(dir == vec3f(0)) || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
@@ -329,7 +370,7 @@ fn evalMaterialIsotropic(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<functi
   return true;
 }
 
-fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+/*fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let data = materials[h.matOfs];
   switch(h.matType)
@@ -356,29 +397,9 @@ fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: pt
       return false;
     }
   }
-}
+}*/
 
-fn intersectObject(ray: Ray, objIndex: u32) -> f32
-{
-  let obj = &objects[indices[objIndex]];
-  let data = shapes[(*obj).shapeOfs];
-  
-  switch((*obj).shapeType) {
-    case SHAPE_TYPE_SPHERE: {
-      return intersectSphere(ray, data.xyz, data.w);
-    }
-    case SHAPE_TYPE_QUAD: {
-      let u = shapes[(*obj).shapeOfs + 1];
-      let v = shapes[(*obj).shapeOfs + 2];
-      return intersectQuad(ray, data.xyz, u.xyz, v.xyz);
-    }
-    default: {
-      return ray.t;
-    }
-  }
-}
-
-fn intersectObjects(ray: ptr<function, Ray>, objStartIndex: u32, objCount: u32, objId: ptr<function, u32>)
+/*fn intersectObjects(ray: ptr<function, Ray>, objStartIndex: u32, objCount: u32, objId: ptr<function, u32>)
 {
   for(var i=objStartIndex; i<objStartIndex + objCount; i++) {
     let currDist = intersectObject(*ray, i);
@@ -387,11 +408,19 @@ fn intersectObjects(ray: ptr<function, Ray>, objStartIndex: u32, objCount: u32, 
       *objId = i;
     }
   }
-}
+}*/
 
 fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
 {
-  var objId: u32;
+  let tri = Tri(vec3f(-1, 1, 2), vec3f(-1, -1, 2), vec3f(1, -1, 2));
+  var u: f32;
+  var v: f32;
+
+  if(intersectTriangle(*ray, tri, &u, &v) < MAX_DISTANCE) {
+    return true;
+  }
+
+  /*var objId: u32;
   
   //intersectObjects(ray, 0, arrayLength(&objects), &objId);
 
@@ -463,7 +492,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
     (*hit).matType = (*obj).matType;
     (*hit).matOfs = (*obj).matOfs;
     return true;
-  }
+  }*/
 
   return false;
 }
@@ -476,7 +505,9 @@ fn render(initialRay: Ray) -> vec3f
   loop {
     var hit: Hit;
     if(intersectScene(&ray, &hit)) {
-      var att: vec3f;
+      col = vec3f(1);
+      break;
+      /*var att: vec3f;
       var emit: vec3f;
       var newDir: vec3f;
       if(evalMaterial(ray, hit, &att, &emit, &newDir)) {
@@ -485,15 +516,15 @@ fn render(initialRay: Ray) -> vec3f
       } else {
         col *= emit;
         break;
-      }
+      }*/
     } else {
       col *= globals.bgColor;
       break;
     }
-    bounce += 1;
+    /*bounce += 1;
     if(bounce >= globals.maxBounces) {
       break;
-    }
+    }*/
   }
 
   return col;

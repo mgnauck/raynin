@@ -9,7 +9,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLB: 0, BVH: 1, IDX: 2, OBJ: 3, SHP: 4, MAT: 5, ACC: 6, IMG: 7 };
+const bufType = { GLB: 0, /*BVH: 1, IDX: 2, MAT: 3,*/ ACC: 1, IMG: 2 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -124,7 +124,7 @@ function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesS
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[bufType.BVH] = device.createBuffer({
+  /*res.buf[bufType.BVH] = device.createBuffer({
     size: bvhSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
@@ -134,20 +134,10 @@ function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesS
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[bufType.OBJ] = device.createBuffer({
-    size: objsSize,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.SHP] = device.createBuffer({
-    size: shapesSize,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
   res.buf[bufType.MAT] = device.createBuffer({
     size: matsSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
+  });*/
 
   res.buf[bufType.ACC] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
@@ -164,21 +154,15 @@ function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesS
       { binding: bufType.GLB,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "uniform" } },
-      { binding: bufType.BVH,
+      /*{ binding: bufType.BVH,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
       { binding: bufType.IDX,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: bufType.OBJ,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.SHP,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
       { binding: bufType.MAT,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
+        buffer: { type: "read-only-storage" } },*/
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
@@ -192,11 +176,9 @@ function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesS
     layout: bindGroupLayout,
     entries: [
       { binding: bufType.GLB, resource: { buffer: res.buf[bufType.GLB] } },
-      { binding: bufType.BVH, resource: { buffer: res.buf[bufType.BVH] } },
+      /*{ binding: bufType.BVH, resource: { buffer: res.buf[bufType.BVH] } },
       { binding: bufType.IDX, resource: { buffer: res.buf[bufType.IDX] } },
-      { binding: bufType.OBJ, resource: { buffer: res.buf[bufType.OBJ] } },
-      { binding: bufType.SHP, resource: { buffer: res.buf[bufType.SHP] } },
-      { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },
+      { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },*/
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
       { binding: bufType.IMG, resource: { buffer: res.buf[bufType.IMG] } }
     ]

@@ -26,6 +26,9 @@ mesh *init_scene(size_t tri_cnt)
   for(size_t i=0; i<tri_cnt * 3; i++)
     vertices[i] = vec3_rand();
 
+  curr_cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
+  cam_set(&curr_cam, (vec3){ 0.0f, 0.0f, -2.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+
   return mesh_create(vertices, tri_cnt * 3);
 }
 
@@ -48,6 +51,8 @@ void init(uint32_t width, uint32_t height)
 
   curr_mesh = init_scene(16);
 
+  gpu_create_res(GLOB_BUF_SIZE, 0, 0, 0, 0, 0);
+  
   gpu_write_buf(GLOB, GLOB_BUF_OFS_CFG, &config, sizeof(cfg));
 
   update_cam_view();
