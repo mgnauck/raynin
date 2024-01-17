@@ -61,17 +61,19 @@ const EPSILON = 0.001;
 const PI = 3.141592;
 const MAX_DISTANCE = 3.402823466e+38;
 
-const SHAPE_TYPE_SPHERE = 1;
-const SHAPE_TYPE_BOX = 2;
-const SHAPE_TYPE_CYLINDER = 3;
-const SHAPE_TYPE_QUAD = 4;
-const SHAPE_TYPE_MESH = 5;
+const SHAPE_TYPE_SPHERE = 1u;
+const SHAPE_TYPE_BOX = 2u;
+const SHAPE_TYPE_CYLINDER = 3u;
+const SHAPE_TYPE_QUAD = 4u;
+const SHAPE_TYPE_MESH = 5u;
 
-const MAT_TYPE_LAMBERT = 1;
-const MAT_TYPE_METAL = 2;
-const MAT_TYPE_GLASS = 3;
-const MAT_TYPE_EMITTER = 4;
-const MAT_TYPE_ISOTROPIC = 5;
+const MAT_TYPE_LAMBERT = 1u;
+const MAT_TYPE_METAL = 2u;
+const MAT_TYPE_GLASS = 3u;
+const MAT_TYPE_EMITTER = 4u;
+const MAT_TYPE_ISOTROPIC = 5u;
+
+const vertexPos = array<vec2f, 4u>(vec2f(-1.0, 1.0), vec2f(-1.0), vec2f(1.0), vec2f(1.0, -1.0));
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> bvhNodes: array<BvhNode>;
@@ -111,9 +113,9 @@ fn rand3Range(valueMin: f32, valueMax: f32) -> vec3f
 // https://mathworld.wolfram.com/SpherePointPicking.html
 fn rand3UnitSphere() -> vec3f
 {
-  let u = 2 * rand() - 1;
-  let theta = 2 * PI * rand();
-  let r = sqrt(1 - u * u);
+  let u = 2.0 * rand() - 1.0;
+  let theta = 2.0 * PI * rand();
+  let r = sqrt(1.0 - u * u);
   return vec3f(r * cos(theta), r * sin(theta), u);
 }
 
@@ -127,7 +129,7 @@ fn rand3Hemi(nrm: vec3f) -> vec3f
 fn rand2Disk() -> vec2f
 {
   let r = sqrt(rand());
-  let theta = 2 * PI * rand();
+  let theta = 2.0 * PI * rand();
   return vec2f(r * cos(theta), r * sin(theta));
 }
 
@@ -148,7 +150,7 @@ fn createRay(ori: vec3f, dir: vec3f, tmin: f32, tmax: f32) -> Ray
   r.dir = dir;
   r.tmin = tmin;
   r.t = tmax;
-  r.invDir = 1 / r.dir;
+  r.invDir = 1.0 / r.dir;
   return r;
 }
 
@@ -171,7 +173,7 @@ fn intersectSphere(ray: Ray, center: vec3f, radius: f32) -> f32
   let c = dot(oc, oc) - radius * radius;
 
   let d = b * b - a * c;
-  if(d < 0) {
+  if(d < 0.0) {
     return MAX_DISTANCE;
   }
 
@@ -214,7 +216,7 @@ fn intersectQuad(ray: Ray, q: vec3f, u: vec3f, v: vec3f) -> f32
   let a = dot(w, cross(planar, v));
   let b = dot(w, cross(u, planar));
 
-  return select(t, MAX_DISTANCE, a < 0 || 1 < a || b < 0 || 1 < b);
+  return select(t, MAX_DISTANCE, a < 0.0 || 1.0 < a || b < 0.0 || 1.0 < b);
 }
 
 fn completeHitQuad(ray: Ray, q: vec3f, u: vec3f, v: vec3f, h: ptr<function, Hit>)
@@ -251,8 +253,8 @@ fn completeHitQuad(ray: Ray, q: vec3f, u: vec3f, v: vec3f, h: ptr<function, Hit>
     return MAX_DISTANCE;
   }
 
-  if(t1 < 0) {
-    t1 = 0;
+  if(t1 < 0.0) {
+    t1 = 0.0;
   }
 
   let rayLen = length(ray.dir);
@@ -271,7 +273,7 @@ fn completeHitConstantMedium(ray: Ray, h: ptr<function, Hit>)
 
 fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let nrm = select(h.nrm, -h.nrm, dot(in.dir, h.nrm) > 0);
+  let nrm = select(h.nrm, -h.nrm, dot(in.dir, h.nrm) > 0.0);
   let dir = nrm + rand3UnitSphere();
 
   *scatterDir = select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
@@ -281,39 +283,39 @@ fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function
 
 fn evalMaterialMetal(in: Ray, h: Hit, albedo: vec3f, fuzzRadius: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let nrm = select(h.nrm, -h.nrm, dot(in.dir, h.nrm) > 0);
+  let nrm = select(h.nrm, -h.nrm, dot(in.dir, h.nrm) > 0.0);
   let dir = reflect(in.dir, nrm);
 
   *scatterDir = normalize(dir + fuzzRadius * rand3UnitSphere());
   *attenuation = albedo;
-  return dot(*scatterDir, nrm) > 0;
+  return dot(*scatterDir, nrm) > 0.0;
 }
 
 fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
 {
-  var r0 = (1 - refractionIndexRatio) / (1 + refractionIndexRatio);
+  var r0 = (1.0 - refractionIndexRatio) / (1.0 + refractionIndexRatio);
   r0 = r0 * r0;
-  return r0 + (1 - r0) * pow(1 - cosTheta, 5);
+  return r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
 }
 
 fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let inside = dot(in.dir, h.nrm) > 0;
+  let inside = dot(in.dir, h.nrm) > 0.0;
   let nrm = select(h.nrm, -h.nrm, inside);
-  let refracIndexRatio = select(1 / refractionIndex, refractionIndex, inside);
+  let refracIndexRatio = select(1.0 / refractionIndex, refractionIndex, inside);
   
-  let cosTheta = min(dot(-in.dir, nrm), 1);
+  let cosTheta = min(dot(-in.dir, nrm), 1.0);
   /*let sinTheta = sqrt(1 - cosTheta * cosTheta);
 
   var dir: vec3f;
-  if(refracIndexRatio * sinTheta > 1 || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
+  if(refracIndexRatio * sinTheta > 1.0 || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
     dir = reflect(in.dir, nrm);
   } else {
     dir = refract(in.dir, nrm, refracIndexRatio);
   }*/
 
   var dir = refract(in.dir, nrm, refracIndexRatio);
-  if(all(dir == vec3f(0)) || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
+  if(all(dir == vec3f(0.0)) || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
     dir = reflect(in.dir, nrm);
   }
 
@@ -352,7 +354,7 @@ fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: pt
     }
     default: {
       // Error material
-      *emission = vec3f(99999, 0, 0);
+      *emission = vec3f(99999.0, 0.0, 0.0);
       return false;
     }
   }
@@ -368,8 +370,8 @@ fn intersectObject(ray: Ray, objIndex: u32) -> f32
       return intersectSphere(ray, data.xyz, data.w);
     }
     case SHAPE_TYPE_QUAD: {
-      let u = shapes[(*obj).shapeOfs + 1];
-      let v = shapes[(*obj).shapeOfs + 2];
+      let u = shapes[(*obj).shapeOfs + 1u];
+      let v = shapes[(*obj).shapeOfs + 2u];
       return intersectQuad(ray, data.xyz, u.xyz, v.xyz);
     }
     default: {
@@ -403,9 +405,9 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
     let nodeStartIndex = (*node).startIndex;
     let nodeObjCount = (*node).objCount;
    
-    if(nodeObjCount > 0) {
+    if(nodeObjCount > 0u) {
       intersectObjects(ray, nodeStartIndex, nodeObjCount, &objId);
-      if(nodeStackIndex > 0) {
+      if(nodeStackIndex > 0u) {
         nodeStackIndex--;
         nodeIndex = nodeStack[nodeStackIndex];
       } else {
@@ -413,7 +415,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
       }
     } else {
       let leftChildNode = &bvhNodes[nodeStartIndex];
-      let rightChildNode = &bvhNodes[nodeStartIndex + 1];
+      let rightChildNode = &bvhNodes[nodeStartIndex + 1u];
 
       let leftDist = intersectAabb(*ray, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
       let rightDist = intersectAabb(*ray, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
@@ -421,8 +423,8 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
       let switchNodes = leftDist > rightDist;
       let nearNodeDist = select(leftDist, rightDist, switchNodes);
       let farNodeDist = select(rightDist, leftDist, switchNodes);
-      let nearNodeIndex = select(nodeStartIndex, nodeStartIndex + 1, switchNodes);
-      let farNodeIndex = select(nodeStartIndex + 1, nodeStartIndex, switchNodes);
+      let nearNodeIndex = select(nodeStartIndex, nodeStartIndex + 1u, switchNodes);
+      let farNodeIndex = select(nodeStartIndex + 1u, nodeStartIndex, switchNodes);
 
       if(nearNodeDist < MAX_DISTANCE) {
         nodeIndex = nearNodeIndex;
@@ -431,7 +433,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
           nodeStackIndex++;
         }
       } else {
-        if(nodeStackIndex > 0) {
+        if(nodeStackIndex > 0u) {
           nodeStackIndex--;
           nodeIndex = nodeStack[nodeStackIndex];
         } else {
@@ -449,8 +451,8 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
         completeHitSphere(*ray, data.xyz, data.w, hit);
       }
       case SHAPE_TYPE_QUAD: {
-        let u = shapes[(*obj).shapeOfs + 1];
-        let v = shapes[(*obj).shapeOfs + 2];
+        let u = shapes[(*obj).shapeOfs + 1u];
+        let v = shapes[(*obj).shapeOfs + 2u];
         completeHitQuad(*ray, data.xyz, u.xyz, v.xyz, hit);
       }
       case SHAPE_TYPE_MESH: {
@@ -471,7 +473,7 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
 fn render(initialRay: Ray) -> vec3f
 {
   var ray = initialRay;
-  var col = vec3f(1);
+  var col = vec3f(1.0);
   var bounce = 0u;
   loop {
     var hit: Hit;
@@ -490,7 +492,7 @@ fn render(initialRay: Ray) -> vec3f
       col *= globals.bgColor;
       break;
     }
-    bounce += 1;
+    bounce += 1u;
     if(bounce >= globals.maxBounces) {
       break;
     }
@@ -505,7 +507,7 @@ fn createPrimaryRay(pixelPos: vec2f) -> Ray
   pixelSample += (rand() - 0.5) * globals.pixelDeltaX + (rand() - 0.5) * globals.pixelDeltaY;
 
   var eyeSample = globals.eye;
-  if(globals.focAngle > 0) {
+  if(globals.focAngle > 0.0) {
     let focRadius = globals.focDist * tan(0.5 * radians(globals.focAngle));
     let diskSample = rand2Disk();
     eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
@@ -524,22 +526,37 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   let index = globals.width * globalId.y + globalId.x;
   rngState = index ^ u32(globals.rngSeed * 0xffffffff); 
 
-  var col = vec3f(0);
+  var col = vec3f(0.0);
   for(var i=0u; i<globals.samplesPerPixel; i++) {
     col += render(createPrimaryRay(vec2f(globalId.xy)));
   }
 
   let outCol = mix(buffer[index].xyz, col / f32(globals.samplesPerPixel), globals.weight);
 
-  buffer[index] = vec4f(outCol, 1);
-  image[index] = vec4f(pow(outCol, vec3f(0.4545)), 1);
+  buffer[index] = vec4f(outCol, 1.0);
+  image[index] = vec4f(pow(outCol, vec3f(0.4545)), 1.0);
 }
 
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 {
-  let pos = array<vec2f, 4>(vec2f(-1, 1), vec2f(-1), vec2f(1), vec2f(1, -1));
-  return vec4f(pos[vertexIndex], 0, 1);
+  return vec4f(vertexPos[vertexIndex], 0.0, 1.0);
+ 
+  // Firefox/Naga workaround for above array access
+  /*switch(vertexIndex) {
+    case 0u: {
+      return vec4f(-1.0, 1.0, 0.0, 1.0);
+    }
+    case 1u: {
+      return vec4f(-1.0, -1.0, 0.0, 1.0);
+    } 
+    case 2u: {
+      return vec4f(1.0, 1.0, 0.0, 1.0);
+    }
+    default: {
+      return vec4f(1.0, -1.0, 0.0, 1.0);
+    }
+  }*/
 }
 
 @fragment
