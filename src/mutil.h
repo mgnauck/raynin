@@ -5,7 +5,7 @@
 
 #define PI      3.141592654f
 #define TWO_PI  6.283185307f
-#define EPSILON 0.0001f
+#define EPSILON	0.0001f
 
 // Beware of double evaluation
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -25,9 +25,9 @@ float     floorf(float v);
 float     truncf(float v);
 float     fmodf(float x, float y);
 
-void      srand(uint64_t seed, uint64_t seq);
-uint32_t  rand(void);
-float     randf(void);
-float     randf_rng(float start, float end);
+void      pcg_srand(uint64_t seed, uint64_t seq);
+uint32_t  pcg_rand(void);
+float     pcg_randf(void);
+float     pcg_randf_rng(float start, float end);
 
 #endif

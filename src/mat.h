@@ -11,20 +11,11 @@ typedef enum mat_type {
   DIELECTRIC
 } mat_type;
 
-// LAMBERT, ISOTROPIC, EMITTER
-typedef struct basic {
-  vec3  albedo;
-  float pad;
-} basic;
+typedef struct mat {
+  vec3  color;
+  float value;
+} mat;
 
-typedef struct metal {
-  vec3  albedo;
-  float fuzz_radius;
-} metal;
-
-typedef struct dielectric {
-  vec3  albedo;
-  float refr_idx;
-} glass;
+void mat_rand(mat *m);
 
 #endif

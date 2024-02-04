@@ -12,13 +12,18 @@
 
 typedef enum buf_type {
   GLOB = 0,
-  /*BVH,
+  TRI,
+  TRI_DATA,
   INDEX,
-  MAT*/
+  BVH_NODE,
+  TLAS_NODE,
+  INST,
+  MAT
 } buf_type;
 
-extern void gpu_create_res(size_t glob_sz, size_t bvh_sz, size_t indices_sz,
-    size_t obj_sz, size_t shape_sz, size_t mat_sz);
+extern void gpu_create_res(size_t glob_sz, size_t tri_sz, size_t tri_data_sz,
+    size_t index_sz, size_t bvh_node_sz, size_t tlas_node_sz, size_t inst_sz,
+    size_t mat_sz);
 
 extern void gpu_write_buf(buf_type src_type, size_t dest_ofs,
     const void *src, size_t size);

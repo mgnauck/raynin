@@ -5,8 +5,16 @@
 
 typedef struct tri {
   vec3 v[3];
+  vec3 center;
 } tri;
 
-vec3 tri_calc_center(const tri *t);
+typedef struct tri_data {
+  vec3  n[3];
+  float u[3];
+  float v[3];
+  float pad;
+} tri_data;
+
+void tri_calc_center(tri *t);
 
 #endif

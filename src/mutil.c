@@ -48,23 +48,23 @@ void pcg32_srandom_r(pcg32_random_t* rng, uint64_t initstate, uint64_t initseq)
     pcg32_random_r(rng);
 }
 
-void srand(uint64_t seed, uint64_t seq)
+void pcg_srand(uint64_t seed, uint64_t seq)
 {
   pcg32_srandom_r(&pcg32_global, seed, seq);
 }
 
-uint32_t rand()
+uint32_t pcg_rand()
 {
   return pcg32_random_r(&pcg32_global);
 }
 
-float randf()
+float pcg_randf()
 {
   // ldexp(rand(), -32);
-  return rand() / (double)UINT32_MAX;
+  return pcg_rand() / (double)UINT32_MAX;
 }
 
-float randf_rng(float start, float end)
+float pcg_randf_rng(float start, float end)
 {
-  return start + randf() * (end - start);
+  return start + pcg_randf() * (end - start);
 }

@@ -29,39 +29,68 @@ struct Ray
   ori: vec3f,
   dir: vec3f,
   invDir: vec3f,
-  tmin: f32,
-  t: f32
-}
-
-struct BvhNode
-{
-  aabbMin: vec3f,
-  startIndex: u32, // Either index of first object or left child node
-  aabbMax: vec3f,
-  objCount: u32
 }
 
 struct Tri
 {
   v0: vec3f,
   v1: vec3f,
-  v2: vec3f
+  v2: vec3f,
+  center: vec3f
 }
 
-/*struct Mesh
+struct TriData
 {
-  matType: u32,
-  matOfs: u32,
-  triOfs: u32
-}*/
+  n0: vec3f,
+  n1: vec3f,
+  n2: vec3f,
+  uv0: vec2f,
+  uv1: vec2f,
+  uv2: vec2f,
+  pad: f32
+}
+
+struct BvhNode
+{
+  aabbMin: vec3f,
+  startIndex: u32,  // Either index of first object or left child node
+  aabbMax: vec3f,
+  objCount: u32
+}
+
+struct TlasNode
+{
+  aabbMin: vec3f,
+  children: u32,    // 2x 16 bit
+  aabbMax: vec3f,
+  inst: u32         // Leaf nodes only
+}
+
+struct Inst
+{
+  aabbMin: vec3f,
+  triOfs: u32,
+  aabbMax: vec3f,
+  bvhNodeOfs: u32,
+  transform: mat4x4f,
+  invTransform: mat4x4f,
+  id: u32,          // (mesh idx << 20) | (inst idx & 0xfffff)
+  matId: u32        // (mat type << 24) | (mat idx & 0xffffff)
+}
+
+struct Mat
+{
+  albedo: vec3f,
+  value: f32
+}
 
 struct Hit
 {
-  pos: vec3f,
-  nrm: vec3f,
-  //meshId: u32,
-  matType: u32,
-  matOfs: u32
+  t: f32,
+  u: f32,
+  v: f32,
+  obj: u32,
+  tri: u32          // (mesh id << 20) | (inst id & 0xfffff)
 }
 
 const EPSILON = 0.001;
@@ -75,13 +104,15 @@ const MAT_TYPE_EMITTER = 4;
 const MAT_TYPE_ISOTROPIC = 5;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-/*
-@group(0) @binding(1) var<storage, read> bvhNodes: array<BvhNode>;
-@group(0) @binding(2) var<storage, read> indices: array<u32>;
-@group(0) @binding(3) var<storage, read> triangles: array<u32>;
-@group(0) @binding(4) var<storage, read> materials: array<vec4f>;*/
-@group(0) @binding(1) var<storage, read_write> buffer: array<vec4f>;
-@group(0) @binding(2) var<storage, read_write> image: array<vec4f>;
+@group(0) @binding(1) var<storage, read> tris: array<Tri>;
+@group(0) @binding(2) var<storage, read> trisData: array<TriData>;
+@group(0) @binding(3) var<storage, read> indices: array<u32>;
+@group(0) @binding(4) var<storage, read> bvhNodes: array<BvhNode>;
+@group(0) @binding(5) var<storage, read> tlasNodes: array<TlasNode>;
+@group(0) @binding(6) var<storage, read> instances: array<Inst>;
+@group(0) @binding(7) var<storage, read> materials: array<Mat>;
+@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> image: array<vec4f>;
 
 var<private> nodeStack: array<u32, 32>; // Fixed size
 var<private> rngState: u32;
@@ -142,18 +173,18 @@ fn maxComp(v: vec3f) -> f32
   return max(v.x, max(v.y, v.z));
 }
 
-fn createRay(ori: vec3f, dir: vec3f, tmin: f32, tmax: f32) -> Ray
+fn createRay(ori: vec3f, dir: vec3f) -> Ray
 {
   var r: Ray;
   r.ori = ori;
   r.dir = dir;
-  r.tmin = tmin;
-  r.t = tmax;
   r.invDir = 1 / r.dir;
   return r;
 }
 
-fn intersectAabb(ray: Ray, minExt: vec3f, maxExt: vec3f) -> f32
+// GPU efficient slabs test [Laine et al. 2013; Afra et al. 2016]
+// https://www.jcgt.org/published/0007/03/04/paper-lowres.pdf
+fn intersectAabb(ray: Ray, currT: f32, minExt: vec3f, maxExt: vec3f) -> f32
 {
   let t0 = (minExt - ray.ori) * ray.invDir;
   let t1 = (maxExt - ray.ori) * ray.invDir;
@@ -161,11 +192,12 @@ fn intersectAabb(ray: Ray, minExt: vec3f, maxExt: vec3f) -> f32
   let tmin = maxComp(min(t0, t1));
   let tmax = minComp(max(t0, t1));
   
-  return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < ray.t && tmax > ray.tmin);
+  return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < currT && tmax > EPSILON);
 }
 
-// MT ray-triangle: https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-fn intersectTriangle(ray: Ray, tri: Tri, u: ptr<function, f32>, v: ptr<function, f32>) -> f32
+// Moeller/Trumbore ray-triangle intersection
+// https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
+fn intersectTriangle(ray: Ray, tri: Tri, objId: u32, triId: u32, h: ptr<function, Hit>)
 {
   // Vectors of two edges sharing vertex 0
   let edge1 = tri.v1 - tri.v0;
@@ -177,7 +209,7 @@ fn intersectTriangle(ray: Ray, tri: Tri, u: ptr<function, f32>, v: ptr<function,
 
   if(abs(det) < EPSILON) {
     // Ray in plane of triangle
-    return MAX_DISTANCE;
+    return;
   }
 
   let invDet = 1 / det;
@@ -186,129 +218,46 @@ fn intersectTriangle(ray: Ray, tri: Tri, u: ptr<function, f32>, v: ptr<function,
   let tvec = ray.ori - tri.v0;
 
   // Calculate parameter u and test bounds
-  *u = dot(tvec, pvec) * invDet;
-  if(*u < 0 || *u > 1) {
-    return MAX_DISTANCE;
+  let u = dot(tvec, pvec) * invDet;
+  if(u < 0 || u > 1) {
+    return;
   }
 
   // Prepare to test for v
   let qvec = cross(tvec, edge1);
 
   // Calculate parameter u and test bounds
-  *v = dot(ray.dir, qvec) * invDet;
-  if(*v < 0 || *u + *v > 1) {
-    return MAX_DISTANCE;
+  let v = dot(ray.dir, qvec) * invDet;
+  if(v < 0 || u + v > 1) {
+    return;
   }
 
   // Calc distance
-  return dot(edge2, qvec) * invDet;
+  let dist = dot(edge2, qvec) * invDet;
+  if(dist > EPSILON && dist < (*h).t) {
+    (*h).t = dist;
+    (*h).u = u;
+    (*h).v = v;
+    (*h).obj = obj_id;
+    (*h).tri = tri_id;
+  }
 }
 
-fn intersectSphere(ray: Ray, center: vec3f, radius: f32) -> f32
+fn intersectBvh(ray: Ray, objId: u32, h: ptr<function, Hit>)
 {
-  let oc = ray.ori - center;
-  let a = dot(ray.dir, ray.dir);
-  let b = dot(oc, ray.dir); // half
-  let c = dot(oc, oc) - radius * radius;
-
-  let d = b * b - a * c;
-  if(d < 0) {
-    return MAX_DISTANCE;
-  }
-
-  let sqrtd = sqrt(d);
-  var t = (-b - sqrtd) / a;
-  if(t <= ray.tmin || ray.t <= t) {
-    t = (-b + sqrtd) / a;
-    if(t <= ray.tmin || ray.t <= t) {
-      return MAX_DISTANCE;
-    }
-  }
-
-  return t;
+  // TODO
 }
 
-fn completeHitSphere(ray: Ray, center: vec3f, radius: f32, h: ptr<function, Hit>)
+fn intersectInst(ray: Ray, inst: Inst, h: ptr<function, Hit>)
 {
-  (*h).pos = ray.ori + ray.t * ray.dir;
-  (*h).nrm = ((*h).pos - center) / radius;
+  // TODO
 }
 
-fn intersectQuad(ray: Ray, q: vec3f, u: vec3f, v: vec3f) -> f32
+fn intersectTlas(ray: Ray, h: ptr<function, Hit>) -> bool
 {
-  let n = cross(u, v);
-  let nrm = normalize(n);
-  let denom = dot(nrm, ray.dir);
-
-  if(abs(denom) < EPSILON) {
-    return MAX_DISTANCE;
-  }
-
-  let t = (dot(nrm, q) - dot(nrm, ray.ori)) / denom;
-  if(t < ray.tmin || t > ray.t) {
-    return MAX_DISTANCE;
-  }
-
-  let w = n / dot(n, n);
-  let pos = ray.ori + t * ray.dir;
-  let planar = pos - q;
-  let a = dot(w, cross(planar, v));
-  let b = dot(w, cross(u, planar));
-
-  return select(t, MAX_DISTANCE, a < 0 || 1 < a || b < 0 || 1 < b);
+  // TODO
+  return false;
 }
-
-fn completeHitQuad(ray: Ray, q: vec3f, u: vec3f, v: vec3f, h: ptr<function, Hit>)
-{
-  (*h).pos = ray.ori + ray.t * ray.dir;
-  (*h).nrm = normalize(cross(u, v));
-}
-
-/*fn intersectConstantMedium(ray: Ray, negInvDensity: f32, refIndex: u32) -> f32
-{
-  var newRay = ray;
-  newRay.tmin = -MAX_DISTANCE;
-  newRay.t = MAX_DISTANCE;
-  var t1 = intersectObjectNonRecursive(newRay, refIndex);
-  if(t1 >= MAX_DISTANCE) {
-    return MAX_DISTANCE;
-  }
-
-  newRay.tmin = t1 + EPSILON;
-  var t2 = intersectObjectNonRecursive(newRay, refIndex);
-  if(t2 >= MAX_DISTANCE) {
-    return MAX_DISTANCE;
-  }
-
-  if(t1 < ray.tmin) {
-    t1 = ray.tmin;
-  }
-
-  if(t2 > ray.t) {
-    t2 = ray.t;
-  }
-
-  if(t1 >= t2) {
-    return MAX_DISTANCE;
-  }
-
-  if(t1 < 0) {
-    t1 = 0;
-  }
-
-  let rayLen = length(ray.dir);
-  let dist = negInvDensity * log(rand());
-  if(dist > (t2 - t1) * rayLen) {
-    return MAX_DISTANCE;
-  }
-
-  return t1 + dist / rayLen;
-}
-
-fn completeHitConstantMedium(ray: Ray, h: ptr<function, Hit>)
-{
-  (*h).pos = ray.ori + ray.t * ray.dir;
-}*/
 
 fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
@@ -410,20 +359,10 @@ fn evalMaterialIsotropic(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<functi
   }
 }*/
 
-fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
+/*fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
 {
-  let tri = Tri(vec3f(-1, 1, 2), vec3f(-1, -1, 2), vec3f(1, -1, 2));
-  var u: f32;
-  var v: f32;
-
-  if(intersectTriangle(*ray, tri, &u, &v) < MAX_DISTANCE) {
-    return true;
-  }
-
-  /*var objId: u32;
+  var objId: u32;
   
-  //intersectObjects(ray, 0, arrayLength(&objects), &objId);
-
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
@@ -492,10 +431,10 @@ fn intersectScene(ray: ptr<function, Ray>, hit: ptr<function, Hit>) -> bool
     (*hit).matType = (*obj).matType;
     (*hit).matOfs = (*obj).matOfs;
     return true;
-  }*/
+  }
 
   return false;
-}
+}*/
 
 fn render(initialRay: Ray) -> vec3f
 {
@@ -504,7 +443,7 @@ fn render(initialRay: Ray) -> vec3f
   var bounce = 0u;
   loop {
     var hit: Hit;
-    if(intersectScene(&ray, &hit)) {
+    if(intersectTlas(&ray, &hit)) {
       col = vec3f(1);
       break;
       /*var att: vec3f;

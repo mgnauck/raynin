@@ -18,13 +18,20 @@ float vec3_get(vec3 v, uint8_t idx)
 
 vec3 vec3_rand()
 {
-  return (vec3){ randf(), randf(), randf() };
+  return (vec3){ pcg_randf(), pcg_randf(), pcg_randf() };
 }
 
 vec3 vec3_rand_rng(float start, float end)
 {
   float d = end - start;
-  return (vec3){ start + randf() * d, start + randf() * d, start + randf() * d };
+  return (vec3){ start + pcg_randf() * d, start + pcg_randf() * d, start + pcg_randf() * d };
+}
+
+vec3 vec3_rand2_disk()
+{
+  float r = sqrtf(pcg_randf());
+  float theta = 2.0f * PI * pcg_randf();
+  return (vec3){ r * cosf(theta), r * sinf(theta), 0.0f };
 }
 
 vec3 vec3_add(vec3 a, vec3 b)
@@ -66,9 +73,14 @@ vec3 vec3_unit(vec3 v)
   return (vec3){ v.x * il, v.y * il, v.z * il };
 }
 
+float vec3_dot(vec3 a, vec3 b)
+{
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
 float vec3_len(vec3 v)
 {
-  return sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+  return sqrtf(vec3_dot(v, v));
 }
 
 vec3 vec3_min(vec3 a, vec3 b)
@@ -79,6 +91,16 @@ vec3 vec3_min(vec3 a, vec3 b)
 vec3 vec3_max(vec3 a, vec3 b)
 {
   return (vec3){ max(a.x, b.x), max(a.y, b.y), max(a.z, b.z) };
+}
+
+float vec3_min_comp(vec3 v)
+{
+  return min(min(v.x, v.y), v.z);
+}
+
+float vec3_max_comp(vec3 v)
+{
+  return max(max(v.x, v.y), v.z);
 }
 
 vec3 vec3_spherical(float theta, float phi)

@@ -9,7 +9,10 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLB: 0, /*BVH: 1, IDX: 2, MAT: 3,*/ ACC: 1, IMG: 2 };
+const bufType = {
+  GLOB: 0, TRI: 1, TRI_DATA: 2, INDEX: 3, BVH_NODE: 4,
+  TLAS_NODE: 5, INST: 7, MAT: 8, ACC: 9, IMG: 10
+};
 
 let canvas, context, device;
 let wa, res = {};
@@ -56,7 +59,7 @@ function Wasm(module)
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
     powf: (b, e) => Math.pow(b, e),
-    gpu_create_res: (g, b, i, o, s, m) => createGpuResources(g, b, i, o, s, m),
+    gpu_create_res: (g, t, td, idx, bn, tn, i, m) => createGpuResources(g, t, td, idx, bn, tn, i, m),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz)
   };
 
@@ -115,29 +118,49 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesSize, matsSize)
+function createGpuResources(globSz, triSz, triDataSz, indexSz, bvhNodeSz, tlasNodeSz, instSz, matSz)
 {
   res.buf = [];
 
-  res.buf[bufType.GLB] = device.createBuffer({
-    size: globalsSize,
+  res.buf[bufType.GLOB] = device.createBuffer({
+    size: globSz,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  /*res.buf[bufType.BVH] = device.createBuffer({
-    size: bvhSize,
+  res.buf[bufType.TRI] = device.createBuffer({
+    size: triSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[bufType.IDX] = device.createBuffer({
-    size: indicesSize,
+  res.buf[bufType.TRI_DATA] = device.createBuffer({
+    size: triDataSz,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.INDEX] = device.createBuffer({
+    size: indexSz,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.BVH_NODE] = device.createBuffer({
+    size: bvhNodeSz,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.TLAS_NODE] = device.createBuffer({
+    size: tlasNodeSz,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.INST] = device.createBuffer({
+    size: instSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   res.buf[bufType.MAT] = device.createBuffer({
-    size: matsSize,
+    size: matSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });*/
+  });
 
   res.buf[bufType.ACC] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
@@ -151,18 +174,30 @@ function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesS
 
   let bindGroupLayout = device.createBindGroupLayout({
     entries: [ 
-      { binding: bufType.GLB,
+      { binding: bufType.GLOB,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "uniform" } },
-      /*{ binding: bufType.BVH,
+      { binding: bufType.TRI,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: bufType.IDX,
+      { binding: bufType.TRI_DATA,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage" } },
+      { binding: bufType.INDEX,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage" } },
+      { binding: bufType.BVH_NODE,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage" } },
+      { binding: bufType.TLAS_NODE,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage" } },
+      { binding: bufType.INST,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
       { binding: bufType.MAT,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },*/
+        buffer: { type: "read-only-storage" } },
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
@@ -175,10 +210,14 @@ function createGpuResources(globalsSize, bvhSize, indicesSize, objsSize, shapesS
   res.bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: bufType.GLB, resource: { buffer: res.buf[bufType.GLB] } },
-      /*{ binding: bufType.BVH, resource: { buffer: res.buf[bufType.BVH] } },
-      { binding: bufType.IDX, resource: { buffer: res.buf[bufType.IDX] } },
-      { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },*/
+      { binding: bufType.GLOB, resource: { buffer: res.buf[bufType.GLOB] } },
+      { binding: bufType.TRI, resource: { buffer: res.buf[bufType.TRI] } },
+      { binding: bufType.TRI_DATA, resource: { buffer: res.buf[bufType.TRI_DATA] } },
+      { binding: bufType.INDEX, resource: { buffer: res.buf[bufType.INDEX] } },
+      { binding: bufType.BVH_NODE, resource: { buffer: res.buf[bufType.BVH_NODE] } },
+      { binding: bufType.TLAS_NODE, resource: { buffer: res.buf[bufType.TLAS_NODE] } },
+      { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
+      { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
       { binding: bufType.IMG, resource: { buffer: res.buf[bufType.IMG] } }
     ]
