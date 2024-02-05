@@ -34,20 +34,23 @@ struct Ray
 struct Tri
 {
   v0: vec3f,
+  pad0: f32,
   v1: vec3f,
+  pad1: f32,
   v2: vec3f,
-  center: vec3f
+  pad2: f32,
+  center: vec3f,
+  pad3: f32
 }
 
 struct TriData
 {
   n0: vec3f,
+  pad0: f32,
   n1: vec3f,
+  pad1: f32,
   n2: vec3f,
-  uv0: vec2f,
-  uv1: vec2f,
-  uv2: vec2f,
-  pad: f32
+  pad2: f32,
 }
 
 struct BvhNode
@@ -75,7 +78,9 @@ struct Inst
   transform: mat4x4f,
   invTransform: mat4x4f,
   id: u32,          // (mesh idx << 20) | (inst idx & 0xfffff)
-  matId: u32        // (mat type << 24) | (mat idx & 0xffffff)
+  matId: u32,       // (mat type << 24) | (mat idx & 0xffffff)
+  pad0: u32,
+  pad1: u32
 }
 
 struct Mat
@@ -250,16 +255,19 @@ fn intersectBvh(ray: Ray, inst: Inst, h: ptr<function, Hit>)
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
+  let bofs = inst.bvhNodeOfs;
+  let tofs = inst.triOfs; 
+
   loop {
-    let node = &bvhNodes[inst.bvhNodeOfs + nodeIndex];
+    let node = &bvhNodes[bofs + nodeIndex];
     let nodeStartIndex = (*node).startIndex;
     let nodeObjCount = (*node).objCount;
    
     if(nodeObjCount > 0) {
       // Leaf node, check all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
-        let triId = indices[inst.triOfs + nodeStartIndex + i];
-        intersectTri(ray, tris[triId], inst.id, triId, h);
+        let triId = indices[tofs + nodeStartIndex + i];
+        intersectTri(ray, tris[tofs + triId], inst.id, triId, h);
       }
       if(nodeStackIndex > 0) {
         nodeStackIndex--;
@@ -269,8 +277,8 @@ fn intersectBvh(ray: Ray, inst: Inst, h: ptr<function, Hit>)
       }
     } else {
       // Interior node, check aabbs of children
-      let leftChildNode = &bvhNodes[inst.bvhNodeOfs + nodeStartIndex];
-      let rightChildNode = &bvhNodes[inst.bvhNodeOfs + nodeStartIndex + 1];
+      let leftChildNode = &bvhNodes[bofs + nodeStartIndex];
+      let rightChildNode = &bvhNodes[bofs + nodeStartIndex + 1];
 
       let leftDist = intersectAabb(ray, (*h).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
       let rightDist = intersectAabb(ray, (*h).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
@@ -475,8 +483,13 @@ fn render(initialRay: Ray) -> vec3f
   loop {
     var hit: Hit;
     hit.t = MAX_DISTANCE;
-    if(intersectTlas(ray, &hit)) {
-      col = vec3f(1, 0, 0);
+    //if(intersectTlas(ray, &hit)) {
+    for(var i=0u; i<4; i++) {
+      intersectInst(ray, instances[i], &hit);
+    }
+    if(hit.t < MAX_DISTANCE) {
+      //col = vec3f(1, 0, 0);
+      col = materials[instances[hit.obj & 0xfffff].matId].albedo;
       break;
       /*var att: vec3f;
       var emit: vec3f;

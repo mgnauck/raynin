@@ -16,10 +16,10 @@
 #include "intersect.h"
 #include "log.h"
 
-#define TRI_CNT   64
+#define TRI_CNT   4
 #define MESH_CNT  2
-#define INST_CNT  128
-#define MAT_CNT   16
+#define INST_CNT  2
+#define MAT_CNT   2
 
 uint32_t  gathered_smpls = 0;
 vec3      bg_col = { 0.0f, 0.0f, 0.0f };
@@ -106,13 +106,15 @@ void init(uint32_t width, uint32_t height)
 {
   pcg_srand(42u, 303u);
 
+  log("mesh_cnt: %d, tri_cnt: %d, inst_cnt: %d, mat_cnt: %d", MESH_CNT, TRI_CNT, INST_CNT, MAT_CNT);
+
   // Reserve buffer space
   buf_init(8);
   buf_reserve(GLOB, sizeof(char), GLOB_BUF_SIZE);
-  buf_reserve(TRI, sizeof(tri), 19332 + 1024);
-  buf_reserve(TRI_DATA, sizeof(tri_data), 19332 + 1024);
-  buf_reserve(INDEX, sizeof(size_t), 19332 + 1024);
-  buf_reserve(BVH_NODE, sizeof(bvh_node), 2 * (19332 + 1024));
+  buf_reserve(TRI, sizeof(tri), TRI_CNT * MESH_CNT);
+  buf_reserve(TRI_DATA, sizeof(tri_data), TRI_CNT * MESH_CNT);
+  buf_reserve(INDEX, sizeof(size_t), TRI_CNT * MESH_CNT);
+  buf_reserve(BVH_NODE, sizeof(bvh_node), 2 * TRI_CNT * MESH_CNT);
   buf_reserve(TLAS_NODE, sizeof(tlas_node), 2 * INST_CNT + 1);
   buf_reserve(INST, sizeof(inst), INST_CNT);
   buf_reserve(MAT, sizeof(mat), MAT_CNT);
@@ -128,21 +130,20 @@ void init(uint32_t width, uint32_t height)
 
   for(size_t j=0; j<MESH_CNT; j++) {
     mesh_init(&scn.meshes[j], TRI_CNT);
+    
     for(size_t i=0; i<TRI_CNT; i++) {
       vec3 a = vec3_sub(vec3_scale(vec3_rand(), 5.0f), (vec3){ 2.5f, 2.5f, 2.5f });
-      scn.meshes[j].tris[i].v[0] = a;
-      scn.meshes[j].tris[i].v[1] = vec3_add(a, vec3_rand());
-      scn.meshes[j].tris[i].v[2] = vec3_add(a, vec3_rand());
-      scn.meshes[j].tris_data[i].n[0] = vec3_rand();
-      scn.meshes[j].tris_data[i].n[1] = vec3_rand();
-      scn.meshes[j].tris_data[i].n[2] = vec3_rand();
+      scn.meshes[j].tris[i].v0 = a;
+      scn.meshes[j].tris[i].v1 = vec3_add(a, vec3_rand());
+      scn.meshes[j].tris[i].v2 = vec3_add(a, vec3_rand());
+      scn.meshes[j].tris_data[i].n0 = vec3_rand();
+      scn.meshes[j].tris_data[i].n1 = vec3_rand();
+      scn.meshes[j].tris_data[i].n2 = vec3_rand();
       tri_calc_center(&scn.meshes[j].tris[i]);
     }
-  }
 
-  for(size_t i=0; i<MESH_CNT; i++) {
-    bvh_init(&scn.bvhs[i], scn.meshes[i].tri_cnt);
-    bvh_build(&scn.bvhs[i], scn.meshes[i].tris, scn.meshes[i].tri_cnt);
+    bvh_init(&scn.bvhs[j], scn.meshes[j].tri_cnt);
+    bvh_build(&scn.bvhs[j], scn.meshes[j].tris, scn.meshes[j].tri_cnt);
   }
 
   for(size_t i=0; i<MAT_CNT; i++)
@@ -162,29 +163,15 @@ void init(uint32_t width, uint32_t height)
   gpu_write_buf(GLOB, GLOB_BUF_OFS_CFG, &config, sizeof(cfg));
 
   // Write tri, tri data, index, bvh node and mat buffer
+  log("tri: %d, bvh: %d", buf_len(TRI), buf_len(BVH_NODE));
+
   gpu_write_buf(TRI, 0, buf_ptr(TRI, 0), buf_len(TRI));
   gpu_write_buf(TRI_DATA, 0, buf_ptr(TRI_DATA, 0), buf_len(TRI_DATA));
   gpu_write_buf(INDEX, 0, buf_ptr(INDEX, 0), buf_len(INDEX));
   gpu_write_buf(BVH_NODE, 0, buf_ptr(BVH_NODE, 0), buf_len(BVH_NODE));
   gpu_write_buf(MAT, 0, buf_ptr(MAT, 0), buf_len(MAT));
 
-  // Write initial view and cam into globals
-  update_cam_view();
-}
-
-__attribute__((visibility("default")))
-void update(float time)
-{
-  // Orbit cam
-  if(orbit_cam) {
-    float s = 0.3f;
-    float r = 8.0f;
-    float h = 0.0f;
-    vec3 pos = (vec3){ r * sinf(time * s), h * sinf(time * s * 0.7f), r * cosf(time * s) };
-    cam_set(&scn.cam, pos, vec3_neg(pos));
-    update_cam_view();
-  }
-
+  /*
   // Create/update instances
   for(size_t i=0; i<INST_CNT; i++) {
     mat4 transform;
@@ -217,6 +204,8 @@ void update(float time)
         directions[i].y *= -1.0f;
       if(positions[i].z < -3.0f || positions[i].z > 3.0f)
         directions[i].z *= -1.0f;
+
+      gathered_smpls = TEMPORAL_WEIGHT * config.spp;
     }
 	}
   
@@ -226,6 +215,70 @@ void update(float time)
   // Write tlas and instance buffer
   gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
   gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
+  */
+
+  // Write initial view and cam into globals
+  update_cam_view();
+}
+
+__attribute__((visibility("default")))
+void update(float time)
+{
+  // Orbit cam
+  if(orbit_cam) {
+    float s = 0.3f;
+    float r = 8.0f;
+    float h = 0.0f;
+    vec3 pos = (vec3){ r * sinf(time * s), h * sinf(time * s * 0.7f), r * cosf(time * s) };
+    cam_set(&scn.cam, pos, vec3_neg(pos));
+    update_cam_view();
+  }
+
+  //*
+  // Create/update instances
+  for(size_t i=0; i<INST_CNT; i++) {
+    mat4 transform;
+		
+    mat4 rotx, roty, rotz;
+    mat4_rot_x(rotx, orientations[i].x);
+    mat4_rot_y(roty, orientations[i].y);
+    mat4_rot_z(rotz, orientations[i].z);
+    mat4_mul(transform, rotx, roty);
+    mat4_mul(transform, transform, rotz);
+     
+    mat4 scale;
+    mat4_scale(scale, 0.2f);
+    mat4_mul(transform, transform, scale);
+    
+    mat4 translation;
+    mat4_trans(translation, positions[i]);
+    mat4_mul(transform, translation, transform);
+
+    inst_create(&scn.instances[i], i % MESH_CNT, i, &scn.meshes[i % MESH_CNT], &scn.bvhs[i % MESH_CNT],
+        transform, LAMBERT, &scn.materials[i % MAT_CNT]);
+	
+    if(!paused) {
+      positions[i] = vec3_add(positions[i], directions[i]);
+      orientations[i] = vec3_add(orientations[i], directions[i]);
+
+      if(positions[i].x < -3.0f || positions[i].x > 3.0f)
+        directions[i].x *= -1.0f;
+      if(positions[i].y < -3.0f || positions[i].y > 3.0f)
+        directions[i].y *= -1.0f;
+      if(positions[i].z < -3.0f || positions[i].z > 3.0f)
+        directions[i].z *= -1.0f;
+
+      gathered_smpls = TEMPORAL_WEIGHT * config.spp;
+    }
+	}
+  
+  // Build tlas
+  tlas_build(scn.tlas_nodes, scn.instances, INST_CNT);
+
+  // Write tlas and instance buffer
+  gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
+  gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
+  //*/
 
   // Push frame data
   float frame[8] = { pcg_randf(), config.spp / (float)(gathered_smpls + config.spp),

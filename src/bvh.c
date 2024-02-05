@@ -56,9 +56,9 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
         (size_t)min(INTERVAL_CNT - 1, (vec3_get(center, axis) - minc) * delta);
       aabb *int_aabb = &intervals[int_idx].aabb;
       const tri *tri = &tris[b->indices[n->start_idx + i]];
-      aabb_grow(int_aabb, tri->v[0]);
-      aabb_grow(int_aabb, tri->v[1]);
-      aabb_grow(int_aabb, tri->v[2]);
+      aabb_grow(int_aabb, tri->v0);
+      aabb_grow(int_aabb, tri->v1);
+      aabb_grow(int_aabb, tri->v2);
       intervals[int_idx].cnt++;
     }
 
@@ -105,12 +105,12 @@ void update_node_bounds(const bvh *b, bvh_node *n, const tri *tris)
   n->max = (vec3){ -FLT_MAX, -FLT_MAX, -FLT_MAX };
   for(size_t i=0; i<n->obj_cnt; i++) {
     const tri *t = &tris[b->indices[n->start_idx + i]];
-    n->min = vec3_min(n->min, t->v[0]);
-    n->min = vec3_min(n->min, t->v[1]);
-    n->min = vec3_min(n->min, t->v[2]);
-    n->max = vec3_max(n->max, t->v[0]);
-    n->max = vec3_max(n->max, t->v[1]);
-    n->max = vec3_max(n->max, t->v[2]);
+    n->min = vec3_min(n->min, t->v0);
+    n->min = vec3_min(n->min, t->v1);
+    n->min = vec3_min(n->min, t->v2);
+    n->max = vec3_max(n->max, t->v0);
+    n->max = vec3_max(n->max, t->v1);
+    n->max = vec3_max(n->max, t->v2);
   }
 }
 

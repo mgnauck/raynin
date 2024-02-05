@@ -26,8 +26,8 @@ float intersect_aabb(const ray *r, float curr_t, vec3 min_ext, vec3 max_ext)
 void intersect_tri(const ray *r, const tri *t, size_t obj, size_t tri, hit *h)
 {
   // Vectors of two edges sharing vertex 0
-  const vec3 edge1 = vec3_sub(t->v[1], t->v[0]);
-  const vec3 edge2 = vec3_sub(t->v[2], t->v[0]);
+  const vec3 edge1 = vec3_sub(t->v1, t->v0);
+  const vec3 edge2 = vec3_sub(t->v2, t->v0);
 
   // Calculate determinant and u parameter later on
   const vec3 pvec = vec3_cross(r->dir, edge2);
@@ -40,7 +40,7 @@ void intersect_tri(const ray *r, const tri *t, size_t obj, size_t tri, hit *h)
   const float inv_det = 1.0f / det;
 
   // Distance vertex 0 to origin
-  const vec3 tvec = vec3_sub(r->ori, t->v[0]);
+  const vec3 tvec = vec3_sub(r->ori, t->v0);
 
   // Calculate parameter u and test bounds
   const float u = vec3_dot(tvec, pvec) * inv_det;

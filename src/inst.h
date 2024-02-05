@@ -17,6 +17,8 @@ typedef struct inst {
   mat4      inv_transform;
   size_t    id;     // (mesh idx << 20) | (inst idx & 0xfffff)
   size_t    mat_id; // (mat type << 24) | (mat idx & 0xffffff)
+  size_t    pad0;
+  size_t    pad1;
 } inst;
 
 void inst_create(inst *inst, size_t mesh_idx, size_t inst_idx,
