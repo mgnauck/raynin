@@ -11,7 +11,8 @@ END_visual_wgsl`;
 
 const bufType = {
   GLOB: 0, TRI: 1, TRI_DATA: 2, INDEX: 3, BVH_NODE: 4,
-  TLAS_NODE: 5, INST: 7, MAT: 8, ACC: 9, IMG: 10
+  TLAS_NODE: 5, INST: 6, MAT: 7, ACC: 8
+  //, IMG: 9
 };
 
 let canvas, context, device;
@@ -167,10 +168,10 @@ function createGpuResources(globSz, triSz, triDataSz, indexSz, bvhNodeSz, tlasNo
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[bufType.IMG] = device.createBuffer({
+  /*res.buf[bufType.IMG] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
-  });
+  });*/
 
   let bindGroupLayout = device.createBindGroupLayout({
     entries: [ 
@@ -199,11 +200,11 @@ function createGpuResources(globSz, triSz, triDataSz, indexSz, bvhNodeSz, tlasNo
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
       { binding: bufType.ACC,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage" } },
-      { binding: bufType.IMG,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
-        buffer: { type: "storage" } }
+        buffer: { type: "storage" } },
+      /*{ binding: bufType.IMG,
+        visibility: GPUShaderStage.FRAGMENT,
+        buffer: { type: "storage" } }*/
     ]
   });
 
@@ -219,7 +220,7 @@ function createGpuResources(globSz, triSz, triDataSz, indexSz, bvhNodeSz, tlasNo
       { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
       { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
-      { binding: bufType.IMG, resource: { buffer: res.buf[bufType.IMG] } }
+      //{ binding: bufType.IMG, resource: { buffer: res.buf[bufType.IMG] } }
     ]
   });
 

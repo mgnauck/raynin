@@ -106,6 +106,7 @@ void init(uint32_t width, uint32_t height)
 {
   pcg_srand(42u, 303u);
 
+  // Reserve buffer space
   buf_init(8);
   buf_reserve(GLOB, sizeof(char), GLOB_BUF_SIZE);
   buf_reserve(TRI, sizeof(tri), 19332 + 1024);
@@ -116,13 +117,15 @@ void init(uint32_t width, uint32_t height)
   buf_reserve(INST, sizeof(inst), INST_CNT);
   buf_reserve(MAT, sizeof(mat), MAT_CNT);
 
+  buf_acquire(GLOB, GLOB_BUF_SIZE);
+  
   config = (cfg){ width, height, 5, 5 };
   
   scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
   
   scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
   cam_set(&scn.cam, (vec3){ 0.0f, 0.0f, -6.5f }, (vec3){ 0.0f, 0.0f, 2.0f });
-  
+
   for(size_t j=0; j<MESH_CNT; j++) {
     mesh_init(&scn.meshes[j], TRI_CNT);
     for(size_t i=0; i<TRI_CNT; i++) {
@@ -142,14 +145,14 @@ void init(uint32_t width, uint32_t height)
     bvh_build(&scn.bvhs[i], scn.meshes[i].tris, scn.meshes[i].tri_cnt);
   }
 
+  for(size_t i=0; i<MAT_CNT; i++)
+    mat_rand(&scn.materials[i]);
+
   for(size_t i=0; i<INST_CNT; i++) {
 	  positions[i] = vec3_scale(vec3_sub(vec3_rand(), (vec3){ 0.5f, 0.5f, 0.5f }), 4.0f);
 	  directions[i] = vec3_scale(vec3_unit(positions[i]), 0.05f);
 	  orientations[i] = vec3_scale(vec3_rand(), 2.5f);
   }
-
-  for(size_t i=0; i<MAT_CNT; i++)
-    mat_rand(&scn.materials[i]);
 
   // Create GPU buffer
   gpu_create_res(buf_len(GLOB), buf_len(TRI), buf_len(TRI_DATA), buf_len(INDEX),
