@@ -4,7 +4,7 @@
 #include "vec3.h"
 
 typedef enum mat_type {
-  LAMBERT,
+  LAMBERT = 0,
   ISOTROPIC,
   EMITTER,
   METAL,

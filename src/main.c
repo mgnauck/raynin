@@ -22,7 +22,7 @@
 #define MAT_CNT   32
 
 uint32_t  gathered_smpls = 0;
-vec3      bg_col = { 0.0f, 0.0f, 0.0f };
+vec3      bg_col = { 0.6f, 0.7f, 0.9f };
 
 bool      orbit_cam = false;
 bool      paused = false;

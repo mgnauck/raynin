@@ -318,7 +318,7 @@ fn intersectInst(ray: Ray, inst: Inst, h: ptr<function, Hit>)
   intersectBvh(rayObjSpace, inst.id, inst.triOfs, inst.bvhNodeOfs, h);
 }
 
-fn intersectTlas(ray: Ray, h: ptr<function, Hit>) -> bool
+fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
@@ -373,18 +373,20 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>) -> bool
       }
     }
   }
+}
 
-  if((*h).t < MAX_DISTANCE) {
-    // TODO
-    return true;
-  }
-
-  return false;
+fn calcNormal(r: Ray, h: Hit, nrm: ptr<function, vec3f>) -> bool
+{
+  *nrm = vec3f(1, 0, 0);
+  let inside = dot(r.dir, *nrm) > 0;
+  *nrm = select(*nrm, -*nrm, inside);
+  return inside;
 }
 
 fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let nrm = select(h.nrm, -h.nrm, dot(in.dir, h.nrm) > 0);
+  var nrm: vec3f;
+  _ = calcNormal(in, h, &nrm);
   let dir = nrm + rand3UnitSphere();
 
   *scatterDir = select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
@@ -394,7 +396,9 @@ fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function
 
 fn evalMaterialMetal(in: Ray, h: Hit, albedo: vec3f, fuzzRadius: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let nrm = select(h.nrm, -h.nrm, dot(in.dir, h.nrm) > 0);
+  var nrm: vec3f;
+  _ = calcNormal(in, h, &nrm); 
+  
   let dir = reflect(in.dir, nrm);
 
   *scatterDir = normalize(dir + fuzzRadius * rand3UnitSphere());
@@ -411,8 +415,8 @@ fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
 
 fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let inside = dot(in.dir, h.nrm) > 0;
-  let nrm = select(h.nrm, -h.nrm, inside);
+  var nrm: vec3f;
+  let inside = calcNormal(in, h, &nrm);
   let refracIndexRatio = select(1 / refractionIndex, refractionIndex, inside);
   
   let cosTheta = min(dot(-in.dir, nrm), 1);
@@ -442,25 +446,27 @@ fn evalMaterialIsotropic(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<functi
   return true;
 }
 
-/*fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let data = materials[h.matOfs];
-  switch(h.matType)
+  let inst = &instances[h.obj & 0xfffff];
+  let mat = materials[(*inst).matId & 0xffffff];
+
+  switch((*inst).matId >> 24)
   {
     case MAT_TYPE_LAMBERT: {
-      return evalMaterialLambert(in, h, data.xyz, attenuation, scatterDir);
+      return evalMaterialLambert(in, h, mat.albedo, attenuation, scatterDir);
     }
     case MAT_TYPE_METAL: {
-      return evalMaterialMetal(in, h, data.xyz, data.w, attenuation, scatterDir);
+      return evalMaterialMetal(in, h, mat.albedo, mat.value, attenuation, scatterDir);
     }
     case MAT_TYPE_GLASS: {
-      return evalMaterialGlass(in, h, data.xyz, data.w, attenuation, scatterDir);
+      return evalMaterialGlass(in, h, mat.albedo, mat.value, attenuation, scatterDir);
     }
     case MAT_TYPE_ISOTROPIC: {
-      return evalMaterialIsotropic(in, h, data.xyz, attenuation, scatterDir);
+      return evalMaterialIsotropic(in, h, mat.albedo, attenuation, scatterDir);
     }
     case MAT_TYPE_EMITTER: {
-      *emission = data.xyz;
+      *emission = mat.albedo;
       return false;
     }
     default: {
@@ -469,7 +475,7 @@ fn evalMaterialIsotropic(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<functi
       return false;
     }
   }
-}*/
+}
 
 fn render(initialRay: Ray) -> vec3f
 {
@@ -479,27 +485,26 @@ fn render(initialRay: Ray) -> vec3f
   loop {
     var hit: Hit;
     hit.t = MAX_DISTANCE;
-    if(intersectTlas(ray, &hit)) {
-      col *= materials[instances[hit.obj & 0xfffff].matId].albedo;
-      break;
-      /*var att: vec3f;
+    intersectTlas(ray, &hit);
+    if(hit.t < MAX_DISTANCE) {
+      var att: vec3f;
       var emit: vec3f;
       var newDir: vec3f;
       if(evalMaterial(ray, hit, &att, &emit, &newDir)) {
         col *= att;
-        ray = createRay(hit.pos, newDir);
+        ray = createRay(ray.ori + hit.t * ray.dir, newDir);
       } else {
         col *= emit;
         break;
-      }*/
+      }
     } else {
       col *= globals.bgColor;
       break;
     }
-    /*bounce += 1;
+    bounce += 1;
     if(bounce >= globals.maxBounces) {
       break;
-    }*/
+    }
   }
 
   return col;
