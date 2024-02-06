@@ -95,8 +95,7 @@ struct Hit
   u: f32,
   v: f32,
   obj: u32,         // (mesh idx << 20) | (inst idx & 0xfffff)
-  tri: u32,
-  nrm: vec3f
+  tri: u32,         // TODO Unify inst idx and tri idx??
 }
 
 const EPSILON = 0.001;
