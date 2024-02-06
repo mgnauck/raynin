@@ -61,7 +61,7 @@ void intersect_tri(const ray *r, const tri *t, size_t inst_id, size_t tri_id, hi
     h->t = dist;
     h->u = u;
     h->v = v;
-    // Tri idx is relative to mesh (i.e. together with inst->tri_ofs)
+    // tri_id is relative to mesh (i.e. together with inst->tri_ofs)
     h->id = (tri_id << 16) | (inst_id & 0xffff);
   }
 }
