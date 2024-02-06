@@ -16,10 +16,10 @@
 #include "intersect.h"
 #include "log.h"
 
-#define TRI_CNT   64
+#define TRI_CNT   128
 #define MESH_CNT  6
-#define INST_CNT  32
-#define MAT_CNT   32
+#define INST_CNT  8
+#define MAT_CNT   8
 
 uint32_t  gathered_smpls = 0;
 vec3      bg_col = { 0.6f, 0.7f, 0.9f };
@@ -203,8 +203,9 @@ void update(float time)
     mat4_trans(translation, positions[i]);
     mat4_mul(transform, translation, transform);
 
-    inst_create(&scn.instances[i], i % MESH_CNT, i, &scn.meshes[i % MESH_CNT], &scn.bvhs[i % MESH_CNT],
-        transform, LAMBERT, &scn.materials[i % MAT_CNT]);
+    inst_create(&scn.instances[i], i, transform,
+        &scn.meshes[i % MESH_CNT], &scn.bvhs[i % MESH_CNT],
+        LAMBERT, &scn.materials[i % MAT_CNT]);
 	
     if(!paused) {
       positions[i] = vec3_add(positions[i], directions[i]);
@@ -227,7 +228,6 @@ void update(float time)
   // Write tlas and instance buffer
   gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
   gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
-  //*/
 
   // Push frame data
   float frame[8] = { pcg_randf(), config.spp / (float)(gathered_smpls + config.spp),

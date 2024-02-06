@@ -23,6 +23,5 @@ typedef struct bvh {
 void  bvh_init(bvh *b, size_t tri_cnt);
 void  bvh_build(bvh *b, const tri *tris, size_t tri_cnt);
 void  bvh_update(bvh *b, const tri *tris);
-void  bvh_release(bvh *b);
 
 #endif

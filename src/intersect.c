@@ -23,7 +23,7 @@ float intersect_aabb(const ray *r, float curr_t, vec3 min_ext, vec3 max_ext)
 
 // Moeller/Trumbore ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-void intersect_tri(const ray *r, const tri *t, size_t obj, size_t tri, hit *h)
+void intersect_tri(const ray *r, const tri *t, size_t inst_id, size_t tri_id, hit *h)
 {
   // Vectors of two edges sharing vertex 0
   const vec3 edge1 = vec3_sub(t->v1, t->v0);
@@ -61,12 +61,12 @@ void intersect_tri(const ray *r, const tri *t, size_t obj, size_t tri, hit *h)
     h->t = dist;
     h->u = u;
     h->v = v;
-    h->obj = obj;
-    h->tri = tri;
+    // Tri idx is relative to mesh (i.e. together with inst->tri_ofs)
+    h->id = (tri_id << 16) | (inst_id & 0xffff);
   }
 }
 
-void intersect_bvh(const ray *r, const bvh_node *nodes, const size_t *indices, const tri *tris, size_t obj, hit *h)
+void intersect_bvh(const ray *r, const bvh_node *nodes, const size_t *indices, const tri *tris, size_t inst_id, hit *h)
 {
 #define NODE_STACK_SIZE 64
   uint32_t        stack_pos = 0;
@@ -77,8 +77,8 @@ void intersect_bvh(const ray *r, const bvh_node *nodes, const size_t *indices, c
     if(node->obj_cnt > 0) {
       // Leaf node, check triangles
       for(size_t i=0; i<node->obj_cnt; i++) {
-        size_t tri = indices[node->start_idx + i];
-        intersect_tri(r, &tris[tri], obj, tri, h);
+        size_t tri_id = indices[node->start_idx + i];
+        intersect_tri(r, &tris[tri_id], inst_id, tri_id, h);
       }
       if(stack_pos > 0)
         node = node_stack[--stack_pos];
@@ -121,8 +121,8 @@ void intersect_inst(const ray *r, const inst *inst, hit *h)
   ray r_obj;
   ray_transform(&r_obj, inst->inv_transform, r);
 
-  intersect_bvh(&r_obj, buf_ptr(BVH_NODE, inst->bvh_node_ofs),
-      buf_ptr(INDEX, inst->tri_ofs), buf_ptr(TRI, inst->tri_ofs), inst->id, h);
+  intersect_bvh(&r_obj, buf_ptr(BVH_NODE, 2 * inst->ofs),
+      buf_ptr(INDEX, inst->ofs), buf_ptr(TRI, inst->ofs), inst->id & 0xffff, h);
 }
 
 void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, hit *h)

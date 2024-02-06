@@ -4,14 +4,15 @@
 #include "mesh.h"
 #include "bvh.h"
 
-void inst_create(inst *inst, size_t mesh_idx, size_t inst_idx,
-    const mesh *mesh, const bvh *bvh, const mat4 transform,
-    size_t mat_type, const mat *mat)
+void inst_create(inst *inst, size_t inst_idx, const mat4 transform,
+    const mesh *mesh, const bvh *bvh, size_t mat_type, const mat *mat)
 {
-  inst->tri_ofs = buf_idx(TRI, mesh->tris);
-  inst->bvh_node_ofs = buf_idx(BVH_NODE, bvh->nodes);
-  inst->id = (mesh_idx << 20) | (inst_idx & 0xfffff);
-  inst->mat_id = (mat_type << 24) | (buf_idx(MAT, mat) & 0xffffff);
+  // 16 material types, 4096 materials, 65536 instances
+  inst->id = (mat_type << 28) | ((buf_idx(MAT, mat) & 0xfff) << 16) | (inst_idx & 0xffff);
+
+  // ofs will be used for tris, trisData, indices and bvh nodes
+  // offset into bvh->nodes is implicitly 2*ofs
+  inst->ofs = buf_idx(TRI, mesh->tris);
 
   // Store root node bounds transformed into world space
   aabb a = aabb_init();

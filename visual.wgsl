@@ -74,13 +74,9 @@ struct Inst
   transform: mat4x4f,
   invTransform: mat4x4f,
   aabbMin: vec3f,
-  triOfs: u32,      // Ofs into tri/triData arrays
+  id: u32,          // (mat type << 28) | (mat id << 16) | (inst id & 0xffff)
   aabbMax: vec3f,
-  bvhNodeOfs: u32,  // Ofs into bvh nodes array
-  id: u32,          // (mesh idx << 20) | (inst idx & 0xfffff)
-  matId: u32,       // (mat type << 24) | (mat idx & 0xffffff)
-  pad0: u32,
-  pad1: u32
+  ofs: u32          // ofs into tri/trisData/indices and 2*ofs into bvhNodes
 }
 
 struct Mat
@@ -94,8 +90,7 @@ struct Hit
   t: f32,
   u: f32,
   v: f32,
-  obj: u32,         // (mesh idx << 20) | (inst idx & 0xfffff)
-  tri: u32,         // TODO Unify inst idx and tri idx??
+  id: u32,          // (tri id << 16) | (inst id & 0xffff)
 }
 
 const EPSILON = 0.001;
@@ -202,7 +197,7 @@ fn intersectAabb(ray: Ray, currT: f32, minExt: vec3f, maxExt: vec3f) -> f32
 
 // Moeller/Trumbore ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-fn intersectTri(ray: Ray, tri: Tri, objId: u32, triId: u32, h: ptr<function, Hit>)
+fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hit>)
 {
   // Vectors of two edges sharing vertex 0
   let edge1 = tri.v1 - tri.v0;
@@ -243,26 +238,27 @@ fn intersectTri(ray: Ray, tri: Tri, objId: u32, triId: u32, h: ptr<function, Hit
     (*h).t = dist;
     (*h).u = u;
     (*h).v = v;
-    (*h).obj = objId;
-    (*h).tri = triId;
+    (*h).id = (triId << 16) | (instId & 0xffff);
   }
 }
 
-fn intersectBvh(ray: Ray, instId: u32, triOfs: u32, bvhNodeOfs: u32, h: ptr<function, Hit>)
+fn intersectBvh(ray: Ray, instId: u32, dataOfs: u32, h: ptr<function, Hit>)
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
+  let bvhOfs = 2 * dataOfs;
+
   loop {
-    let node = &bvhNodes[bvhNodeOfs + nodeIndex];
+    let node = &bvhNodes[bvhOfs + nodeIndex];
     let nodeStartIndex = (*node).startIndex;
     let nodeObjCount = (*node).objCount;
    
     if(nodeObjCount > 0) {
       // Leaf node, check all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
-        let triId = triOfs + indices[triOfs + nodeStartIndex + i];
-        intersectTri(ray, tris[triId], instId, triId, h);
+        let triId = indices[dataOfs + nodeStartIndex + i];
+        intersectTri(ray, tris[dataOfs + triId], instId, triId, h);
       }
       if(nodeStackIndex > 0) {
         nodeStackIndex--;
@@ -272,8 +268,8 @@ fn intersectBvh(ray: Ray, instId: u32, triOfs: u32, bvhNodeOfs: u32, h: ptr<func
       }
     } else {
       // Interior node, check aabbs of children
-      let leftChildNode = &bvhNodes[bvhNodeOfs + nodeStartIndex];
-      let rightChildNode = &bvhNodes[bvhNodeOfs + nodeStartIndex + 1];
+      let leftChildNode = &bvhNodes[bvhOfs + nodeStartIndex];
+      let rightChildNode = &bvhNodes[bvhOfs + nodeStartIndex + 1];
 
       let leftDist = intersectAabb(ray, (*h).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
       let rightDist = intersectAabb(ray, (*h).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
@@ -314,7 +310,7 @@ fn intersectInst(ray: Ray, inst: Inst, h: ptr<function, Hit>)
   rayObjSpace.dir = (vec4f(ray.dir, 0.0) * inst.invTransform).xyz;
   rayObjSpace.invDir = 1.0 / rayObjSpace.dir;
 
-  intersectBvh(rayObjSpace, inst.id, inst.triOfs, inst.bvhNodeOfs, h);
+  intersectBvh(rayObjSpace, inst.id & 0xffff, inst.ofs, h);
 }
 
 fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
@@ -376,10 +372,12 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
 
 fn calcNormal(r: Ray, h: Hit, nrm: ptr<function, vec3f>) -> bool
 {
-  let td = &trisData[h.tri];
+  let inst = &instances[h.id & 0xffff];
+  let ofs = (*inst).ofs;
+  let td = &trisData[ofs + (h.id >> 16)]; // Using (*inst).ofs directly results in SPIRV error :(
 
   var n = (*td).n1 * h.u + (*td).n2 * h.v + (*td).n0 * (1.0 - h.u - h.v);
-  n = normalize((vec4f(n, 0.0) * instances[h.obj & 0xfffff].transform).xyz);
+  n = normalize((vec4f(n, 0.0) * (*inst).transform).xyz);
 
   let inside = dot(r.dir, n) > 0;
   *nrm = select(n, -n, inside);
@@ -387,10 +385,10 @@ fn calcNormal(r: Ray, h: Hit, nrm: ptr<function, vec3f>) -> bool
   return inside;
 }
 
-fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterialLambert(r: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   var nrm: vec3f;
-  _ = calcNormal(in, h, &nrm);
+  _ = calcNormal(r, h, &nrm);
   let dir = nrm + rand3UnitSphere();
 
   *scatterDir = select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
@@ -398,12 +396,12 @@ fn evalMaterialLambert(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function
   return true;
 }
 
-fn evalMaterialMetal(in: Ray, h: Hit, albedo: vec3f, fuzzRadius: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterialMetal(r: Ray, h: Hit, albedo: vec3f, fuzzRadius: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   var nrm: vec3f;
-  _ = calcNormal(in, h, &nrm); 
+  _ = calcNormal(r, h, &nrm); 
   
-  let dir = reflect(in.dir, nrm);
+  let dir = reflect(r.dir, nrm);
 
   *scatterDir = normalize(dir + fuzzRadius * rand3UnitSphere());
   *attenuation = albedo;
@@ -417,25 +415,25 @@ fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
   return r0 + (1 - r0) * pow(1 - cosTheta, 5);
 }
 
-fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterialGlass(r: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   var nrm: vec3f;
-  let inside = calcNormal(in, h, &nrm);
+  let inside = calcNormal(r, h, &nrm);
   let refracIndexRatio = select(1 / refractionIndex, refractionIndex, inside);
   
-  let cosTheta = min(dot(-in.dir, nrm), 1);
+  let cosTheta = min(dot(-r.dir, nrm), 1);
   //let sinTheta = sqrt(1 - cosTheta * cosTheta);
   //
   //var dir: vec3f;
   //if(refracIndexRatio * sinTheta > 1 || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
-  //  dir = reflect(in.dir, nrm);
+  //  dir = reflect(r.dir, nrm);
   //} else {
-  //  dir = refract(in.dir, nrm, refracIndexRatio);
+  //  dir = refract(r.dir, nrm, refracIndexRatio);
   //}
 
-  var dir = refract(in.dir, nrm, refracIndexRatio);
+  var dir = refract(r.dir, nrm, refracIndexRatio);
   if(all(dir == vec3f(0)) || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
-    dir = reflect(in.dir, nrm);
+    dir = reflect(r.dir, nrm);
   }
 
   *scatterDir = dir;
@@ -443,31 +441,31 @@ fn evalMaterialGlass(in: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, atten
   return true;
 }
 
-fn evalMaterialIsotropic(in: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterialIsotropic(r: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   *scatterDir = rand3UnitSphere();
   *attenuation = albedo;
   return true;
 }
 
-fn evalMaterial(in: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let inst = &instances[h.obj & 0xfffff];
-  let mat = materials[(*inst).matId & 0xffffff];
+  let inst = &instances[h.id & 0xffff];
+  let mat = materials[((*inst).id >> 16) & 0xfff];
 
-  switch((*inst).matId >> 24)
+  switch((*inst).id >> 28)
   {
     case MAT_TYPE_LAMBERT: {
-      return evalMaterialLambert(in, h, mat.albedo, attenuation, scatterDir);
+      return evalMaterialLambert(r, h, mat.albedo, attenuation, scatterDir);
     }
     case MAT_TYPE_METAL: {
-      return evalMaterialMetal(in, h, mat.albedo, mat.value, attenuation, scatterDir);
+      return evalMaterialMetal(r, h, mat.albedo, mat.value, attenuation, scatterDir);
     }
     case MAT_TYPE_GLASS: {
-      return evalMaterialGlass(in, h, mat.albedo, mat.value, attenuation, scatterDir);
+      return evalMaterialGlass(r, h, mat.albedo, mat.value, attenuation, scatterDir);
     }
     case MAT_TYPE_ISOTROPIC: {
-      return evalMaterialIsotropic(in, h, mat.albedo, attenuation, scatterDir);
+      return evalMaterialIsotropic(r, h, mat.albedo, attenuation, scatterDir);
     }
     case MAT_TYPE_EMITTER: {
       *emission = mat.albedo;

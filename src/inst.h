@@ -12,17 +12,12 @@ typedef struct inst {
   mat4      transform;
   mat4      inv_transform;
   vec3      min;
-  size_t    tri_ofs;
+  size_t    id;   // (mat type << 28) | (mat id << 16) | (inst id & 0xffff)
   vec3      max;
-  size_t    bvh_node_ofs;
-  size_t    id;     // (mesh idx << 20) | (inst idx & 0xfffff)
-  size_t    mat_id; // (mat type << 24) | (mat idx & 0xffffff)
-  size_t    pad0;
-  size_t    pad1;
+  size_t    ofs;  // ofs into tris/tris_data/indices and 2*ofs into bvh_nodes
 } inst;
 
-void inst_create(inst *inst, size_t mesh_idx, size_t inst_idx,
-    const mesh *mesh, const bvh *bvh, const mat4 transform,
-    size_t mat_type, const mat *mat);
+void inst_create(inst *inst, size_t inst_idx, const mat4 transform,
+    const mesh *mesh, const bvh *bvh, size_t mat_type, const mat *mat);
 
 #endif

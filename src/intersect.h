@@ -17,13 +17,12 @@ typedef struct hit {
   float   t;
   float   u;
   float   v;
-  size_t  obj; // (mesh id << 20) | (inst id & 0xfffff)
-  size_t  tri;
+  size_t  id; // (tri id << 16) | (inst id & 0xffff)
 } hit;
 
 float intersect_aabb(const ray *r, float curr_dist, vec3 min_ext, vec3 max_ext);
-void  intersect_tri(const ray *r, const tri *t, size_t obj, size_t tri, hit *h);
-void  intersect_bvh(const ray *r, const bvh_node *nodes, const size_t *indices, const tri *tris, size_t obj, hit *h);
+void  intersect_tri(const ray *r, const tri *t, size_t inst_id, size_t tri_id, hit *h);
+void  intersect_bvh(const ray *r, const bvh_node *nodes, const size_t *indices, const tri *tris, size_t inst_id, hit *h);
 void  intersect_inst(const ray *r, const inst *b, hit *h);
 void  intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, hit *h);
 
