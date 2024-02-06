@@ -74,9 +74,9 @@ struct Inst
   transform: mat4x4f,
   invTransform: mat4x4f,
   aabbMin: vec3f,
-  triOfs: u32,
+  triOfs: u32,      // Ofs into tri/triData arrays
   aabbMax: vec3f,
-  bvhNodeOfs: u32,
+  bvhNodeOfs: u32,  // Ofs into bvh nodes array
   id: u32,          // (mesh idx << 20) | (inst idx & 0xfffff)
   matId: u32,       // (mat type << 24) | (mat idx & 0xffffff)
   pad0: u32,
@@ -262,8 +262,8 @@ fn intersectBvh(ray: Ray, instId: u32, triOfs: u32, bvhNodeOfs: u32, h: ptr<func
     if(nodeObjCount > 0) {
       // Leaf node, check all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
-        let triId = indices[triOfs + nodeStartIndex + i];
-        intersectTri(ray, tris[triOfs + triId], instId, triId, h);
+        let triId = triOfs + indices[triOfs + nodeStartIndex + i];
+        intersectTri(ray, tris[triId], instId, triId, h);
       }
       if(nodeStackIndex > 0) {
         nodeStackIndex--;
@@ -377,9 +377,14 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
 
 fn calcNormal(r: Ray, h: Hit, nrm: ptr<function, vec3f>) -> bool
 {
-  *nrm = vec3f(1, 0, 0);
-  let inside = dot(r.dir, *nrm) > 0;
-  *nrm = select(*nrm, -*nrm, inside);
+  let td = &trisData[h.tri];
+
+  var n = (*td).n1 * h.u + (*td).n2 * h.v + (*td).n0 * (1.0 - h.u - h.v);
+  n = normalize((vec4f(n, 0.0) * instances[h.obj & 0xfffff].transform).xyz);
+
+  let inside = dot(r.dir, n) > 0;
+  *nrm = select(n, -n, inside);
+
   return inside;
 }
 
