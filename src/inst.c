@@ -3,7 +3,6 @@
 #include "aabb.h"
 #include "mesh.h"
 #include "bvh.h"
-//#include "log.h"
 
 void inst_create(inst *inst, size_t mesh_idx, size_t inst_idx,
     const mesh *mesh, const bvh *bvh, const mat4 transform,
@@ -14,9 +13,6 @@ void inst_create(inst *inst, size_t mesh_idx, size_t inst_idx,
   inst->id = (mesh_idx << 20) | (inst_idx & 0xfffff);
   inst->mat_id = (mat_type << 24) | (buf_idx(MAT, mat) & 0xffffff);
 
-  //log("mesh idx: %d, inst idx: %d", mesh_idx, inst_idx);
-  //log("tri_ofs: %d, bvh_node_ofs: %d", inst->tri_ofs, inst->bvh_node_ofs);
-  
   // Store root node bounds transformed into world space
   aabb a = aabb_init();
   vec3 mi = bvh->nodes[0].min;

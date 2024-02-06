@@ -70,7 +70,7 @@ void tlas_build(tlas_node *nodes, const inst *instances, size_t inst_cnt)
       new_node->min = vec3_min(node_a->min, node_b->min);
       new_node->max = vec3_max(node_a->max, node_b->max);
       // Each child node index gets 16 bits
-      new_node->children = idx_b << 16 | idx_a;
+      new_node->children = (idx_b << 16) | idx_a;
 
       // Replace node A with newly created combined node
       node_indices[a] = node_cnt++;

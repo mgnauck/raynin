@@ -16,10 +16,10 @@
 #include "intersect.h"
 #include "log.h"
 
-#define TRI_CNT   4
-#define MESH_CNT  2
-#define INST_CNT  2
-#define MAT_CNT   2
+#define TRI_CNT   64
+#define MESH_CNT  6
+#define INST_CNT  32
+#define MAT_CNT   32
 
 uint32_t  gathered_smpls = 0;
 vec3      bg_col = { 0.0f, 0.0f, 0.0f };
@@ -106,8 +106,6 @@ void init(uint32_t width, uint32_t height)
 {
   pcg_srand(42u, 303u);
 
-  log("mesh_cnt: %d, tri_cnt: %d, inst_cnt: %d, mat_cnt: %d", MESH_CNT, TRI_CNT, INST_CNT, MAT_CNT);
-
   // Reserve buffer space
   buf_init(8);
   buf_reserve(GLOB, sizeof(char), GLOB_BUF_SIZE);
@@ -126,7 +124,7 @@ void init(uint32_t width, uint32_t height)
   scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
   
   scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
-  cam_set(&scn.cam, (vec3){ 0.0f, 0.0f, -6.5f }, (vec3){ 0.0f, 0.0f, 2.0f });
+  cam_set(&scn.cam, (vec3){ 0.0f, 0.0f, -7.5f }, (vec3){ 0.0f, 0.0f, 2.0f });
 
   for(size_t j=0; j<MESH_CNT; j++) {
     mesh_init(&scn.meshes[j], TRI_CNT);
@@ -162,60 +160,12 @@ void init(uint32_t width, uint32_t height)
   // Write config into globals
   gpu_write_buf(GLOB, GLOB_BUF_OFS_CFG, &config, sizeof(cfg));
 
-  // Write tri, tri data, index, bvh node and mat buffer
-  log("tri: %d, bvh: %d", buf_len(TRI), buf_len(BVH_NODE));
-
+  // Write all static data buffer
   gpu_write_buf(TRI, 0, buf_ptr(TRI, 0), buf_len(TRI));
   gpu_write_buf(TRI_DATA, 0, buf_ptr(TRI_DATA, 0), buf_len(TRI_DATA));
   gpu_write_buf(INDEX, 0, buf_ptr(INDEX, 0), buf_len(INDEX));
   gpu_write_buf(BVH_NODE, 0, buf_ptr(BVH_NODE, 0), buf_len(BVH_NODE));
   gpu_write_buf(MAT, 0, buf_ptr(MAT, 0), buf_len(MAT));
-
-  /*
-  // Create/update instances
-  for(size_t i=0; i<INST_CNT; i++) {
-    mat4 transform;
-		
-    mat4 rotx, roty, rotz;
-    mat4_rot_x(rotx, orientations[i].x);
-    mat4_rot_y(roty, orientations[i].y);
-    mat4_rot_z(rotz, orientations[i].z);
-    mat4_mul(transform, rotx, roty);
-    mat4_mul(transform, transform, rotz);
-     
-    mat4 scale;
-    mat4_scale(scale, 0.2f);
-    mat4_mul(transform, transform, scale);
-    
-    mat4 translation;
-    mat4_trans(translation, positions[i]);
-    mat4_mul(transform, translation, transform);
-
-    inst_create(&scn.instances[i], i % MESH_CNT, i, &scn.meshes[i % MESH_CNT], &scn.bvhs[i % MESH_CNT],
-        transform, LAMBERT, &scn.materials[i % MAT_CNT]);
-	
-    if(!paused) {
-      positions[i] = vec3_add(positions[i], directions[i]);
-      orientations[i] = vec3_add(orientations[i], directions[i]);
-
-      if(positions[i].x < -3.0f || positions[i].x > 3.0f)
-        directions[i].x *= -1.0f;
-      if(positions[i].y < -3.0f || positions[i].y > 3.0f)
-        directions[i].y *= -1.0f;
-      if(positions[i].z < -3.0f || positions[i].z > 3.0f)
-        directions[i].z *= -1.0f;
-
-      gathered_smpls = TEMPORAL_WEIGHT * config.spp;
-    }
-	}
-  
-  // Build tlas
-  tlas_build(scn.tlas_nodes, scn.instances, INST_CNT);
-
-  // Write tlas and instance buffer
-  gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
-  gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
-  */
 
   // Write initial view and cam into globals
   update_cam_view();
@@ -234,7 +184,6 @@ void update(float time)
     update_cam_view();
   }
 
-  //*
   // Create/update instances
   for(size_t i=0; i<INST_CNT; i++) {
     mat4 transform;

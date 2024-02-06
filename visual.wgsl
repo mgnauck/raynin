@@ -71,12 +71,12 @@ struct TlasNode
 
 struct Inst
 {
+  transform: mat4x4f,
+  invTransform: mat4x4f,
   aabbMin: vec3f,
   triOfs: u32,
   aabbMax: vec3f,
   bvhNodeOfs: u32,
-  transform: mat4x4f,
-  invTransform: mat4x4f,
   id: u32,          // (mesh idx << 20) | (inst idx & 0xfffff)
   matId: u32,       // (mat type << 24) | (mat idx & 0xffffff)
   pad0: u32,
@@ -103,11 +103,11 @@ const EPSILON = 0.001;
 const PI = 3.141592;
 const MAX_DISTANCE = 3.402823466e+38;
 
-const MAT_TYPE_LAMBERT = 1;
-const MAT_TYPE_METAL = 2;
-const MAT_TYPE_GLASS = 3;
-const MAT_TYPE_EMITTER = 4;
-const MAT_TYPE_ISOTROPIC = 5;
+const MAT_TYPE_LAMBERT = 0;
+const MAT_TYPE_METAL = 1;
+const MAT_TYPE_GLASS = 2;
+const MAT_TYPE_EMITTER = 3;
+const MAT_TYPE_ISOTROPIC = 4;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -118,10 +118,9 @@ const MAT_TYPE_ISOTROPIC = 5;
 @group(0) @binding(6) var<storage, read> instances: array<Inst>;
 @group(0) @binding(7) var<storage, read> materials: array<Mat>;
 @group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
-//@group(0) @binding(9) var<storage, read_write> image: array<vec4f>;
 
-var<private> bvhNodeStack: array<u32, 64>;
-var<private> tlasNodeStack: array<u32, 64>;
+var<private> bvhNodeStack: array<u32, 32>;
+var<private> tlasNodeStack: array<u32, 32>;
 var<private> rngState: u32;
 
 // PCG from https://jcgt.org/published/0009/03/02/
@@ -250,24 +249,21 @@ fn intersectTri(ray: Ray, tri: Tri, objId: u32, triId: u32, h: ptr<function, Hit
   }
 }
 
-fn intersectBvh(ray: Ray, inst: Inst, h: ptr<function, Hit>)
+fn intersectBvh(ray: Ray, instId: u32, triOfs: u32, bvhNodeOfs: u32, h: ptr<function, Hit>)
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
-  let bofs = inst.bvhNodeOfs;
-  let tofs = inst.triOfs; 
-
   loop {
-    let node = &bvhNodes[bofs + nodeIndex];
+    let node = &bvhNodes[bvhNodeOfs + nodeIndex];
     let nodeStartIndex = (*node).startIndex;
     let nodeObjCount = (*node).objCount;
    
     if(nodeObjCount > 0) {
       // Leaf node, check all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
-        let triId = indices[tofs + nodeStartIndex + i];
-        intersectTri(ray, tris[tofs + triId], inst.id, triId, h);
+        let triId = indices[triOfs + nodeStartIndex + i];
+        intersectTri(ray, tris[triOfs + triId], instId, triId, h);
       }
       if(nodeStackIndex > 0) {
         nodeStackIndex--;
@@ -277,8 +273,8 @@ fn intersectBvh(ray: Ray, inst: Inst, h: ptr<function, Hit>)
       }
     } else {
       // Interior node, check aabbs of children
-      let leftChildNode = &bvhNodes[bofs + nodeStartIndex];
-      let rightChildNode = &bvhNodes[bofs + nodeStartIndex + 1];
+      let leftChildNode = &bvhNodes[bvhNodeOfs + nodeStartIndex];
+      let rightChildNode = &bvhNodes[bvhNodeOfs + nodeStartIndex + 1];
 
       let leftDist = intersectAabb(ray, (*h).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
       let rightDist = intersectAabb(ray, (*h).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
@@ -315,11 +311,11 @@ fn intersectInst(ray: Ray, inst: Inst, h: ptr<function, Hit>)
 {
   // Transform ray into object space of the instance
   var rayObjSpace: Ray;
-  rayObjSpace.ori = (inst.invTransform * vec4f(ray.ori, 1.0)).xyz;
-  rayObjSpace.dir = (inst.invTransform * vec4f(ray.dir, 0.0)).xyz;
+  rayObjSpace.ori = (vec4f(ray.ori, 1.0) * inst.invTransform).xyz;
+  rayObjSpace.dir = (vec4f(ray.dir, 0.0) * inst.invTransform).xyz;
   rayObjSpace.invDir = 1.0 / rayObjSpace.dir;
 
-  intersectBvh(rayObjSpace, inst, h);
+  intersectBvh(rayObjSpace, inst.id, inst.triOfs, inst.bvhNodeOfs, h);
 }
 
 fn intersectTlas(ray: Ray, h: ptr<function, Hit>) -> bool
@@ -483,13 +479,8 @@ fn render(initialRay: Ray) -> vec3f
   loop {
     var hit: Hit;
     hit.t = MAX_DISTANCE;
-    //if(intersectTlas(ray, &hit)) {
-    for(var i=0u; i<4; i++) {
-      intersectInst(ray, instances[i], &hit);
-    }
-    if(hit.t < MAX_DISTANCE) {
-      //col = vec3f(1, 0, 0);
-      col = materials[instances[hit.obj & 0xfffff].matId].albedo;
+    if(intersectTlas(ray, &hit)) {
+      col *= materials[instances[hit.obj & 0xfffff].matId].albedo;
       break;
       /*var att: vec3f;
       var emit: vec3f;
@@ -544,10 +535,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
     col += render(createPrimaryRay(vec2f(globalId.xy)));
   }
 
-  let outCol = mix(buffer[index].xyz, col / f32(globals.samplesPerPixel), globals.weight);
-
-  buffer[index] = vec4f(outCol, 1);
-  //image[index] = vec4f(pow(outCol, vec3f(0.4545)), 1);
+  buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.samplesPerPixel), globals.weight), 1);
 }
 
 @vertex
@@ -561,5 +549,4 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec
 fn fragmentMain(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
   return vec4f(pow(buffer[globals.width * u32(pos.y) + u32(pos.x)].xyz, vec3f(0.4545)), 1);
-  //return image[globals.width * u32(pos.y) + u32(pos.x)];
 }
