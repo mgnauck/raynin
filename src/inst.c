@@ -4,8 +4,8 @@
 #include "mesh.h"
 #include "bvh.h"
 
-void inst_create(inst *inst, size_t inst_idx, const mat4 transform,
-    const mesh *mesh, const bvh *bvh, size_t mat_type, const mat *mat)
+void inst_create(inst *inst, uint32_t inst_idx, const mat4 transform,
+    const mesh *mesh, const bvh *bvh, uint32_t mat_type, const mat *mat)
 {
   // 16 material types, 4096 materials, 65536 instances
   inst->id = (mat_type << 28) | ((buf_idx(MAT, mat) & 0xfff) << 16) | (inst_idx & 0xffff);
@@ -32,7 +32,7 @@ void inst_create(inst *inst, size_t inst_idx, const mat4 transform,
   inst->max = a.max;
 
   // Store transform and precalc inverse
-  for(size_t i=0; i<16; i++)
+  for(uint8_t i=0; i<16; i++)
     inst->transform[i] = transform[i];
 
   mat4_inv(inst->inv_transform, transform);

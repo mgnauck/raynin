@@ -1,5 +1,5 @@
 #include "mat4.h"
-#include <stddef.h>
+#include <stdint.h>
 #include "mutil.h"
 
 void mat4_identity(mat4 d)
@@ -89,7 +89,7 @@ void mat4_mul(mat4 d, const mat4 a, const mat4 b)
   t[14] = a[12] * b[ 2] + a[13] * b[ 6] + a[14] * b[10] + a[15] * b[14];
   t[15] = a[12] * b[ 3] + a[13] * b[ 7] + a[14] * b[11] + a[15] * b[15];
   
-  for(size_t i=0; i<16; i++)
+  for(uint8_t i=0; i<16; i++)
     d[i] = t[i];
 }
 
@@ -192,7 +192,7 @@ bool mat4_inv(mat4 d, const mat4 m)
 
   det = 1.0 / det;
 
-  for(size_t i=0; i<16; i++)
+  for(uint8_t i=0; i<16; i++)
     d[i] = inv[i] * det;
 
   return true;

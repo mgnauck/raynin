@@ -9,7 +9,7 @@
 
 typedef struct interval {
   aabb    aabb;
-  size_t  cnt;
+  uint32_t  cnt;
 } interval;
 
 typedef struct split {
@@ -18,7 +18,7 @@ typedef struct split {
   uint8_t axis;
 } split;
 
-void bvh_init(bvh *b, size_t tri_cnt)
+void bvh_init(bvh *b, uint32_t tri_cnt)
 {
   // Would be 2 * tri_cnt - 1 but we skip one node
   b->node_cnt = 0;
@@ -35,7 +35,7 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
     // Calculate bounds of object centers
     float minc = FLT_MAX;
     float maxc = -FLT_MAX;
-    for(size_t i=0; i<n->obj_cnt; i++) {
+    for(uint32_t i=0; i<n->obj_cnt; i++) {
       float c = vec3_get(tris[b->indices[n->start_idx + i]].center, axis);
       minc = min(minc, c);
       maxc = max(maxc, c);
@@ -45,15 +45,15 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
     
     // Initialize empty intervals
     interval intervals[INTERVAL_CNT];
-    for(size_t i=0; i<INTERVAL_CNT; i++)
+    for(uint32_t i=0; i<INTERVAL_CNT; i++)
       intervals[i] = (interval){ aabb_init(), 0 };
 
     // Count objects per interval and find their combined bounds
     float delta = INTERVAL_CNT / (maxc - minc);
-    for(size_t i=0; i<n->obj_cnt; i++) {
+    for(uint32_t i=0; i<n->obj_cnt; i++) {
       vec3 center = tris[b->indices[n->start_idx + i]].center;
-      size_t int_idx =
-        (size_t)min(INTERVAL_CNT - 1, (vec3_get(center, axis) - minc) * delta);
+      uint32_t int_idx =
+        (uint32_t)min(INTERVAL_CNT - 1, (vec3_get(center, axis) - minc) * delta);
       aabb *int_aabb = &intervals[int_idx].aabb;
       const tri *tri = &tris[b->indices[n->start_idx + i]];
       aabb_grow(int_aabb, tri->v0);
@@ -65,13 +65,13 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
     // Calculate left/right area and count for each plane separating the intervals
     float areas_l[INTERVAL_CNT - 1];
     float areas_r[INTERVAL_CNT - 1];
-    size_t cnts_l[INTERVAL_CNT - 1];
-    size_t cnts_r[INTERVAL_CNT - 1];
+    uint32_t cnts_l[INTERVAL_CNT - 1];
+    uint32_t cnts_r[INTERVAL_CNT - 1];
     aabb aabb_l = aabb_init();
     aabb aabb_r = aabb_init();
-    size_t total_cnt_l = 0;
-    size_t total_cnt_r = 0;
-    for(size_t i=0; i<INTERVAL_CNT - 1; i++) {
+    uint32_t total_cnt_l = 0;
+    uint32_t total_cnt_r = 0;
+    for(uint32_t i=0; i<INTERVAL_CNT - 1; i++) {
       // From left
       total_cnt_l += intervals[i].cnt;
       cnts_l[i] = total_cnt_l;
@@ -86,7 +86,7 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
 
     // Find best surface area cost for prepared interval planes
     delta = 1.0f / delta;
-    for(size_t i=0; i<INTERVAL_CNT - 1; i++) {
+    for(uint32_t i=0; i<INTERVAL_CNT - 1; i++) {
       float cost = cnts_l[i] * areas_l[i] + cnts_r[i] * areas_r[i];
       if(cost < best.cost) {
         best.cost = cost;
@@ -103,7 +103,7 @@ void update_node_bounds(const bvh *b, bvh_node *n, const tri *tris)
 {
   n->min = (vec3){ FLT_MAX, FLT_MAX, FLT_MAX };
   n->max = (vec3){ -FLT_MAX, -FLT_MAX, -FLT_MAX };
-  for(size_t i=0; i<n->obj_cnt; i++) {
+  for(uint32_t i=0; i<n->obj_cnt; i++) {
     const tri *t = &tris[b->indices[n->start_idx + i]];
     n->min = vec3_min(n->min, t->v0);
     n->min = vec3_min(n->min, t->v1);
@@ -130,7 +130,7 @@ void subdivide_node(bvh *b, bvh_node *n, const tri *tris)
       l++;
     } else {
       // Swap object index left/right
-      size_t t = b->indices[l];
+      uint32_t t = b->indices[l];
       b->indices[l] = b->indices[r];
       b->indices[r] = t;
       r--;
@@ -138,7 +138,7 @@ void subdivide_node(bvh *b, bvh_node *n, const tri *tris)
   }
 
   // Stop if one side of the l/r partition is empty
-  size_t left_obj_cnt = l - n->start_idx;
+  uint32_t left_obj_cnt = l - n->start_idx;
   if(left_obj_cnt == 0 || left_obj_cnt == n->obj_cnt)
     return;
 
@@ -163,11 +163,11 @@ void subdivide_node(bvh *b, bvh_node *n, const tri *tris)
   subdivide_node(b, right_child, tris);
 }
 
-void bvh_build(bvh *b, const tri *tris, size_t tri_cnt)
+void bvh_build(bvh *b, const tri *tris, uint32_t tri_cnt)
 {
   b->node_cnt = 0;
 
-  for(size_t i=0; i<tri_cnt; i++)
+  for(uint32_t i=0; i<tri_cnt; i++)
     b->indices[i] = i;
 
   bvh_node *root = &b->nodes[b->node_cnt++];

@@ -1,5 +1,4 @@
 #include "log.h"
-#include <stddef.h>
 #include <stdarg.h>
 #include "printf.h"
 
@@ -7,7 +6,7 @@
 
 static char line_buf[LINE_BUF_SIZE];
 
-extern void log_buf(char *addr, size_t len);
+extern void log_buf(char *addr, uint32_t len);
 
 void log_msg(const char *file, uint32_t line, const char *format, ...)
 {

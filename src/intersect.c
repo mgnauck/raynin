@@ -23,7 +23,7 @@ float intersect_aabb(const ray *r, float curr_t, vec3 min_ext, vec3 max_ext)
 
 // Moeller/Trumbore ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-void intersect_tri(const ray *r, const tri *t, size_t inst_id, size_t tri_id, hit *h)
+void intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id, hit *h)
 {
   // Vectors of two edges sharing vertex 0
   const vec3 edge1 = vec3_sub(t->v1, t->v0);
@@ -66,7 +66,7 @@ void intersect_tri(const ray *r, const tri *t, size_t inst_id, size_t tri_id, hi
   }
 }
 
-void intersect_bvh(const ray *r, const bvh_node *nodes, const size_t *indices, const tri *tris, size_t inst_id, hit *h)
+void intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices, const tri *tris, uint32_t inst_id, hit *h)
 {
 #define NODE_STACK_SIZE 64
   uint32_t        stack_pos = 0;
@@ -76,8 +76,8 @@ void intersect_bvh(const ray *r, const bvh_node *nodes, const size_t *indices, c
   while(true) {
     if(node->obj_cnt > 0) {
       // Leaf node, check triangles
-      for(size_t i=0; i<node->obj_cnt; i++) {
-        size_t tri_id = indices[node->start_idx + i];
+      for(uint32_t i=0; i<node->obj_cnt; i++) {
+        uint32_t tri_id = indices[node->start_idx + i];
         intersect_tri(r, &tris[tri_id], inst_id, tri_id, h);
       }
       if(stack_pos > 0)

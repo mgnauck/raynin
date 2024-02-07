@@ -4,20 +4,20 @@
 #include "aabb.h"
 #include "inst.h"
 
-size_t find_best_node(tlas_node *nodes, size_t idx, size_t *node_indices,
-    size_t node_indices_cnt)
+uint32_t find_best_node(tlas_node *nodes, uint32_t idx, uint32_t *node_indices,
+    uint32_t node_indices_cnt)
 {
   float best_area = FLT_MAX;
-  size_t best_idx;
+  uint32_t best_idx;
 
-  size_t curr_idx = node_indices[idx];
+  uint32_t curr_idx = node_indices[idx];
   vec3 curr_min = nodes[curr_idx].min;
   vec3 curr_max = nodes[curr_idx].max;
 
   // Find smallest combined aabb of current node and any other node
-  for(size_t i=0; i<node_indices_cnt; i++) {
+  for(uint32_t i=0; i<node_indices_cnt; i++) {
     if(idx != i) {
-      size_t other_idx = node_indices[i];
+      uint32_t other_idx = node_indices[i];
       vec3 mi = vec3_min(curr_min, nodes[other_idx].min);
       vec3 ma = vec3_max(curr_max, nodes[other_idx].max);
       float area = aabb_calc_area((aabb){ mi, ma });
@@ -32,16 +32,16 @@ size_t find_best_node(tlas_node *nodes, size_t idx, size_t *node_indices,
 }
 
 // Walter et al: Fast Agglomerative Clustering for Rendering
-void tlas_build(tlas_node *nodes, const inst *instances, size_t inst_cnt)
+void tlas_build(tlas_node *nodes, const inst *instances, uint32_t inst_cnt)
 {
-  size_t node_indices_cnt = inst_cnt;
-  size_t node_indices[inst_cnt];
+  uint32_t node_indices_cnt = inst_cnt;
+  uint32_t node_indices[inst_cnt];
 
   // Reserve space for root node + skipped 1st node
-  size_t ofs = 2;
+  uint32_t ofs = 2;
 
   // Construct leaf node for each instance
-  for(size_t i=0; i<inst_cnt; i++) {
+  for(uint32_t i=0; i<inst_cnt; i++) {
     tlas_node *n = &nodes[ofs + i];
     n->min = instances[i].min;
     n->max = instances[i].max;
@@ -51,16 +51,16 @@ void tlas_build(tlas_node *nodes, const inst *instances, size_t inst_cnt)
   }
 
   // Account for nodes so far
-  size_t node_cnt = ofs + inst_cnt;
+  uint32_t node_cnt = ofs + inst_cnt;
 
   // Bottom up combining of tlas nodes
-  size_t a = 0;
-  size_t b = find_best_node(nodes, a, node_indices, node_indices_cnt);
+  uint32_t a = 0;
+  uint32_t b = find_best_node(nodes, a, node_indices, node_indices_cnt);
   while(node_indices_cnt > 1) {
-    size_t c = find_best_node(nodes, b, node_indices, node_indices_cnt);
+    uint32_t c = find_best_node(nodes, b, node_indices, node_indices_cnt);
     if(a == c) {
-      size_t idx_a = node_indices[a];
-      size_t idx_b = node_indices[b];
+      uint32_t idx_a = node_indices[a];
+      uint32_t idx_b = node_indices[b];
 
       tlas_node *node_a = &nodes[idx_a];
       tlas_node *node_b = &nodes[idx_b];

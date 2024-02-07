@@ -1,7 +1,7 @@
 #include "mesh.h"
 #include "buf.h"
 
-void mesh_init(mesh *m, size_t tri_cnt)
+void mesh_init(mesh *m, uint32_t tri_cnt)
 {
   m->tri_cnt = tri_cnt;
 

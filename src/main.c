@@ -1,5 +1,5 @@
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "sutil.h"
 #include "mutil.h"
 #include "buf.h"
@@ -111,7 +111,7 @@ void init(uint32_t width, uint32_t height)
   buf_reserve(GLOB, sizeof(char), GLOB_BUF_SIZE);
   buf_reserve(TRI, sizeof(tri), TRI_CNT * MESH_CNT);
   buf_reserve(TRI_DATA, sizeof(tri_data), TRI_CNT * MESH_CNT);
-  buf_reserve(INDEX, sizeof(size_t), TRI_CNT * MESH_CNT);
+  buf_reserve(INDEX, sizeof(uint32_t), TRI_CNT * MESH_CNT);
   buf_reserve(BVH_NODE, sizeof(bvh_node), 2 * TRI_CNT * MESH_CNT);
   buf_reserve(TLAS_NODE, sizeof(tlas_node), 2 * INST_CNT + 1);
   buf_reserve(INST, sizeof(inst), INST_CNT);
@@ -126,10 +126,10 @@ void init(uint32_t width, uint32_t height)
   scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
   cam_set(&scn.cam, (vec3){ 0.0f, 0.0f, -7.5f }, (vec3){ 0.0f, 0.0f, 2.0f });
 
-  for(size_t j=0; j<MESH_CNT; j++) {
+  for(uint32_t j=0; j<MESH_CNT; j++) {
     mesh_init(&scn.meshes[j], TRI_CNT);
     
-    for(size_t i=0; i<TRI_CNT; i++) {
+    for(uint32_t i=0; i<TRI_CNT; i++) {
       vec3 a = vec3_sub(vec3_scale(vec3_rand(), 5.0f), (vec3){ 2.5f, 2.5f, 2.5f });
       scn.meshes[j].tris[i].v0 = a;
       scn.meshes[j].tris[i].v1 = vec3_add(a, vec3_rand());
@@ -144,10 +144,10 @@ void init(uint32_t width, uint32_t height)
     bvh_build(&scn.bvhs[j], scn.meshes[j].tris, scn.meshes[j].tri_cnt);
   }
 
-  for(size_t i=0; i<MAT_CNT; i++)
+  for(uint32_t i=0; i<MAT_CNT; i++)
     mat_rand(&scn.materials[i]);
 
-  for(size_t i=0; i<INST_CNT; i++) {
+  for(uint32_t i=0; i<INST_CNT; i++) {
 	  positions[i] = vec3_scale(vec3_sub(vec3_rand(), (vec3){ 0.5f, 0.5f, 0.5f }), 4.0f);
 	  directions[i] = vec3_scale(vec3_unit(positions[i]), 0.05f);
 	  orientations[i] = vec3_scale(vec3_rand(), 2.5f);
@@ -185,7 +185,7 @@ void update(float time)
   }
 
   // Create/update instances
-  for(size_t i=0; i<INST_CNT; i++) {
+  for(uint32_t i=0; i<INST_CNT; i++) {
     mat4 transform;
 		
     mat4 rotx, roty, rotz;
