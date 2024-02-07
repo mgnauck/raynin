@@ -21,6 +21,11 @@ typedef struct tri_data {
   float pad1;
   vec3  n2;
   float pad2;
+  float uv0[2];
+  float uv1[2];
+  float uv2[2];
+  float pad3;
+  float pad4;
 } tri_data;
 
 void tri_calc_center(tri *t);

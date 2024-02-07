@@ -51,6 +51,11 @@ struct TriData
   pad1: f32,
   n2: vec3f,
   pad2: f32,
+  uv0: vec2f,
+  uv1: vec2f,
+  uv2: vec2f,
+  pad3: f32,
+  pad4: f32
 }
 
 struct BvhNode
