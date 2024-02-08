@@ -15,12 +15,13 @@
 #include "scene.h"
 #include "intersect.h"
 #include "log.h"
+#include "teapot.h"
+#include "dragon.h"
 
-#define TRI_CNT         128
-#define MESH_CNT        6
-#define INST_CNT        8
-#define MAT_CNT         8
-#define TOTAL_TRI_CNT   (TRI_CNT * MESH_CNT)
+#define TRI_CNT         (1024 + 19332)
+#define MESH_CNT        2
+#define INST_CNT        32
+#define MAT_CNT         32
 
 uint32_t  gathered_smpls = 0;
 vec3      bg_col = { 0.6f, 0.7f, 0.9f };
@@ -110,34 +111,32 @@ void init(uint32_t width, uint32_t height)
   // Reserve buffer space
   buf_init(8);
   buf_reserve(GLOB, sizeof(char), GLOB_BUF_SIZE);
-  buf_reserve(TRI, sizeof(tri), TOTAL_TRI_CNT);
-  buf_reserve(TRI_DATA, sizeof(tri_data), TOTAL_TRI_CNT);
-  buf_reserve(INDEX, sizeof(uint32_t), TOTAL_TRI_CNT);
-  buf_reserve(BVH_NODE, sizeof(bvh_node), 2 * TOTAL_TRI_CNT);
+  buf_reserve(TRI, sizeof(tri), TRI_CNT);
+  buf_reserve(TRI_DATA, sizeof(tri_data), TRI_CNT);
+  buf_reserve(INDEX, sizeof(uint32_t), TRI_CNT);
+  buf_reserve(BVH_NODE, sizeof(bvh_node), 2 * TRI_CNT);
   buf_reserve(TLAS_NODE, sizeof(tlas_node), 2 * INST_CNT + 1);
   buf_reserve(INST, sizeof(inst), INST_CNT);
   buf_reserve(MAT, sizeof(mat), MAT_CNT);
 
   buf_acquire(GLOB, GLOB_BUF_SIZE);
   
-  config = (cfg){ width, height, 5, 5 };
+  config = (cfg){ width, height, 3, 5 };
   
   scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
   
   scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
   cam_set(&scn.cam, (vec3){ 0.0f, 0.0f, -7.5f }, (vec3){ 0.0f, 0.0f, 2.0f });
 
-  /*
-  mesh_read_bin(&scn.meshes[0], mesh_teapot);
+  mesh_read_bin(&scn.meshes[0], teapot);
   bvh_init(&scn.bvhs[0], scn.meshes[0].tri_cnt);
   bvh_build(&scn.bvhs[0], scn.meshes[0].tris, scn.meshes[0].tri_cnt);
 
-  mesh_read_bin(&scn.meshes[1], mesh_dragon);
+  mesh_read_bin(&scn.meshes[1], dragon);
   bvh_init(&scn.bvhs[1], scn.meshes[1].tri_cnt);
   bvh_build(&scn.bvhs[1], scn.meshes[1].tris, scn.meshes[1].tri_cnt);
-  */
 
-  for(uint32_t j=0; j<MESH_CNT; j++) {
+  /*for(uint32_t j=0; j<MESH_CNT; j++) {
     mesh_init(&scn.meshes[j], TRI_CNT);
     
     for(uint32_t i=0; i<TRI_CNT; i++) {
@@ -153,7 +152,7 @@ void init(uint32_t width, uint32_t height)
 
     bvh_init(&scn.bvhs[j], scn.meshes[j].tri_cnt);
     bvh_build(&scn.bvhs[j], scn.meshes[j].tris, scn.meshes[j].tri_cnt);
-  }
+  }*/
 
   for(uint32_t i=0; i<MAT_CNT; i++)
     mat_rand(&scn.materials[i]);
@@ -207,8 +206,8 @@ void update(float time)
     mat4_mul(transform, transform, rotz);
      
     mat4 scale;
-    //mat4_scale(scale, (i % 2 == 1) ? 0.004f : 0.2f);
-    mat4_scale(scale, 0.2f);
+    mat4_scale(scale, (i % 2 == 1) ? 0.008f : 0.4f);
+    //mat4_scale(scale, 0.2f);
     mat4_mul(transform, transform, scale);
     
     mat4 translation;

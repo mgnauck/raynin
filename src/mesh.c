@@ -11,7 +11,7 @@ void mesh_init(mesh *m, uint32_t tri_cnt)
   m->tris_data = buf_acquire(TRI_DATA, tri_cnt);
 }
 
-void mesh_read_bin(mesh *m, unsigned char *data)
+void mesh_read_bin(mesh *m, const uint8_t *data)
 {
   uint32_t ofs = 0;
 
