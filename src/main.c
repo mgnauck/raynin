@@ -15,26 +15,25 @@
 #include "scene.h"
 #include "intersect.h"
 #include "log.h"
+
+// data
 #include "teapot.h"
 #include "dragon.h"
 
 #define TRI_CNT         (1024 + 19332)
 #define MESH_CNT        2
-#define INST_CNT        32
-#define MAT_CNT         32
+#define INST_CNT        144
+#define MAT_CNT         144
+#define MAT_TYPES       3
 
 uint32_t  gathered_smpls = 0;
-vec3      bg_col = { 0.6f, 0.7f, 0.9f };
+vec3      bg_col = { 0.5f, 0.6f, 0.7f };
 
 bool      orbit_cam = false;
 bool      paused = false;
 
 cfg       config;
 scene     scn;
-
-vec3      positions[INST_CNT];
-vec3      directions[INST_CNT];
-vec3      orientations[INST_CNT];
 
 void update_cam_view()
 {
@@ -121,46 +120,31 @@ void init(uint32_t width, uint32_t height)
 
   buf_acquire(GLOB, GLOB_BUF_SIZE);
   
-  config = (cfg){ width, height, 3, 5 };
+  config = (cfg){ width, height, 2, 5 };
   
   scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
   
   scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
   cam_set(&scn.cam, (vec3){ 0.0f, 0.0f, -7.5f }, (vec3){ 0.0f, 0.0f, 2.0f });
 
-  mesh_read_bin(&scn.meshes[0], teapot);
+  mesh_read_bin(&scn.meshes[0], dragon);
   bvh_init(&scn.bvhs[0], scn.meshes[0].tri_cnt);
   bvh_build(&scn.bvhs[0], scn.meshes[0].tris, scn.meshes[0].tri_cnt);
 
-  mesh_read_bin(&scn.meshes[1], dragon);
+  mesh_read_bin(&scn.meshes[1], teapot);
   bvh_init(&scn.bvhs[1], scn.meshes[1].tri_cnt);
   bvh_build(&scn.bvhs[1], scn.meshes[1].tris, scn.meshes[1].tri_cnt);
 
-  /*for(uint32_t j=0; j<MESH_CNT; j++) {
-    mesh_init(&scn.meshes[j], TRI_CNT);
-    
-    for(uint32_t i=0; i<TRI_CNT; i++) {
-      vec3 a = vec3_sub(vec3_scale(vec3_rand(), 5.0f), (vec3){ 2.5f, 2.5f, 2.5f });
-      scn.meshes[j].tris[i].v0 = a;
-      scn.meshes[j].tris[i].v1 = vec3_add(a, vec3_rand());
-      scn.meshes[j].tris[i].v2 = vec3_add(a, vec3_rand());
-      scn.meshes[j].tris_data[i].n0 = vec3_rand();
-      scn.meshes[j].tris_data[i].n1 = vec3_rand();
-      scn.meshes[j].tris_data[i].n2 = vec3_rand();
-      tri_calc_center(&scn.meshes[j].tris[i]);
-    }
-
-    bvh_init(&scn.bvhs[j], scn.meshes[j].tri_cnt);
-    bvh_build(&scn.bvhs[j], scn.meshes[j].tris, scn.meshes[j].tri_cnt);
-  }*/
-
-  for(uint32_t i=0; i<MAT_CNT; i++)
-    mat_rand(&scn.materials[i]);
-
-  for(uint32_t i=0; i<INST_CNT; i++) {
-	  positions[i] = vec3_scale(vec3_sub(vec3_rand(), (vec3){ 0.5f, 0.5f, 0.5f }), 4.0f);
-	  directions[i] = vec3_scale(vec3_unit(positions[i]), 0.05f);
-	  orientations[i] = vec3_scale(vec3_rand(), 2.5f);
+  for(uint32_t i=0; i<MAT_CNT; i++) {
+    uint8_t mat_type = i % MAT_TYPES;
+    if(mat_type == LAMBERT)
+      mat_rand(&scn.materials[i]);
+    else if(mat_type == METAL)
+      scn.materials[i] = (mat){ .color = (vec3){ 0.75f, 0.75f, 0.75f }, .value = 0.0f };
+    else if(mat_type == DIELECTRIC)
+      scn.materials[i] = (mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.33f };
+    else if(mat_type == EMITTER)
+      scn.materials[i] = (mat){ .color = (vec3){ 10.0f, 10.0f, 10.0f } };
   }
 
   // Create GPU buffer
@@ -181,64 +165,59 @@ void init(uint32_t width, uint32_t height)
   update_cam_view();
 }
 
+void update_scene(float time)
+{
+  uint32_t dim = (uint32_t)sqrtf(INST_CNT);
+  for(uint32_t j=0; j<dim; j++) {
+    for(uint32_t i=0; i<dim; i++) {
+
+      uint32_t cnt = dim * j + i;    
+     
+      mat4 rot;
+      mat4_rot_y(rot, 1.412f * cnt + time * 0.8f);
+
+      mat4 scale;
+      mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
+      
+      mat4 translation;
+      mat4_trans(translation, (vec3){ i * 1.5f - (float)dim / 1.5f, 0.0f, j * 1.5f - (float)dim / 1.5f });
+
+      mat4 transform;
+      mat4_mul(transform, rot, scale);
+      mat4_mul(transform, translation, transform);
+    
+      inst_create(&scn.instances[cnt], cnt, transform,
+          &scn.meshes[cnt % MESH_CNT], &scn.bvhs[cnt % MESH_CNT],
+          cnt % MAT_TYPES, &scn.materials[cnt % MAT_CNT]);
+    }
+  }
+
+  gathered_smpls = TEMPORAL_WEIGHT * config.spp;
+}
+
 __attribute__((visibility("default")))
 void update(float time)
 {
   // Orbit cam
   if(orbit_cam) {
-    float s = 0.3f;
+    float s = 0.5f;
     float r = 8.0f;
-    float h = 0.0f;
-    vec3 pos = (vec3){ r * sinf(time * s), h * sinf(time * s * 0.7f), r * cosf(time * s) };
+    float h = 7.0f;
+    vec3 pos = (vec3){ r * sinf(time * s * s), h * sinf(time * s * 0.7f), r * cosf(time * s) };
     cam_set(&scn.cam, pos, vec3_neg(pos));
     update_cam_view();
   }
+ 
+  if(!paused) {
+    update_scene(time);
 
-  // Create/update instances
-  for(uint32_t i=0; i<INST_CNT; i++) {
-    mat4 transform;
-		
-    mat4 rotx, roty, rotz;
-    mat4_rot_x(rotx, orientations[i].x);
-    mat4_rot_y(roty, orientations[i].y);
-    mat4_rot_z(rotz, orientations[i].z);
-    mat4_mul(transform, rotx, roty);
-    mat4_mul(transform, transform, rotz);
-     
-    mat4 scale;
-    mat4_scale(scale, (i % 2 == 1) ? 0.008f : 0.4f);
-    //mat4_scale(scale, 0.2f);
-    mat4_mul(transform, transform, scale);
-    
-    mat4 translation;
-    mat4_trans(translation, positions[i]);
-    mat4_mul(transform, translation, transform);
+    // Build tlas
+    tlas_build(scn.tlas_nodes, scn.instances, INST_CNT);
 
-    inst_create(&scn.instances[i], i, transform,
-        &scn.meshes[i % MESH_CNT], &scn.bvhs[i % MESH_CNT],
-        LAMBERT, &scn.materials[i % MAT_CNT]);
-	
-    if(!paused) {
-      positions[i] = vec3_add(positions[i], directions[i]);
-      orientations[i] = vec3_add(orientations[i], directions[i]);
-
-      if(positions[i].x < -3.0f || positions[i].x > 3.0f)
-        directions[i].x *= -1.0f;
-      if(positions[i].y < -3.0f || positions[i].y > 3.0f)
-        directions[i].y *= -1.0f;
-      if(positions[i].z < -3.0f || positions[i].z > 3.0f)
-        directions[i].z *= -1.0f;
-
-      gathered_smpls = TEMPORAL_WEIGHT * config.spp;
-    }
-	}
-  
-  // Build tlas
-  tlas_build(scn.tlas_nodes, scn.instances, INST_CNT);
-
-  // Write tlas and instance buffer
-  gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
-  gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
+    // Write tlas and instance buffer
+    gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
+    gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
+  }
 
   // Push frame data
   float frame[8] = { pcg_randf(), config.spp / (float)(gathered_smpls + config.spp),

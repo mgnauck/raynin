@@ -5,10 +5,10 @@
 
 typedef enum mat_type {
   LAMBERT = 0,
-  ISOTROPIC,
-  EMITTER,
   METAL,
-  DIELECTRIC
+  DIELECTRIC,
+  EMITTER,
+  ISOTROPIC,
 } mat_type;
 
 typedef struct mat {

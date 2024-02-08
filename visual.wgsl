@@ -104,7 +104,7 @@ const MAX_DISTANCE = 3.402823466e+38;
 
 const MAT_TYPE_LAMBERT = 0;
 const MAT_TYPE_METAL = 1;
-const MAT_TYPE_GLASS = 2;
+const MAT_TYPE_DIELECTRIC = 2;
 const MAT_TYPE_EMITTER = 3;
 const MAT_TYPE_ISOTROPIC = 4;
 
@@ -420,7 +420,7 @@ fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
   return r0 + (1 - r0) * pow(1 - cosTheta, 5);
 }
 
-fn evalMaterialGlass(r: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterialDielectric(r: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   var nrm: vec3f;
   let inside = calcNormal(r, h, &nrm);
@@ -466,15 +466,15 @@ fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr
     case MAT_TYPE_METAL: {
       return evalMaterialMetal(r, h, mat.albedo, mat.value, attenuation, scatterDir);
     }
-    case MAT_TYPE_GLASS: {
-      return evalMaterialGlass(r, h, mat.albedo, mat.value, attenuation, scatterDir);
-    }
-    case MAT_TYPE_ISOTROPIC: {
-      return evalMaterialIsotropic(r, h, mat.albedo, attenuation, scatterDir);
+    case MAT_TYPE_DIELECTRIC: {
+      return evalMaterialDielectric(r, h, mat.albedo, mat.value, attenuation, scatterDir);
     }
     case MAT_TYPE_EMITTER: {
       *emission = mat.albedo;
       return false;
+    }
+    case MAT_TYPE_ISOTROPIC: {
+      return evalMaterialIsotropic(r, h, mat.albedo, attenuation, scatterDir);
     }
     default: {
       // Error material
