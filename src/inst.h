@@ -3,21 +3,22 @@
 
 #include <stdint.h>
 #include "mat4.h"
-#include "mat.h"
 
-typedef struct mesh mesh;
 typedef struct bvh bvh;
+typedef struct mat mat;
 
 typedef struct inst {
   mat4      transform;
   mat4      inv_transform;
   vec3      min;
-  uint32_t  id;   // (mat type << 28) | (mat id << 16) | (inst id & 0xffff)
+  uint32_t  id;   // (mat id << 16) | (inst id & 0xffff)
   vec3      max;
-  uint32_t  ofs;  // ofs into tris/tris_data/indices and 2*ofs into bvh_nodes
+  uint32_t  ofs;  // ofs into tris/indices and 2 * ofs into bvh_nodes
 } inst;
 
 void inst_create(inst *inst, uint32_t inst_idx, const mat4 transform,
-    const mesh *mesh, const bvh *bvh, uint32_t mat_type, const mat *mat);
+    const bvh *bvh, const mat *mat);
+
+void inst_transform(inst *inst, const bvh *bvh, const mat4 transform);
 
 #endif

@@ -22,6 +22,8 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t inst_cnt, uint32_t mat_cnt
 
 void scene_release(scene *s)
 {
+  for(uint32_t i=0; i<s->mesh_cnt; i++)
+    mesh_release(&s->meshes[i]);
   free(s->meshes);
   free(s->bvhs);
 }

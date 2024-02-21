@@ -4,6 +4,7 @@
 #include "mutil.h"
 #include "tri.h"
 #include "aabb.h"
+#include "mesh.h"
 
 #define INTERVAL_CNT 16
 
@@ -18,17 +19,18 @@ typedef struct split {
   uint8_t axis;
 } split;
 
-void bvh_init(bvh *b, uint32_t tri_cnt)
+void bvh_init(bvh *b, mesh *m)
 {
   // Would be 2 * tri_cnt - 1 but we skip one node
   b->node_cnt = 0;
-  b->nodes = buf_acquire(BVH_NODE, 2 * tri_cnt);
-  b->indices = buf_acquire(INDEX, tri_cnt);
+  b->nodes = buf_acquire(BVH_NODE, 2 * m->tri_cnt);
+  b->indices = buf_acquire(INDEX, m->tri_cnt);
+  b->mesh = m;
 }
 
 // Guenther et al: Realtime Ray Tracing on GPU with BVH-based Packet Traversal
 // Section Fast BVH Construction
-split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
+split find_best_cost_interval_split(const bvh *b, bvh_node *n)
 {
   split best = { .cost = FLT_MAX };
   for(uint8_t axis=0; axis<3; axis++) {
@@ -36,7 +38,7 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
     float minc = FLT_MAX;
     float maxc = -FLT_MAX;
     for(uint32_t i=0; i<n->obj_cnt; i++) {
-      float c = vec3_get(tris[b->indices[n->start_idx + i]].center, axis);
+      float c = vec3_get(b->mesh->centers[b->indices[n->start_idx + i]], axis);
       minc = min(minc, c);
       maxc = max(maxc, c);
     }
@@ -51,11 +53,11 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
     // Count objects per interval and find their combined bounds
     float delta = INTERVAL_CNT / (maxc - minc);
     for(uint32_t i=0; i<n->obj_cnt; i++) {
-      vec3 center = tris[b->indices[n->start_idx + i]].center;
+      vec3 center = b->mesh->centers[b->indices[n->start_idx + i]];
       uint32_t int_idx =
         (uint32_t)min(INTERVAL_CNT - 1, (vec3_get(center, axis) - minc) * delta);
       aabb *int_aabb = &intervals[int_idx].aabb;
-      const tri *tri = &tris[b->indices[n->start_idx + i]];
+      const tri *tri = &b->mesh->tris[b->indices[n->start_idx + i]];
       aabb_grow(int_aabb, tri->v0);
       aabb_grow(int_aabb, tri->v1);
       aabb_grow(int_aabb, tri->v2);
@@ -99,12 +101,12 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n, const tri *tris)
   return best;
 }
 
-void update_node_bounds(const bvh *b, bvh_node *n, const tri *tris)
+void update_node_bounds(const bvh *b, bvh_node *n)
 {
   n->min = (vec3){ FLT_MAX, FLT_MAX, FLT_MAX };
   n->max = (vec3){ -FLT_MAX, -FLT_MAX, -FLT_MAX };
   for(uint32_t i=0; i<n->obj_cnt; i++) {
-    const tri *t = &tris[b->indices[n->start_idx + i]];
+    const tri *t = &b->mesh->tris[b->indices[n->start_idx + i]];
     n->min = vec3_min(n->min, t->v0);
     n->min = vec3_min(n->min, t->v1);
     n->min = vec3_min(n->min, t->v2);
@@ -114,10 +116,10 @@ void update_node_bounds(const bvh *b, bvh_node *n, const tri *tris)
   }
 }
 
-void subdivide_node(bvh *b, bvh_node *n, const tri *tris)
+void subdivide_node(bvh *b, bvh_node *n)
 {
   // Calculate if we need to split or not
-  split split = find_best_cost_interval_split(b, n, tris);
+  split split = find_best_cost_interval_split(b, n);
   float no_split_cost = n->obj_cnt * aabb_calc_area((aabb){ n->min, n->max });
   if(no_split_cost <= split.cost)
     return;
@@ -126,7 +128,7 @@ void subdivide_node(bvh *b, bvh_node *n, const tri *tris)
   int32_t l = n->start_idx;
   int32_t r = n->start_idx + n->obj_cnt - 1;
   while(l <= r) {
-    if(vec3_get(tris[b->indices[l]].center, split.axis) < split.pos) {
+    if(vec3_get(b->mesh->centers[b->indices[l]], split.axis) < split.pos) {
       l++;
     } else {
       // Swap object index left/right
@@ -147,41 +149,41 @@ void subdivide_node(bvh *b, bvh_node *n, const tri *tris)
   left_child->start_idx = n->start_idx;
   left_child->obj_cnt = left_obj_cnt;
 
-  update_node_bounds(b, left_child, tris);
+  update_node_bounds(b, left_child);
 
   bvh_node *right_child = &b->nodes[b->node_cnt++];
   right_child->start_idx = l;
   right_child->obj_cnt = n->obj_cnt - left_obj_cnt;
 
-  update_node_bounds(b, right_child, tris);
+  update_node_bounds(b, right_child);
 
   // Update current node with child link
   n->start_idx = b->node_cnt - 2; // Right child implicitly + 1
   n->obj_cnt = 0; // No leaf
 
-  subdivide_node(b, left_child, tris);
-  subdivide_node(b, right_child, tris);
+  subdivide_node(b, left_child);
+  subdivide_node(b, right_child);
 }
 
-void bvh_build(bvh *b, const tri *tris, uint32_t tri_cnt)
+void bvh_build(bvh *b)
 {
   b->node_cnt = 0;
 
-  for(uint32_t i=0; i<tri_cnt; i++)
+  for(uint32_t i=0; i<b->mesh->tri_cnt; i++)
     b->indices[i] = i;
 
   bvh_node *root = &b->nodes[b->node_cnt++];
   root->start_idx = 0;
-  root->obj_cnt = tri_cnt;
+  root->obj_cnt = b->mesh->tri_cnt;
 
   // Skip node 1 to have children aligned in mem
   b->node_cnt++;
 
-  update_node_bounds(b, root, tris);
-  subdivide_node(b, root, tris);
+  update_node_bounds(b, root);
+  subdivide_node(b, root);
 }
 
-void bvh_update(bvh *b, const tri *tris)
+void bvh_update(bvh *b)
 {
   for(int32_t i=b->node_cnt; i>=0; i--) {
     if(i == 1)
@@ -190,7 +192,7 @@ void bvh_update(bvh *b, const tri *tris)
     bvh_node *n = &b->nodes[i];
     if(n->obj_cnt > 0) {
       // Leaf with objects
-      update_node_bounds(b, n, tris);
+      update_node_bounds(b, n);
     } else {
       // Interior node. Just update bounds as per child bounds.
       bvh_node *l = &b->nodes[n->start_idx];

@@ -13,7 +13,6 @@
 typedef enum buf_type {
   GLOB = 0,
   TRI,
-  TRI_DATA,
   INDEX,
   BVH_NODE,
   TLAS_NODE,
@@ -21,7 +20,7 @@ typedef enum buf_type {
   MAT
 } buf_type;
 
-extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz, uint32_t tri_data_sz,
+extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz,
     uint32_t index_sz, uint32_t bvh_node_sz, uint32_t tlas_node_sz, uint32_t inst_sz,
     uint32_t mat_sz);
 

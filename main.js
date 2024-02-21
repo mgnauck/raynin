@@ -9,10 +9,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = {
-  GLOB: 0, TRI: 1, TRI_DATA: 2, INDEX: 3, BVH_NODE: 4,
-  TLAS_NODE: 5, INST: 6, MAT: 7, ACC: 8
-};
+const bufType = { GLOB: 0, TRI: 1, INDEX: 2, BVH_NODE: 3, TLAS_NODE: 4, INST: 5, MAT: 6, ACC: 7 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -59,7 +56,7 @@ function Wasm(module)
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
     powf: (b, e) => Math.pow(b, e),
-    gpu_create_res: (g, t, td, idx, bn, tn, i, m) => createGpuResources(g, t, td, idx, bn, tn, i, m),
+    gpu_create_res: (g, t, idx, bn, tn, i, m) => createGpuResources(g, t, idx, bn, tn, i, m),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz)
   };
 
@@ -118,7 +115,7 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-function createGpuResources(globSz, triSz, triDataSz, indexSz, bvhNodeSz, tlasNodeSz, instSz, matSz)
+function createGpuResources(globSz, triSz, indexSz, bvhNodeSz, tlasNodeSz, instSz, matSz)
 {
   res.buf = [];
 
@@ -129,11 +126,6 @@ function createGpuResources(globSz, triSz, triDataSz, indexSz, bvhNodeSz, tlasNo
 
   res.buf[bufType.TRI] = device.createBuffer({
     size: triSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.TRI_DATA] = device.createBuffer({
-    size: triDataSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -175,9 +167,6 @@ function createGpuResources(globSz, triSz, triDataSz, indexSz, bvhNodeSz, tlasNo
       { binding: bufType.TRI,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: bufType.TRI_DATA,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
       { binding: bufType.INDEX,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
@@ -204,7 +193,6 @@ function createGpuResources(globSz, triSz, triDataSz, indexSz, bvhNodeSz, tlasNo
     entries: [
       { binding: bufType.GLOB, resource: { buffer: res.buf[bufType.GLOB] } },
       { binding: bufType.TRI, resource: { buffer: res.buf[bufType.TRI] } },
-      { binding: bufType.TRI_DATA, resource: { buffer: res.buf[bufType.TRI_DATA] } },
       { binding: bufType.INDEX, resource: { buffer: res.buf[bufType.INDEX] } },
       { binding: bufType.BVH_NODE, resource: { buffer: res.buf[bufType.BVH_NODE] } },
       { binding: bufType.TLAS_NODE, resource: { buffer: res.buf[bufType.TLAS_NODE] } },

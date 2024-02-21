@@ -39,23 +39,17 @@ struct Tri
   pad1: f32,
   v2: vec3f,
   pad2: f32,
-  center: vec3f,
-  pad3: f32
-}
-
-struct TriData
-{
   n0: vec3f,
-  pad0: f32,
+  pad3: f32,
   n1: vec3f,
-  pad1: f32,
+  pad4: f32,
   n2: vec3f,
-  pad2: f32,
+  pad5: f32,
   uv0: vec2f,
   uv1: vec2f,
   uv2: vec2f,
-  pad3: f32,
-  pad4: f32
+  pad6: f32,
+  pad7: f32
 }
 
 struct BvhNode
@@ -79,14 +73,14 @@ struct Inst
   transform: mat4x4f,
   invTransform: mat4x4f,
   aabbMin: vec3f,
-  id: u32,          // (mat type << 28) | (mat id << 16) | (inst id & 0xffff)
+  id: u32,          // (mat id << 16) | (inst id & 0xffff)
   aabbMax: vec3f,
-  ofs: u32          // ofs into tri/trisData/indices and 2*ofs into bvhNodes
+  ofs: u32          // ofs into tri/indices and 2*ofs into bvhNodes
 }
 
 struct Mat
 {
-  albedo: vec3f,
+  color: vec3f,
   value: f32
 }
 
@@ -102,21 +96,14 @@ const EPSILON = 0.001;
 const PI = 3.141592;
 const MAX_DISTANCE = 3.402823466e+38;
 
-const MAT_TYPE_LAMBERT = 0;
-const MAT_TYPE_METAL = 1;
-const MAT_TYPE_DIELECTRIC = 2;
-const MAT_TYPE_EMITTER = 3;
-const MAT_TYPE_ISOTROPIC = 4;
-
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
-@group(0) @binding(2) var<storage, read> trisData: array<TriData>;
-@group(0) @binding(3) var<storage, read> indices: array<u32>;
-@group(0) @binding(4) var<storage, read> bvhNodes: array<BvhNode>;
-@group(0) @binding(5) var<storage, read> tlasNodes: array<TlasNode>;
-@group(0) @binding(6) var<storage, read> instances: array<Inst>;
-@group(0) @binding(7) var<storage, read> materials: array<Mat>;
-@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(2) var<storage, read> indices: array<u32>;
+@group(0) @binding(3) var<storage, read> bvhNodes: array<BvhNode>;
+@group(0) @binding(4) var<storage, read> tlasNodes: array<TlasNode>;
+@group(0) @binding(5) var<storage, read> instances: array<Inst>;
+@group(0) @binding(6) var<storage, read> materials: array<Mat>;
+@group(0) @binding(7) var<storage, read_write> buffer: array<vec4f>;
 
 var<private> bvhNodeStack: array<u32, 32>;
 var<private> tlasNodeStack: array<u32, 32>;
@@ -379,9 +366,9 @@ fn calcNormal(r: Ray, h: Hit, nrm: ptr<function, vec3f>) -> bool
 {
   let inst = &instances[h.id & 0xffff];
   let ofs = (*inst).ofs;
-  let td = &trisData[ofs + (h.id >> 16)]; // Using (*inst).ofs directly results in SPIRV error :(
+  let tri = &tris[ofs + (h.id >> 16)]; // Using (*inst).ofs directly results in SPIRV error :(
 
-  var n = (*td).n1 * h.u + (*td).n2 * h.v + (*td).n0 * (1.0 - h.u - h.v);
+  var n = (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v);
   n = normalize((vec4f(n, 0.0) * (*inst).transform).xyz);
 
   let inside = dot(r.dir, n) > 0;
@@ -446,41 +433,20 @@ fn evalMaterialDielectric(r: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, a
   return true;
 }
 
-fn evalMaterialIsotropic(r: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
-{
-  *scatterDir = rand3UnitSphere();
-  *attenuation = albedo;
-  return true;
-}
-
 fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let inst = &instances[h.id & 0xffff];
-  let mat = materials[((*inst).id >> 16) & 0xfff];
+  let mat = materials[(*inst).id >> 16];
 
-  switch((*inst).id >> 28)
-  {
-    case MAT_TYPE_LAMBERT: {
-      return evalMaterialLambert(r, h, mat.albedo, attenuation, scatterDir);
-    }
-    case MAT_TYPE_METAL: {
-      return evalMaterialMetal(r, h, mat.albedo, mat.value, attenuation, scatterDir);
-    }
-    case MAT_TYPE_DIELECTRIC: {
-      return evalMaterialDielectric(r, h, mat.albedo, mat.value, attenuation, scatterDir);
-    }
-    case MAT_TYPE_EMITTER: {
-      *emission = mat.albedo;
-      return false;
-    }
-    case MAT_TYPE_ISOTROPIC: {
-      return evalMaterialIsotropic(r, h, mat.albedo, attenuation, scatterDir);
-    }
-    default: {
-      // Error material
-      *emission = vec3f(99999, 0, 0);
-      return false;
-    }
+  if(maxComp(mat.color) > 1.0) {
+    *emission = mat.color;
+    return false;
+  } else if(mat.value > 1.0) {
+    return evalMaterialDielectric(r, h, mat.color, mat.value, attenuation, scatterDir);
+  } else if(mat.value > 0.0) {
+    return evalMaterialMetal(r, h, mat.color, mat.value, attenuation, scatterDir);
+  } else {
+    return evalMaterialLambert(r, h, mat.color, attenuation, scatterDir);
   }
 }
 

@@ -10,24 +10,19 @@ typedef struct tri {
   float pad1;
   vec3 v2;
   float pad2;
-  vec3 center;
-  float pad3;
-} tri;
-
-typedef struct tri_data {
   vec3  n0;
-  float pad0;
+  float pad3;
   vec3  n1;
-  float pad1;
+  float pad4;
   vec3  n2;
-  float pad2;
+  float pad5;
   float uv0[2];
   float uv1[2];
   float uv2[2];
-  float pad3;
-  float pad4;
-} tri_data;
+  float pad6;
+  float pad7;
+} tri;
 
-void tri_calc_center(tri *t);
+vec3 tri_calc_center(tri *t);
 
 #endif
