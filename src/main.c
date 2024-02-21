@@ -22,12 +22,13 @@
 
 #define TRI_CNT         (1024 + 19332)
 #define MESH_CNT        2
-#define INST_CNT        144
-#define MAT_CNT         144
-#define MAT_TYPES       3
+#define INST_CNT        36
+#define MAT_CNT         36
+#define MAT_TYPES       4
 
 uint32_t  gathered_smpls = 0;
-vec3      bg_col = { 0.5f, 0.6f, 0.7f };
+//vec3      bg_col = { 0.5f, 0.6f, 0.7f };
+vec3      bg_col = { 0.005f, 0.006f, 0.007f };
 
 bool      orbit_cam = false;
 bool      paused = false;
