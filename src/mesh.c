@@ -101,9 +101,67 @@ void mesh_make_quad(mesh *m, vec3 pos, vec3 nrm, float w, float h)
   m->centers[1] = tri_calc_center(tri);
 }
 
-void mesh_make_sphere(mesh *m, vec3 center, float radius, uint32_t subx, uint32_t suby)
+void mesh_make_icosahedron(mesh *m)
 {
-  // TODO
+  float phi = 0.5f * (1.0f + sqrtf(5.0f));
+
+  vec3 verts[12] = {
+    { -1.0f,  phi, 0.0f },
+    {  1.0f,  phi, 0.0f },
+    { -1.0f, -phi, 0.0f },
+    {  1.0f, -phi, 0.0f },
+    
+    { 0.0f, -1.0f,  phi },
+    { 0.0f,  1.0f,  phi },
+    { 0.0f, -1.0f, -phi },
+    { 0.0f,  1.0f, -phi },
+    
+    {  phi, 0.0f, -1.0f },
+    {  phi, 0.0f,  1.0f },
+    { -phi, 0.0f, -1.0f },
+    { -phi, 0.0f,  1.0f },
+  };
+
+  for(uint8_t i=0; i<12; i++)
+    verts[i] = vec3_unit(verts[i]);
+
+  mesh_init(m, 20);
+
+  m->tris[ 0] = (tri){ .v0 = verts[ 0], .v1 = verts[11], .v2 = verts[ 5] };
+  m->tris[ 1] = (tri){ .v0 = verts[ 0], .v1 = verts[ 5], .v2 = verts[ 1] };
+  m->tris[ 2] = (tri){ .v0 = verts[ 0], .v1 = verts[ 1], .v2 = verts[ 7] };
+  m->tris[ 3] = (tri){ .v0 = verts[ 0], .v1 = verts[ 7], .v2 = verts[10] };
+  m->tris[ 4] = (tri){ .v0 = verts[ 0], .v1 = verts[10], .v2 = verts[11] };
+
+  m->tris[ 5] = (tri){ .v0 = verts[ 1], .v1 = verts[ 5], .v2 = verts[ 9] };
+  m->tris[ 6] = (tri){ .v0 = verts[ 5], .v1 = verts[11], .v2 = verts[ 4] };
+  m->tris[ 7] = (tri){ .v0 = verts[11], .v1 = verts[10], .v2 = verts[ 2] };
+  m->tris[ 8] = (tri){ .v0 = verts[10], .v1 = verts[ 7], .v2 = verts[ 6] };
+  m->tris[ 9] = (tri){ .v0 = verts[ 7], .v1 = verts[ 1], .v2 = verts[ 8] };
+
+  m->tris[10] = (tri){ .v0 = verts[ 3], .v1 = verts[ 9], .v2 = verts[ 4] };
+  m->tris[11] = (tri){ .v0 = verts[ 3], .v1 = verts[ 4], .v2 = verts[ 2] };
+  m->tris[12] = (tri){ .v0 = verts[ 3], .v1 = verts[ 2], .v2 = verts[ 6] };
+  m->tris[13] = (tri){ .v0 = verts[ 3], .v1 = verts[ 6], .v2 = verts[ 8] };
+  m->tris[14] = (tri){ .v0 = verts[ 3], .v1 = verts[ 8], .v2 = verts[ 9] };
+
+  m->tris[15] = (tri){ .v0 = verts[ 4], .v1 = verts[ 9], .v2 = verts[ 5] };
+  m->tris[16] = (tri){ .v0 = verts[ 2], .v1 = verts[ 4], .v2 = verts[11] };
+  m->tris[17] = (tri){ .v0 = verts[ 6], .v1 = verts[ 2], .v2 = verts[10] };
+  m->tris[18] = (tri){ .v0 = verts[ 8], .v1 = verts[ 6], .v2 = verts[ 7] };
+  m->tris[19] = (tri){ .v0 = verts[ 9], .v1 = verts[ 8], .v2 = verts[ 1] };
+
+  for(uint8_t i=0; i<20; i++) {
+    tri *t = &m->tris[i];
+    
+    t->n0 = t->v0;
+    t->n1 = t->v1;
+    t->n2 = t->v2;
+    
+    // TODO uvs
+
+    m->centers[i] = tri_calc_center(t);
+  }
 }
 
 void mesh_release(mesh *m)

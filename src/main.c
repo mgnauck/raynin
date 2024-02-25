@@ -128,8 +128,9 @@ void init(uint32_t width, uint32_t height)
 
   // Meshes load or generate
   mesh_read(&scn.meshes[0], dragon);
-  mesh_read(&scn.meshes[1], teapot);
-  mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -0.4f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 50.0f, 10.0f);
+  //mesh_read(&scn.meshes[1], teapot);
+  mesh_make_icosahedron(&scn.meshes[1]);
+  mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -0.5f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 50.0f, 10.0f);
 
   for(uint32_t i=0; i<MESH_CNT; i++) {
     bvh_init(&scn.bvhs[i], &scn.meshes[i]);
@@ -180,7 +181,8 @@ void update_scene(float time)
       mat4_rot_y(rot, 1.412f * cnt + time * 0.8f);
 
       mat4 scale;
-      mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
+      //mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
+      mat4_scale(scale, (cnt % 2 == 1) ? 1.0f : 0.008f);
       
       mat4 translation;
       mat4_trans(translation, (vec3){ i * 1.5f - (float)dim / 1.5f, 0.0f, j * 1.5f - (float)dim / 1.5f });
