@@ -1,5 +1,6 @@
 #include "mesh.h"
 #include "sutil.h"
+#include "mutil.h"
 #include "buf.h"
 #include "tri.h"
 
@@ -66,12 +67,41 @@ void mesh_read(mesh *m, const uint8_t *data)
   }
 }
 
-void mesh_make_quad(mesh *m, vec3 nrm, vec3 pos, float w, float h)
+void mesh_make_quad(mesh *m, vec3 pos, vec3 nrm, float w, float h)
 {
-  // TODO
+  mesh_init(m, 2);
+  
+  nrm = vec3_unit(nrm);
+  
+  vec3 r = (fabsf(nrm.x) > 0.9) ? (vec3){ 0.0, 1.0, 0.0 } : (vec3){ 0.0, 0.0, 1.0 };
+  vec3 t = vec3_cross(nrm, r);
+  vec3 b = vec3_cross(t, nrm);
+
+  t = vec3_scale(t, 0.5f * w);
+  b = vec3_scale(b, 0.5f * h);
+
+  tri *tri = &m->tris[0];
+  tri->v0 = vec3_sub(vec3_sub(pos, t), b);
+  tri->v1 = vec3_add(vec3_sub(pos, t), b);
+  tri->v2 = vec3_add(vec3_add(pos, t), b);
+  tri->n0 = tri->n1 = tri->n2 = nrm;
+  tri->uv0[0] = 0.0f; tri->uv0[1] = 0.0f;
+  tri->uv1[0] = 0.0f; tri->uv1[1] = 1.0f;
+  tri->uv2[0] = 1.0f; tri->uv2[1] = 1.0f;
+  m->centers[0] = tri_calc_center(tri);
+
+  tri = &m->tris[1];
+  tri->v0 = vec3_sub(vec3_sub(pos, t), b);
+  tri->v1 = vec3_add(vec3_add(pos, t), b);
+  tri->v2 = vec3_sub(vec3_add(pos, t), b);
+  tri->n0 = tri->n1 = tri->n2 = nrm;
+  tri->uv0[0] = 0.0f; tri->uv0[1] = 0.0f;
+  tri->uv1[0] = 1.0f; tri->uv1[1] = 1.0f;
+  tri->uv2[0] = 1.0f; tri->uv2[1] = 0.0f;
+  m->centers[1] = tri_calc_center(tri);
 }
 
-void mesh_make_sphere(mesh *m, vec3 pos, float radius)
+void mesh_make_sphere(mesh *m, vec3 center, float radius, uint32_t subx, uint32_t suby)
 {
   // TODO
 }

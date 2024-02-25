@@ -20,10 +20,10 @@
 #include "teapot.h"
 #include "dragon.h"
 
-#define TRI_CNT         (1024 + 19332)
-#define MESH_CNT        2
-#define INST_CNT        36
-#define MAT_CNT         36
+#define TRI_CNT         (1024 + 19332 + 2)
+#define MESH_CNT        3
+#define INST_CNT        37
+#define MAT_CNT         37
 
 uint32_t  gathered_smpls = 0;
 vec3      bg_col = { 0.5f, 0.6f, 0.7f };
@@ -119,23 +119,25 @@ void init(uint32_t width, uint32_t height)
 
   buf_acquire(GLOB, GLOB_BUF_SIZE);
   
-  config = (cfg){ width, height, 2, 5 };
+  config = (cfg){ width, height, 5, 5 };
   
   scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
   
   scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
-  cam_set(&scn.cam, (vec3){ 0.0f, 0.0f, -7.5f }, (vec3){ 0.0f, 0.0f, 2.0f });
+  cam_set(&scn.cam, (vec3){ 0.0f, 3.0f, 7.5f }, (vec3){ 0.0f, 0.0f, -2.0f });
 
+  // Meshes load or generate
   mesh_read(&scn.meshes[0], dragon);
-  bvh_init(&scn.bvhs[0], &scn.meshes[0]);
-  bvh_build(&scn.bvhs[0]);
-
   mesh_read(&scn.meshes[1], teapot);
-  bvh_init(&scn.bvhs[1], &scn.meshes[1]);
-  bvh_build(&scn.bvhs[1]);
+  mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -0.4f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 50.0f, 10.0f);
 
-  for(uint32_t i=0; i<MAT_CNT; i++) {
-    uint8_t mat_type = i % 4;
+  for(uint32_t i=0; i<MESH_CNT; i++) {
+    bvh_init(&scn.bvhs[i], &scn.meshes[i]);
+    bvh_build(&scn.bvhs[i]);
+  }
+
+  for(uint32_t i=0; i<MAT_CNT - 1; i++) {
+    uint8_t mat_type = i % 3;
     if(mat_type == 0) // Lambert
       mat_rand(&scn.materials[i]);
     else if(mat_type == 1) // Metal
@@ -145,6 +147,9 @@ void init(uint32_t width, uint32_t height)
     else if(mat_type == 3) // Emitter
       scn.materials[i] = (mat){ .color = (vec3){ 10.0f, 10.0f, 10.0f } };
   }
+
+  // Floor
+  mat_rand(&scn.materials[MAT_CNT - 1]);
 
   // Create GPU buffer
   gpu_create_res(buf_len(GLOB), buf_len(TRI), buf_len(INDEX),
@@ -165,7 +170,7 @@ void init(uint32_t width, uint32_t height)
 
 void update_scene(float time)
 {
-  uint32_t dim = (uint32_t)sqrtf(INST_CNT);
+  uint32_t dim = (uint32_t)sqrtf(INST_CNT - 1);
   for(uint32_t j=0; j<dim; j++) {
     for(uint32_t i=0; i<dim; i++) {
 
@@ -185,9 +190,15 @@ void update_scene(float time)
       mat4_mul(transform, translation, transform);
     
       inst_create(&scn.instances[cnt], cnt, transform,
-          &scn.bvhs[cnt % MESH_CNT], &scn.materials[cnt % MAT_CNT]);
+          &scn.bvhs[cnt % (MESH_CNT - 1)], &scn.materials[cnt % (MAT_CNT - 1)]);
     }
   }
+
+  // Floor
+  mat4 identity;
+  mat4_identity(identity);
+  inst_create(&scn.instances[dim * dim], dim * dim, identity,
+      &scn.bvhs[MESH_CNT - 1], &scn.materials[MAT_CNT - 1]);
 
   gathered_smpls = TEMPORAL_WEIGHT * config.spp;
 }
