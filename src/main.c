@@ -27,8 +27,8 @@
 #define MAT_TYPES       4
 
 uint32_t  gathered_smpls = 0;
-//vec3      bg_col = { 0.5f, 0.6f, 0.7f };
-vec3      bg_col = { 0.005f, 0.006f, 0.007f };
+vec3      bg_col = { 0.5f, 0.6f, 0.7f };
+//vec3      bg_col = { 0.005f, 0.006f, 0.007f };
 
 bool      orbit_cam = false;
 bool      paused = false;
@@ -126,7 +126,7 @@ void init(uint32_t width, uint32_t height)
   scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
   
   scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
-  cam_set(&scn.cam, (vec3){ 0.0f, 0.0f, -7.5f }, (vec3){ 0.0f, 0.0f, 2.0f });
+  cam_set(&scn.cam, (vec3){ 0.0f, 3.0f, 12.5f }, (vec3){ 0.0f, 0.0f, -2.0f });
 
   mesh_read_bin(&scn.meshes[0], dragon);
   bvh_init(&scn.bvhs[0], scn.meshes[0].tri_cnt);
@@ -137,7 +137,7 @@ void init(uint32_t width, uint32_t height)
   bvh_build(&scn.bvhs[1], scn.meshes[1].tris, scn.meshes[1].tri_cnt);
 
   for(uint32_t i=0; i<MAT_CNT; i++) {
-    uint8_t mat_type = i % MAT_TYPES;
+    uint8_t mat_type = i % (MAT_TYPES - 1);
     if(mat_type == LAMBERT)
       mat_rand(&scn.materials[i]);
     else if(mat_type == METAL)
@@ -181,7 +181,11 @@ void update_scene(float time)
       mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
       
       mat4 translation;
-      mat4_trans(translation, (vec3){ i * 1.5f - (float)dim / 1.5f, 0.0f, j * 1.5f - (float)dim / 1.5f });
+#define SPACE 2.0f
+      mat4_trans(translation, (vec3){
+          i * SPACE - (float)dim / 2.0f * SPACE + SPACE / 2.0f,
+          0.0f,
+          j * SPACE - (float)dim / 2.0f * SPACE + SPACE / 2.0f });
 
       mat4 transform;
       mat4_mul(transform, rot, scale);
@@ -189,7 +193,7 @@ void update_scene(float time)
     
       inst_create(&scn.instances[cnt], cnt, transform,
           &scn.meshes[cnt % MESH_CNT], &scn.bvhs[cnt % MESH_CNT],
-          cnt % MAT_TYPES, &scn.materials[cnt % MAT_CNT]);
+          cnt % (MAT_TYPES - 1), &scn.materials[cnt % MAT_CNT]);
     }
   }
 
