@@ -21,7 +21,7 @@
 #include "dragon.h"
 
 #define TRI_CNT         (1024 + 19332 + 2)
-//#define TRI_CNT         (20 + 20 + 2)
+//#define TRI_CNT         (320 + 20 + 2)
 #define MESH_CNT        3
 #define INST_CNT        37
 #define MAT_CNT         37
@@ -128,10 +128,10 @@ void init(uint32_t width, uint32_t height)
   cam_set(&scn.cam, (vec3){ 0.0f, 3.0f, 12.5f }, (vec3){ 0.0f, 0.0f, -2.0f });
 
   // Meshes load or generate
-  mesh_read(&scn.meshes[0], dragon);
-  //mesh_make_icosahedron(&scn.meshes[0]);
-  mesh_read(&scn.meshes[1], teapot);
-  //mesh_make_icosahedron(&scn.meshes[1]);
+  //mesh_read(&scn.meshes[0], dragon);
+  mesh_make_icosphere(&scn.meshes[0], 2, false);
+  //mesh_read(&scn.meshes[1], teapot);
+  mesh_make_icosphere(&scn.meshes[1], 0, true);
   mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -1.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 12.0f, 12.0f);
 
   for(uint32_t i=0; i<MESH_CNT; i++) {
@@ -183,8 +183,8 @@ void update_scene(float time)
       mat4_rot_y(rot, 1.412f * cnt + time * 0.8f);
 
       mat4 scale;
-      mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
-      //mat4_identity(scale);
+      //mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
+      mat4_identity(scale);
       
       mat4 translation;
 #define SPACE 2.0f
@@ -219,8 +219,8 @@ void update(float time)
   if(orbit_cam) {
     float s = 0.5f;
     float r = 8.0f;
-    float h = 7.0f;
-    vec3 pos = (vec3){ r * sinf(time * s * s), h * sinf(time * s * 0.7f), r * cosf(time * s) };
+    float h = 3.0f;
+    vec3 pos = (vec3){ r * sinf(time * s * s), h + h * sinf(time * s * 0.7f), r * cosf(time * s) };
     cam_set(&scn.cam, pos, vec3_neg(pos));
     update_cam_view();
   }

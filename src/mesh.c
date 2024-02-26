@@ -3,7 +3,6 @@
 #include "mutil.h"
 #include "buf.h"
 #include "tri.h"
-#include "log.h"
 
 void mesh_init(mesh *m, uint32_t tri_cnt)
 {
@@ -102,7 +101,7 @@ void mesh_make_quad(mesh *m, vec3 pos, vec3 nrm, float w, float h)
   m->centers[1] = tri_calc_center(tri);
 }
 
-void mesh_make_icosahedron(mesh *m)
+void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals)
 {
   float phi = 0.5f * (1.0f + sqrtf(5.0f));
 
@@ -126,7 +125,7 @@ void mesh_make_icosahedron(mesh *m)
   for(uint8_t i=0; i<12; i++)
     verts[i] = vec3_unit(verts[i]);
 
-  mesh_init(m, 20);
+  mesh_init(m, 20 * (1 << (2 * steps)));
 
   m->tris[ 0] = (tri){ .v0 = verts[ 0], .v1 = verts[11], .v2 = verts[ 5] };
   m->tris[ 1] = (tri){ .v0 = verts[ 0], .v1 = verts[ 5], .v2 = verts[ 1] };
@@ -152,15 +151,47 @@ void mesh_make_icosahedron(mesh *m)
   m->tris[18] = (tri){ .v0 = verts[ 8], .v1 = verts[ 6], .v2 = verts[ 7] };
   m->tris[19] = (tri){ .v0 = verts[ 9], .v1 = verts[ 8], .v2 = verts[ 1] };
 
-  for(uint8_t i=0; i<20; i++) {
-    tri *t = &m->tris[i];
+  // Alloc temp tri buffer for last but one subdiv level
+  tri *temp_tris = (steps > 0) ? malloc(20 * (1 << (2 * (steps - 1))) * sizeof(*temp_tris)) : NULL;
+
+  // Subdivide
+  for(uint8_t j=0; j<steps; j++)
+  {
+    uint32_t curr_tri_cnt = 20 * (1 << (2 * j)); 
     
+    memcpy(temp_tris, m->tris, curr_tri_cnt * sizeof(*temp_tris));
+
+    for(uint32_t i=0; i<curr_tri_cnt; i++) {
+      tri *t = &temp_tris[i];
+      vec3 a = vec3_unit(vec3_scale(vec3_add(t->v0, t->v1), 0.5f));
+      vec3 b = vec3_unit(vec3_scale(vec3_add(t->v1, t->v2), 0.5f));
+      vec3 c = vec3_unit(vec3_scale(vec3_add(t->v2, t->v0), 0.5f));
+
+      uint32_t ofs = 4 * i;
+      m->tris[ofs + 0] = (tri){ .v0 = t->v0, .v1 =     a, .v2 =     c };
+      m->tris[ofs + 1] = (tri){ .v0 =     a, .v1 = t->v1, .v2 =     b };
+      m->tris[ofs + 2] = (tri){ .v0 =     c, .v1 =     b, .v2 = t->v2 };
+      m->tris[ofs + 3] = (tri){ .v0 =     a, .v1 =     b, .v2 =     c };
+    }
+  }
+
+  free(temp_tris);
+
+  // Centers, normals and uvs
+  for(uint32_t i=0; i<m->tri_cnt; i++) {
+    tri *t = &m->tris[i];
     m->centers[i] = tri_calc_center(t);
 
-    vec3 n = vec3_unit(m->centers[i]); // Face normal
-    t->n0 = n;
-    t->n1 = n;
-    t->n2 = n;
+    if(face_normals) {
+      vec3 n = vec3_unit(m->centers[i]);
+      t->n0 = n;
+      t->n1 = n;
+      t->n2 = n;
+    } else {
+      t->n0 = t->v0;
+      t->n1 = t->v1;
+      t->n2 = t->v2;
+    }
     
     t->uv0[0] = asinf(t->v0.x) / PI + 0.5f;
     t->uv0[1] = asinf(t->v0.y) / PI + 0.5f;
