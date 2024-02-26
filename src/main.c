@@ -120,12 +120,12 @@ void init(uint32_t width, uint32_t height)
 
   buf_acquire(GLOB, GLOB_BUF_SIZE);
   
-  config = (cfg){ width, height, 5, 5 };
+  config = (cfg){ width, height, 2, 5 };
   
   scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
   
   scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
-  cam_set(&scn.cam, (vec3){ 0.0f, 3.0f, 7.5f }, (vec3){ 0.0f, 0.0f, -2.0f });
+  cam_set(&scn.cam, (vec3){ 0.0f, 3.0f, 12.5f }, (vec3){ 0.0f, 0.0f, -2.0f });
 
   // Meshes load or generate
   mesh_read(&scn.meshes[0], dragon);
@@ -137,7 +137,6 @@ void init(uint32_t width, uint32_t height)
   for(uint32_t i=0; i<MESH_CNT; i++) {
     bvh_init(&scn.bvhs[i], &scn.meshes[i]);
     bvh_build(&scn.bvhs[i]);
-    log("bvh node count: %d", scn.bvhs[i].node_cnt);
   }
 
   for(uint32_t i=0; i<MAT_CNT - 1; i++) {
@@ -184,7 +183,7 @@ void update_scene(float time)
       mat4_rot_y(rot, 1.412f * cnt + time * 0.8f);
 
       mat4 scale;
-      mat4_scale(scale, (cnt % 2 == 1) ? 1.3f : 0.016f);
+      mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
       //mat4_identity(scale);
       
       mat4 translation;
