@@ -3,6 +3,7 @@
 #include "mutil.h"
 #include "buf.h"
 #include "tri.h"
+#include "log.h"
 
 void mesh_init(mesh *m, uint32_t tri_cnt)
 {
@@ -119,7 +120,7 @@ void mesh_make_icosahedron(mesh *m)
     {  phi, 0.0f, -1.0f },
     {  phi, 0.0f,  1.0f },
     { -phi, 0.0f, -1.0f },
-    { -phi, 0.0f,  1.0f },
+    { -phi, 0.0f,  1.0f }
   };
 
   for(uint8_t i=0; i<12; i++)
@@ -154,13 +155,19 @@ void mesh_make_icosahedron(mesh *m)
   for(uint8_t i=0; i<20; i++) {
     tri *t = &m->tris[i];
     
-    t->n0 = t->v0;
-    t->n1 = t->v1;
-    t->n2 = t->v2;
-    
-    // TODO uvs
-
     m->centers[i] = tri_calc_center(t);
+
+    vec3 n = vec3_unit(m->centers[i]); // Face normal
+    t->n0 = n;
+    t->n1 = n;
+    t->n2 = n;
+    
+    t->uv0[0] = asinf(t->v0.x) / PI + 0.5f;
+    t->uv0[1] = asinf(t->v0.y) / PI + 0.5f;
+    t->uv1[0] = asinf(t->v1.x) / PI + 0.5f;
+    t->uv1[1] = asinf(t->v1.y) / PI + 0.5f;
+    t->uv2[0] = asinf(t->v2.x) / PI + 0.5f;
+    t->uv2[1] = asinf(t->v2.y) / PI + 0.5f;
   }
 }
 

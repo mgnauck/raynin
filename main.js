@@ -53,6 +53,7 @@ function Wasm(module)
     sinf: (v) => Math.sin(v),
     cosf: (v) => Math.cos(v),
     tanf: (v) => Math.tan(v),
+    asinf: (v) => Math.asin(v),
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
     powf: (b, e) => Math.pow(b, e),

@@ -21,6 +21,7 @@
 #include "dragon.h"
 
 #define TRI_CNT         (1024 + 19332 + 2)
+//#define TRI_CNT         (20 + 20 + 2)
 #define MESH_CNT        3
 #define INST_CNT        37
 #define MAT_CNT         37
@@ -128,13 +129,15 @@ void init(uint32_t width, uint32_t height)
 
   // Meshes load or generate
   mesh_read(&scn.meshes[0], dragon);
-  //mesh_read(&scn.meshes[1], teapot);
-  mesh_make_icosahedron(&scn.meshes[1]);
-  mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -0.5f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 50.0f, 10.0f);
+  //mesh_make_icosahedron(&scn.meshes[0]);
+  mesh_read(&scn.meshes[1], teapot);
+  //mesh_make_icosahedron(&scn.meshes[1]);
+  mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -1.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 12.0f, 12.0f);
 
   for(uint32_t i=0; i<MESH_CNT; i++) {
     bvh_init(&scn.bvhs[i], &scn.meshes[i]);
     bvh_build(&scn.bvhs[i]);
+    log("bvh node count: %d", scn.bvhs[i].node_cnt);
   }
 
   for(uint32_t i=0; i<MAT_CNT - 1; i++) {
@@ -181,13 +184,18 @@ void update_scene(float time)
       mat4_rot_y(rot, 1.412f * cnt + time * 0.8f);
 
       mat4 scale;
-      //mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
-      mat4_scale(scale, (cnt % 2 == 1) ? 1.0f : 0.008f);
+      mat4_scale(scale, (cnt % 2 == 1) ? 1.3f : 0.016f);
+      //mat4_identity(scale);
       
       mat4 translation;
-      mat4_trans(translation, (vec3){ i * 1.5f - (float)dim / 1.5f, 0.0f, j * 1.5f - (float)dim / 1.5f });
+#define SPACE 2.0f
+      mat4_trans(translation, (vec3){
+          i * SPACE - dim * SPACE / 2.0f + SPACE / 2.0f,
+          0.0f,
+          j * SPACE - dim * SPACE / 2.0f + SPACE / 2.0f });
 
       mat4 transform;
+      //mat4_identity(transform);
       mat4_mul(transform, rot, scale);
       mat4_mul(transform, translation, transform);
     
@@ -199,7 +207,7 @@ void update_scene(float time)
   // Floor
   mat4 identity;
   mat4_identity(identity);
-  inst_create(&scn.instances[dim * dim], dim * dim, identity,
+  inst_create(&scn.instances[INST_CNT - 1], INST_CNT - 1, identity,
       &scn.bvhs[MESH_CNT - 1], &scn.materials[MAT_CNT - 1]);
 
   gathered_smpls = TEMPORAL_WEIGHT * config.spp;
