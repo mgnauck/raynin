@@ -20,11 +20,23 @@
 #include "teapot.h"
 #include "dragon.h"
 
-#define TRI_CNT         (1024 + 19332 + 2)
-//#define TRI_CNT         (320 + 20 + 2)
-#define MESH_CNT        3
-#define INST_CNT        37
-#define MAT_CNT         37
+// TEST SCENE
+/*
+//#define TRI_CNT         (1024 + 19332 + 2) // dragon/teapot
+#define TRI_CNT           (320 + 20 + 2) // icospheres
+#define MESH_CNT          3 // icospheres
+#define INST_CNT          37 // dragon/teapot/icospheres
+#define MAT_CNT           37 // dragon/teapot/icospheres
+//*/
+
+// RIOW
+//*
+#define RIOW_SIZE         22
+#define TRI_CNT           1280 + 2
+#define MESH_CNT          2
+#define INST_CNT          (RIOW_SIZE * RIOW_SIZE + 4)
+#define MAT_CNT           INST_CNT
+//*/
 
 uint32_t  gathered_smpls = 0;
 vec3      bg_col = { 0.5f, 0.6f, 0.7f };
@@ -103,6 +115,110 @@ void mouse_move(int32_t dx, int32_t dy)
   update_cam_view();
 }
 
+void init_scene()
+{
+  scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
+  
+  scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
+  cam_set(&scn.cam, (vec3){ 0.0f, 3.0f, 12.5f }, (vec3){ 0.0f, 0.0f, -2.0f });
+
+  // Meshes load or generate
+  //mesh_read(&scn.meshes[0], dragon); // dragon/teapot
+  //mesh_read(&scn.meshes[1], teapot);
+  mesh_make_icosphere(&scn.meshes[0], 2, false); // icospheres
+  mesh_make_icosphere(&scn.meshes[1], 0, true);
+  mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -1.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 12.0f, 12.0f);
+
+  for(uint32_t i=0; i<MESH_CNT; i++) {
+    bvh_init(&scn.bvhs[i], &scn.meshes[i]);
+    bvh_build(&scn.bvhs[i]);
+  }
+
+  // icospheres
+  for(uint32_t i=0; i<MAT_CNT - 1; i++) {
+    uint8_t mat_type = i % 3;
+    if(mat_type == 0) // Lambert
+      mat_rand(&scn.materials[i]);
+    else if(mat_type == 1) // Metal
+      scn.materials[i] = (mat){ .color = (vec3){ 0.75f, 0.75f, 0.75f }, .value = 0.001f };
+    else if(mat_type == 2) // Dielectric
+      scn.materials[i] = (mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.33f };
+    else if(mat_type == 3) // Emitter
+      scn.materials[i] = (mat){ .color = (vec3){ 10.0f, 10.0f, 10.0f } };
+  }
+
+  // Floor
+  mat_rand(&scn.materials[MAT_CNT - 1]); 
+}
+
+void init_scene_riow()
+{
+  scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
+
+  scn.cam = (cam){ .vert_fov = 20.0f, .foc_dist = 10.0f, .foc_angle = 0.6f };
+  cam_set(&scn.cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+
+  // Mesh
+  mesh_make_icosphere(&scn.meshes[0], 3, false);
+  bvh_init(&scn.bvhs[0], &scn.meshes[0]);
+  bvh_build(&scn.bvhs[0]);
+
+  mesh_make_quad(&scn.meshes[1], (vec3){ 0.0f, 0.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
+  bvh_init(&scn.bvhs[1], &scn.meshes[1]);
+  bvh_build(&scn.bvhs[1]);
+ 
+  mat4 scale, translation, transform;
+
+  uint32_t n = 0;
+
+  // Instances
+  /*mat4_scale(scale, 10.0f);
+  mat4_trans(translation, (vec3){ 0.0f, -10.0f, 0.0f });
+  mat4_mul(transform, translation, scale);
+  scn.materials[n] = (mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f };
+  inst_create(&scn.instances[n], n, transform, &scn.bvhs[0], &scn.materials[n]);*/
+  mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
+  scn.materials[n] = (mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f };
+  inst_create(&scn.instances[n], n, translation, &scn.bvhs[1], &scn.materials[n]);
+  n++;
+
+  mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
+  scn.materials[n] = (mat){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f };
+  inst_create(&scn.instances[n], n, translation, &scn.bvhs[0], &scn.materials[n]);
+  n++;
+
+  mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
+  scn.materials[n] = (mat){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f };
+  inst_create(&scn.instances[n], n, translation, &scn.bvhs[0], &scn.materials[n]);
+  n++;
+
+  mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
+  scn.materials[n] = (mat){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f };
+  inst_create(&scn.instances[n], n, translation, &scn.bvhs[0], &scn.materials[n]);
+  n++;
+
+  for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
+    for(int b=-RIOW_SIZE/2; b<RIOW_SIZE/2; b++) {
+      float mat_p = pcg_randf();
+      vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
+      if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
+        if(mat_p < 0.8f)
+          scn.materials[n] = (mat){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f };
+        else if(mat_p < 0.95f)
+          scn.materials[n] = (mat){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) };
+        else
+          scn.materials[n] = (mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f };
+        
+        mat4_scale(scale, 0.2f);
+        mat4_trans(translation, center);
+        mat4_mul(transform, translation, scale);
+        inst_create(&scn.instances[n], n, transform, &scn.bvhs[0], &scn.materials[n]);
+        n++;
+      }
+    }
+  }
+}
+
 __attribute__((visibility("default")))
 void init(uint32_t width, uint32_t height)
 {
@@ -121,38 +237,9 @@ void init(uint32_t width, uint32_t height)
   buf_acquire(GLOB, GLOB_BUF_SIZE);
   
   config = (cfg){ width, height, 2, 5 };
-  
-  scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
-  
-  scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
-  cam_set(&scn.cam, (vec3){ 0.0f, 3.0f, 12.5f }, (vec3){ 0.0f, 0.0f, -2.0f });
 
-  // Meshes load or generate
-  //mesh_read(&scn.meshes[0], dragon);
-  mesh_make_icosphere(&scn.meshes[0], 2, false);
-  //mesh_read(&scn.meshes[1], teapot);
-  mesh_make_icosphere(&scn.meshes[1], 0, true);
-  mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -1.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 12.0f, 12.0f);
-
-  for(uint32_t i=0; i<MESH_CNT; i++) {
-    bvh_init(&scn.bvhs[i], &scn.meshes[i]);
-    bvh_build(&scn.bvhs[i]);
-  }
-
-  for(uint32_t i=0; i<MAT_CNT - 1; i++) {
-    uint8_t mat_type = i % 3;
-    if(mat_type == 0) // Lambert
-      mat_rand(&scn.materials[i]);
-    else if(mat_type == 1) // Metal
-      scn.materials[i] = (mat){ .color = (vec3){ 0.75f, 0.75f, 0.75f }, .value = 0.001f };
-    else if(mat_type == 2) // Dielectric
-      scn.materials[i] = (mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.33f };
-    else if(mat_type == 3) // Emitter
-      scn.materials[i] = (mat){ .color = (vec3){ 10.0f, 10.0f, 10.0f } };
-  }
-
-  // Floor
-  mat_rand(&scn.materials[MAT_CNT - 1]);
+  //init_scene();
+  init_scene_riow();
 
   // Create GPU buffer
   gpu_create_res(buf_len(GLOB), buf_len(TRI), buf_len(INDEX),
@@ -226,7 +313,7 @@ void update(float time)
   }
  
   if(!paused) {
-    update_scene(time);
+    //update_scene(time);
 
     // Build tlas
     tlas_build(scn.tlas_nodes, scn.instances, INST_CNT);

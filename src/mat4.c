@@ -197,4 +197,3 @@ bool mat4_inv(mat4 d, const mat4 m)
 
   return true;
 }
-
