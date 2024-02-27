@@ -1,6 +1,7 @@
 #include "mat4.h"
 #include <stdint.h>
 #include "mutil.h"
+#include "log.h"
 
 void mat4_identity(mat4 d)
 {
@@ -196,4 +197,10 @@ bool mat4_inv(mat4 d, const mat4 m)
     d[i] = inv[i] * det;
 
   return true;
+}
+
+void mat4_log(mat4 m)
+{
+  for(uint8_t i=0; i<4; i++)
+    log("%6.3f %6.3f %6.3f %6.3f", m[4 * i], m[4 * i + 1], m[4 * i + 2], m[4 * i + 3]); 
 }
