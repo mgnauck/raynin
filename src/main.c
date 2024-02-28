@@ -19,6 +19,7 @@
 // data
 #include "teapot.h"
 #include "dragon.h"
+#include "icosahedron.h"
 
 // TEST SCENE
 /*
@@ -160,6 +161,7 @@ void init_scene_riow()
 
   // Mesh
   mesh_make_icosphere(&scn.meshes[0], 3, false);
+  //mesh_read(&scn.meshes[0], icosahedron);
   bvh_init(&scn.bvhs[0], &scn.meshes[0]);
   bvh_build(&scn.bvhs[0]);
 
