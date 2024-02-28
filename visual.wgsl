@@ -92,7 +92,7 @@ struct Hit
   id: u32,          // (tri id << 16) | (inst id & 0xffff)
 }
 
-const EPSILON = 0.001;
+const EPSILON = 0.0001;
 const PI = 3.141592;
 const MAX_DISTANCE = 3.402823466e+38;
 
@@ -438,7 +438,7 @@ fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr
   let inst = &instances[h.id & 0xffff];
   let mat = materials[(*inst).id >> 16];
 
-  if(maxComp(mat.color) > 1.0) {
+  if(any(mat.color > vec3f(1.0))) {
     *emission = mat.color;
     return false;
   } else if(mat.value > 1.0) {
@@ -501,7 +501,7 @@ fn createPrimaryRay(pixelPos: vec2f) -> Ray
 @compute @workgroup_size(8,8)
 fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 {
-  if(all(globalId.xy >= vec2u(globals.width, globals.height))) {
+  if(any(globalId.xy >= vec2u(globals.width, globals.height))) {
     return;
   }
 

@@ -172,11 +172,6 @@ void init_scene_riow()
   uint32_t n = 0;
 
   // Instances
-  /*mat4_scale(scale, 10.0f);
-  mat4_trans(translation, (vec3){ 0.0f, -10.0f, 0.0f });
-  mat4_mul(transform, translation, scale);
-  scn.materials[n] = (mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f };
-  inst_create(&scn.instances[n], n, transform, &scn.bvhs[0], &scn.materials[n]);*/
   mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
   scn.materials[n] = (mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f };
   inst_create(&scn.instances[n], n, translation, &scn.bvhs[1], &scn.materials[n]);
