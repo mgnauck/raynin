@@ -45,11 +45,11 @@ struct Tri
   pad4: f32,
   n2: vec3f,
   pad5: f32,
-  uv0: vec2f,
+  /*uv0: vec2f,
   uv1: vec2f,
   uv2: vec2f,
   pad6: f32,
-  pad7: f32
+  pad7: f32*/
 }
 
 struct BvhNode

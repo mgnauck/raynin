@@ -17,9 +17,9 @@
 #include "log.h"
 
 // data
-#include "teapot.h"
-#include "dragon.h"
-#include "icosahedron.h"
+#include "data/teapot.h"
+#include "data/dragon.h"
+#include "data/icosahedron.h"
 
 // TEST SCENE
 /*
@@ -160,6 +160,7 @@ void init_scene_riow()
   cam_set(&scn.cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   // Mesh
+  //mesh_make_uvsphere(&scn.meshes[0], 20, 20, false);
   mesh_make_icosphere(&scn.meshes[0], 3, false);
   //mesh_read(&scn.meshes[0], icosahedron);
   bvh_init(&scn.bvhs[0], &scn.meshes[0]);
@@ -302,9 +303,9 @@ void update(float time)
   // Orbit cam
   if(orbit_cam) {
     float s = 0.5f;
-    float r = 8.0f;
-    float h = 3.0f;
-    vec3 pos = (vec3){ r * sinf(time * s * s), h + h * sinf(time * s * 0.7f), r * cosf(time * s) };
+    float r = 16.0f;
+    float h = 2.0f;
+    vec3 pos = (vec3){ r * sinf(time * s * s), 0.2f + h + h * sinf(time * s * 0.7f), r * cosf(time * s) };
     cam_set(&scn.cam, pos, vec3_neg(pos));
     update_cam_view();
   }

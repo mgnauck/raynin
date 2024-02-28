@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #define TEMPORAL_WEIGHT 0.1f
+//#define TEXTURE_SUPPORT
 
 typedef struct cfg {
   uint32_t  width;

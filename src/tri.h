@@ -2,6 +2,7 @@
 #define TRI_H
 
 #include "vec3.h"
+#include "cfg.h" // TEXTURE_SUPPORT flag
 
 typedef struct tri {
   vec3 v0;
@@ -16,11 +17,13 @@ typedef struct tri {
   float pad4;
   vec3  n2;
   float pad5;
+#ifdef TEXTURE_SUPPORT
   float uv0[2];
   float uv1[2];
   float uv2[2];
   float pad6;
   float pad7;
+#endif
 } tri;
 
 vec3 tri_calc_center(tri *t);

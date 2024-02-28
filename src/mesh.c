@@ -3,6 +3,7 @@
 #include "mutil.h"
 #include "buf.h"
 #include "tri.h"
+#include "cfg.h" // TEXTURE_SUPPORT flag
 
 void mesh_init(mesh *m, uint32_t tri_cnt)
 {
@@ -50,13 +51,13 @@ void mesh_read(mesh *m, const uint8_t *data)
     memcpy(&t->v0, &vertices[3 * indices[index]], sizeof(t->v0));
     memcpy(&t->v1, &vertices[3 * indices[index + items]], sizeof(t->v1));
     memcpy(&t->v2, &vertices[3 * indices[index + items + items]], sizeof(t->v2));
-
+#ifdef TEXTURE_SUPPORT
     if(uv_cnt > 0 ) {
       memcpy(t->uv0, &uvs[2 * indices[index + 1]], 2 * sizeof(*t->uv0));
       memcpy(t->uv1, &uvs[2 * indices[index + items + 1]], 2 * sizeof(*t->uv1));
       memcpy(t->uv2, &uvs[2 * indices[index + items + items + 1]], 2 * sizeof(*t->uv2));
     }
-    
+#endif
     if(normal_cnt > 0) {
       memcpy(&t->n0, &normals[3 * indices[index + 2]], sizeof(t->n0));
       memcpy(&t->n1, &normals[3 * indices[index + items + 2]], sizeof(t->n1));
@@ -85,9 +86,11 @@ void mesh_make_quad(mesh *m, vec3 pos, vec3 nrm, float w, float h)
   tri->v1 = vec3_add(vec3_sub(pos, t), b);
   tri->v2 = vec3_add(vec3_add(pos, t), b);
   tri->n0 = tri->n1 = tri->n2 = nrm;
+#ifdef TEXTURE_SUPPORT
   tri->uv0[0] = 0.0f; tri->uv0[1] = 0.0f;
   tri->uv1[0] = 0.0f; tri->uv1[1] = 1.0f;
   tri->uv2[0] = 1.0f; tri->uv2[1] = 1.0f;
+#endif
   m->centers[0] = tri_calc_center(tri);
 
   tri = &m->tris[1];
@@ -95,10 +98,78 @@ void mesh_make_quad(mesh *m, vec3 pos, vec3 nrm, float w, float h)
   tri->v1 = vec3_add(vec3_add(pos, t), b);
   tri->v2 = vec3_sub(vec3_add(pos, t), b);
   tri->n0 = tri->n1 = tri->n2 = nrm;
+#ifdef TEXTURE_SUPPORT
   tri->uv0[0] = 0.0f; tri->uv0[1] = 0.0f;
   tri->uv1[0] = 1.0f; tri->uv1[1] = 1.0f;
   tri->uv2[0] = 1.0f; tri->uv2[1] = 0.0f;
+#endif
   m->centers[1] = tri_calc_center(tri);
+}
+
+void mesh_make_uvsphere(mesh *m, uint32_t subx, uint32_t suby, bool face_normals)
+{
+  mesh_init(m, 2 * subx * suby);
+
+  float dphi = 2 * PI / subx;
+  float dtheta = PI / suby;
+
+  float theta = 0.0f;
+  for(uint32_t j=0; j<suby; j++) {
+    float phi = 0.0f;
+    for(uint32_t i=0; i<subx; i++) {
+      uint32_t ofs = 2 * (subx * j + i);
+
+      vec3 a = vec3_spherical(theta, phi);
+      vec3 b = vec3_spherical(theta + dtheta, phi);
+      vec3 c = vec3_spherical(theta + dtheta, phi + dphi);
+      vec3 d = vec3_spherical(theta, phi + dphi);
+
+      tri *t1 = &m->tris[ofs];
+      *t1 = (tri){ .v0 = a, .v1 = b, .v2 = c,
+#ifdef TEXTURE_SUPPORT
+        .uv0[0] = phi / 2.0f * PI, .uv0[1] = theta / PI,
+        .uv1[0] = phi / 2.0f * PI, .uv1[1] = (theta + dtheta) / PI,
+        .uv2[0] = (phi + dphi) / 2.0f * PI, .uv2[1] = (theta + dtheta) / PI,
+#endif
+      };
+      
+      m->centers[ofs] = tri_calc_center(t1);
+      
+      if(face_normals) {
+        t1->n0 = vec3_unit(m->centers[ofs]);
+        t1->n1 = t1->n0;
+        t1->n2 = t1->n0;
+      } else {
+        t1->n0 = a;
+        t1->n1 = b;
+        t1->n2 = c;
+      }
+
+      tri *t2 = &m->tris[ofs + 1];
+      *t2 = (tri){ .v0 = a, .v1 = c, .v2 = d,
+#ifdef TEXTURE_SUPPORT
+        .uv0[0] = t1->uv0[0], .uv0[1] = t1->uv0[1],
+        .uv1[0] = t1->uv2[0], .uv1[1] = t1->uv2[1],
+        .uv2[0] = t1->uv2[0], .uv2[1] = t1->uv0[1],
+#endif
+      };
+      
+      m->centers[ofs + 1] = tri_calc_center(t2);
+      
+      if(face_normals) {
+        t2->n0 = vec3_unit(m->centers[ofs + 1]);
+        t2->n1 = t2->n0;
+        t2->n2 = t2->n0;
+      } else {
+        t2->n0 = a;
+        t2->n1 = c;
+        t2->n2 = d;
+      }
+
+      phi += dphi;
+    }
+    theta += dtheta;
+  }
 }
 
 void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals)
@@ -165,7 +236,6 @@ void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals)
   for(uint32_t i=0; i<m->tri_cnt; i++) {
     tri *t = &m->tris[i];
     m->centers[i] = tri_calc_center(t);
-
     if(face_normals) {
       vec3 n = vec3_unit(m->centers[i]);
       t->n0 = n;
@@ -176,13 +246,14 @@ void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals)
       t->n1 = t->v1;
       t->n2 = t->v2;
     }
-    
+#ifdef TEXTURE_SUPPORT
     t->uv0[0] = asinf(t->v0.x) / PI + 0.5f;
     t->uv0[1] = asinf(t->v0.y) / PI + 0.5f;
     t->uv1[0] = asinf(t->v1.x) / PI + 0.5f;
     t->uv1[1] = asinf(t->v1.y) / PI + 0.5f;
     t->uv2[0] = asinf(t->v2.x) / PI + 0.5f;
     t->uv2[1] = asinf(t->v2.y) / PI + 0.5f;
+#endif
   }
 }
 
