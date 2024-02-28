@@ -40,7 +40,7 @@
 //*/
 
 uint32_t  gathered_smpls = 0;
-vec3      bg_col = { 0.5f, 0.6f, 0.7f };
+vec3      bg_col = { 0.7f, 0.8f, 1.0f };
 //vec3      bg_col = { 0.005f, 0.006f, 0.007f };
 
 bool      orbit_cam = false;
