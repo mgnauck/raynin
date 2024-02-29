@@ -160,9 +160,9 @@ void init_scene_riow()
   cam_set(&scn.cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   // Mesh
-  mesh_make_uvsphere(&scn.meshes[0], 1.25f, 20, 20, false);
-  //mesh_make_uvcylinder(&scn.meshes[0], 1.0f, 1.0f, 20, 20, false);
-  //mesh_make_icosphere(&scn.meshes[0], 3, false);
+  mesh_make_uvsphere(&scn.meshes[0], 1.0f, 20, 20, false);
+  //mesh_make_uvcylinder(&scn.meshes[0], 1.0f, 2.0f, 20, 4, false);
+  //mesh_make_icosphere(&scn.meshes[0], 3, true);
   //mesh_read(&scn.meshes[0], icosahedron);
   bvh_init(&scn.bvhs[0], &scn.meshes[0]);
   bvh_build(&scn.bvhs[0]);
