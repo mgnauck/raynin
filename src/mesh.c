@@ -106,72 +106,6 @@ void mesh_make_quad(mesh *m, vec3 pos, vec3 nrm, float w, float h)
   m->centers[1] = tri_calc_center(tri);
 }
 
-void mesh_make_uvsphere(mesh *m, uint32_t subx, uint32_t suby, bool face_normals)
-{
-  mesh_init(m, 2 * subx * suby);
-
-  float dphi = 2 * PI / subx;
-  float dtheta = PI / suby;
-
-  float theta = 0.0f;
-  for(uint32_t j=0; j<suby; j++) {
-    float phi = 0.0f;
-    for(uint32_t i=0; i<subx; i++) {
-      uint32_t ofs = 2 * (subx * j + i);
-
-      vec3 a = vec3_spherical(theta, phi);
-      vec3 b = vec3_spherical(theta + dtheta, phi);
-      vec3 c = vec3_spherical(theta + dtheta, phi + dphi);
-      vec3 d = vec3_spherical(theta, phi + dphi);
-
-      tri *t1 = &m->tris[ofs];
-      *t1 = (tri){ .v0 = a, .v1 = b, .v2 = c,
-#ifdef TEXTURE_SUPPORT
-        .uv0[0] = phi / 2.0f * PI, .uv0[1] = theta / PI,
-        .uv1[0] = phi / 2.0f * PI, .uv1[1] = (theta + dtheta) / PI,
-        .uv2[0] = (phi + dphi) / 2.0f * PI, .uv2[1] = (theta + dtheta) / PI,
-#endif
-      };
-      
-      m->centers[ofs] = tri_calc_center(t1);
-      
-      if(face_normals) {
-        t1->n0 = vec3_unit(m->centers[ofs]);
-        t1->n1 = t1->n0;
-        t1->n2 = t1->n0;
-      } else {
-        t1->n0 = a;
-        t1->n1 = b;
-        t1->n2 = c;
-      }
-
-      tri *t2 = &m->tris[ofs + 1];
-      *t2 = (tri){ .v0 = a, .v1 = c, .v2 = d,
-#ifdef TEXTURE_SUPPORT
-        .uv0[0] = t1->uv0[0], .uv0[1] = t1->uv0[1],
-        .uv1[0] = t1->uv2[0], .uv1[1] = t1->uv2[1],
-        .uv2[0] = t1->uv2[0], .uv2[1] = t1->uv0[1],
-#endif
-      };
-      
-      m->centers[ofs + 1] = tri_calc_center(t2);
-      
-      if(face_normals) {
-        t2->n0 = vec3_unit(m->centers[ofs + 1]);
-        t2->n1 = t2->n0;
-        t2->n2 = t2->n0;
-      } else {
-        t2->n0 = a;
-        t2->n1 = c;
-        t2->n2 = d;
-      }
-
-      phi += dphi;
-    }
-    theta += dtheta;
-  }
-}
-
 void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals)
 {
   mesh_init(m, 20 * (1 << (2 * steps)));
@@ -254,6 +188,143 @@ void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals)
     t->uv2[0] = asinf(t->v2.x) / PI + 0.5f;
     t->uv2[1] = asinf(t->v2.y) / PI + 0.5f;
 #endif
+  }
+}
+
+void mesh_make_uvsphere(mesh *m, float radius, uint32_t subx, uint32_t suby, bool face_normals)
+{
+  mesh_init(m, 2 * subx * suby);
+
+  float dphi = 2 * PI / subx;
+  float dtheta = PI / suby;
+  float inv_r = 1.0f / radius;
+
+  float theta = 0.0f;
+  for(uint32_t j=0; j<suby; j++) {
+    float phi = 0.0f;
+    for(uint32_t i=0; i<subx; i++) {
+      uint32_t ofs = 2 * (subx * j + i);
+
+      vec3 a = vec3_scale(vec3_spherical(theta, phi), radius);
+      vec3 b = vec3_scale(vec3_spherical(theta + dtheta, phi), radius);
+      vec3 c = vec3_scale(vec3_spherical(theta + dtheta, phi + dphi), radius);
+      vec3 d = vec3_scale(vec3_spherical(theta, phi + dphi), radius);
+
+      tri *t1 = &m->tris[ofs];
+      *t1 = (tri){ .v0 = a, .v1 = b, .v2 = c,
+#ifdef TEXTURE_SUPPORT
+        .uv0[0] = phi / 2.0f * PI, .uv0[1] = theta / PI,
+        .uv1[0] = phi / 2.0f * PI, .uv1[1] = (theta + dtheta) / PI,
+        .uv2[0] = (phi + dphi) / 2.0f * PI, .uv2[1] = (theta + dtheta) / PI,
+#endif
+      };
+      
+      m->centers[ofs] = tri_calc_center(t1);
+      
+      if(face_normals) {
+        t1->n0 = vec3_unit(m->centers[ofs]);
+        t1->n1 = t1->n0;
+        t1->n2 = t1->n0;
+      } else {
+        t1->n0 = vec3_scale(a, inv_r);
+        t1->n1 = vec3_scale(b, inv_r);
+        t1->n2 = vec3_scale(c, inv_r);
+      }
+
+      tri *t2 = &m->tris[ofs + 1];
+      *t2 = (tri){ .v0 = a, .v1 = c, .v2 = d,
+#ifdef TEXTURE_SUPPORT
+        .uv0[0] = t1->uv0[0], .uv0[1] = t1->uv0[1],
+        .uv1[0] = t1->uv2[0], .uv1[1] = t1->uv2[1],
+        .uv2[0] = t1->uv2[0], .uv2[1] = t1->uv0[1],
+#endif
+      };
+      
+      m->centers[ofs + 1] = tri_calc_center(t2);
+      
+      if(face_normals) {
+        t2->n0 = vec3_unit(m->centers[ofs + 1]);
+        t2->n1 = t2->n0;
+        t2->n2 = t2->n0;
+      } else {
+        t2->n0 = vec3_scale(a, inv_r);
+        t2->n1 = vec3_scale(c, inv_r);
+        t2->n2 = vec3_scale(d, inv_r);
+      }
+
+      phi += dphi;
+    }
+
+    theta += dtheta;
+  }
+}
+
+void mesh_make_uvcylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, bool face_normals)
+{
+  mesh_init(m, 2 * subx * suby);
+
+  float dphi = 2 * PI / subx;
+  float dtheta = height / suby;
+  float inv_r = 1.0f / radius;
+
+  float theta = 0.0f;
+  for(uint32_t j=0; j<suby; j++) {
+    float phi = 0.0f;
+    for(uint32_t i=0; i<subx; i++) {
+      uint32_t ofs = 2 * (subx * j + i);
+
+      // TODO
+      vec3 a = vec3_scale(vec3_spherical(theta, phi), radius);
+      vec3 b = vec3_scale(vec3_spherical(theta + dtheta, phi), radius);
+      vec3 c = vec3_scale(vec3_spherical(theta + dtheta, phi + dphi), radius);
+      vec3 d = vec3_scale(vec3_spherical(theta, phi + dphi), radius);
+
+      tri *t1 = &m->tris[ofs];
+      *t1 = (tri){ .v0 = a, .v1 = b, .v2 = c,
+#ifdef TEXTURE_SUPPORT
+        .uv0[0] = phi / 2.0f * PI, .uv0[1] = theta / height,
+        .uv1[0] = phi / 2.0f * PI, .uv1[1] = (theta + dtheta) / height,
+        .uv2[0] = (phi + dphi) / 2.0f * PI, .uv2[1] = (theta + dtheta) / height,
+#endif
+      };
+      
+      m->centers[ofs] = tri_calc_center(t1);
+      
+      if(face_normals) {
+        t1->n0 = vec3_unit(m->centers[ofs]); // TODO
+        t1->n1 = t1->n0;
+        t1->n2 = t1->n0;
+      } else {
+        t1->n0 = vec3_scale(a, inv_r); // TODO
+        t1->n1 = vec3_scale(b, inv_r);
+        t1->n2 = vec3_scale(c, inv_r);
+      }
+
+      tri *t2 = &m->tris[ofs + 1];
+      *t2 = (tri){ .v0 = a, .v1 = c, .v2 = d,
+#ifdef TEXTURE_SUPPORT
+        .uv0[0] = t1->uv0[0], .uv0[1] = t1->uv0[1],
+        .uv1[0] = t1->uv2[0], .uv1[1] = t1->uv2[1],
+        .uv2[0] = t1->uv2[0], .uv2[1] = t1->uv0[1],
+#endif
+      };
+      
+      m->centers[ofs + 1] = tri_calc_center(t2);
+      
+      if(face_normals) {
+        t2->n0 = vec3_unit(m->centers[ofs + 1]); // TODO
+        t2->n1 = t2->n0;
+        t2->n2 = t2->n0;
+      } else {
+        t2->n0 = vec3_scale(a, inv_r); // TODO
+        t2->n1 = vec3_scale(c, inv_r);
+        t2->n2 = vec3_scale(d, inv_r);
+      }
+
+      phi += dphi;
+    }
+
+    theta += dtheta;
   }
 }
 
