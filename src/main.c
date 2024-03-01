@@ -135,7 +135,6 @@ void init_scene()
     bvh_build(&scn.bvhs[i]);
   }
 
-  // icospheres
   for(uint32_t i=0; i<MAT_CNT - 1; i++) {
     uint8_t mat_type = i % 3;
     if(mat_type == 0) // Lambert
@@ -148,7 +147,6 @@ void init_scene()
       scn.materials[i] = (mat){ .color = (vec3){ 10.0f, 10.0f, 10.0f } };
   }
 
-  // Floor
   mat_rand(&scn.materials[MAT_CNT - 1]); 
 }
 
