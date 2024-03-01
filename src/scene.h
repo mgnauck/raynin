@@ -2,6 +2,7 @@
 #define SCENE_H
 
 #include <stdint.h>
+#include "mat4.h"
 #include "view.h"
 #include "cam.h"
 
@@ -12,11 +13,11 @@ typedef struct bvh bvh;
 typedef struct tlas_node tlas_node;
 
 typedef struct scene {
-  uint32_t    mesh_cnt;
+  uint16_t    mesh_cnt;
   mesh        *meshes;
-  uint32_t    inst_cnt;
+  uint16_t    inst_cnt;
   inst        *instances;
-  uint32_t    mat_cnt;
+  uint16_t    mat_cnt;
   mat         *materials;
   bvh         *bvhs;
   tlas_node   *tlas_nodes;
@@ -24,7 +25,14 @@ typedef struct scene {
   cam         cam;
 } scene;
 
-void scene_init(scene *scene, uint32_t mesh_cnt, uint32_t inst_cnt, uint32_t mat_cnt);
-void scene_release();
+void      scene_init(scene *scene, uint16_t mesh_cnt, uint16_t inst_cnt, uint16_t mat_cnt);
+
+uint16_t  scene_add_mat(scene *s, mat *material);
+void      scene_upd_mat(scene *s, uint16_t mat_id, mat *material);
+
+uint16_t  scene_add_inst(scene *s, const bvh *b, uint16_t mat_id, mat4 transform);
+void      scene_upd_inst(scene *s, uint16_t inst_id, const bvh *bvh, mat4 transform);
+
+void      scene_release();
 
 #endif

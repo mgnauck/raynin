@@ -31,8 +31,8 @@
 //*/
 
 // RIOW
-//*
 #define RIOW_SIZE         22
+//*
 #define TRI_CNT           1280 + 2
 #define MESH_CNT          2
 #define INST_CNT          (RIOW_SIZE * RIOW_SIZE + 4)
@@ -116,6 +116,8 @@ void mouse_move(int32_t dx, int32_t dy)
   update_cam_view();
 }
 
+void update_scene(float time);
+
 void init_scene()
 {
   scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
@@ -138,16 +140,18 @@ void init_scene()
   for(uint32_t i=0; i<MAT_CNT - 1; i++) {
     uint8_t mat_type = i % 3;
     if(mat_type == 0) // Lambert
-      mat_rand(&scn.materials[i]);
+      scene_add_mat(&scn, &(mat){ .color = vec3_rand(), .value = 0.0f });
     else if(mat_type == 1) // Metal
-      scn.materials[i] = (mat){ .color = (vec3){ 0.75f, 0.75f, 0.75f }, .value = 0.001f };
+      scene_add_mat(&scn, &(mat){ .color = (vec3){ 0.75f, 0.75f, 0.75f }, .value = 0.001f });
     else if(mat_type == 2) // Dielectric
-      scn.materials[i] = (mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.33f };
+      scene_add_mat(&scn, &(mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.33f });
     else if(mat_type == 3) // Emitter
-      scn.materials[i] = (mat){ .color = (vec3){ 10.0f, 10.0f, 10.0f } };
+      scene_add_mat(&scn, &(mat){ .color = (vec3){ 10.0f, 10.0f, 10.0f } });
   }
 
-  mat_rand(&scn.materials[MAT_CNT - 1]); 
+  scene_add_mat(&scn, &(mat){ .color = vec3_rand(), .value = 0.0f });
+
+  update_scene(0);
 }
 
 void init_scene_riow()
@@ -175,23 +179,23 @@ void init_scene_riow()
 
   // Instances
   mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
-  scn.materials[n] = (mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f };
-  inst_create(&scn.instances[n], n, translation, &scn.bvhs[1], &scn.materials[n]);
+  scene_add_mat(&scn, &(mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
+  scene_add_inst(&scn, &scn.bvhs[1], n, translation);
   n++;
 
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  scn.materials[n] = (mat){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f };
-  inst_create(&scn.instances[n], n, translation, &scn.bvhs[0], &scn.materials[n]);
+  scene_add_mat(&scn, &(mat){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  scene_add_inst(&scn, &scn.bvhs[0], n, translation);
   n++;
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  scn.materials[n] = (mat){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f };
-  inst_create(&scn.instances[n], n, translation, &scn.bvhs[0], &scn.materials[n]);
+  scene_add_mat(&scn, &(mat){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
+  scene_add_inst(&scn, &scn.bvhs[0], n, translation);
   n++;
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
-  scn.materials[n] = (mat){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f };
-  inst_create(&scn.instances[n], n, translation, &scn.bvhs[0], &scn.materials[n]);
+  scene_add_mat(&scn, &(mat){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f });
+  scene_add_inst(&scn, &scn.bvhs[0], n, translation);
   n++;
 
   for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
@@ -200,16 +204,16 @@ void init_scene_riow()
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
         if(mat_p < 0.8f)
-          scn.materials[n] = (mat){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f };
+          scene_add_mat(&scn, &(mat){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f });
         else if(mat_p < 0.95f)
-          scn.materials[n] = (mat){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) };
+          scene_add_mat(&scn, &(mat){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) });
         else
-          scn.materials[n] = (mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f };
+          scene_add_mat(&scn, &(mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f });
         
         mat4_scale(scale, 0.2f);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        inst_create(&scn.instances[n], n, transform, &scn.bvhs[0], &scn.materials[n]);
+        scene_add_inst(&scn, &scn.bvhs[0], n, transform);
         n++;
       }
     }
@@ -282,16 +286,14 @@ void update_scene(float time)
       mat4_mul(transform, rot, scale);
       mat4_mul(transform, translation, transform);
     
-      inst_create(&scn.instances[cnt], cnt, transform,
-          &scn.bvhs[cnt % (MESH_CNT - 1)], &scn.materials[cnt % (MAT_CNT - 1)]);
+      scene_add_inst(&scn, &scn.bvhs[cnt % (MESH_CNT - 1)], cnt % (MAT_CNT - 1), transform);
     }
   }
 
   // Floor
   mat4 identity;
   mat4_identity(identity);
-  inst_create(&scn.instances[INST_CNT - 1], INST_CNT - 1, identity,
-      &scn.bvhs[MESH_CNT - 1], &scn.materials[MAT_CNT - 1]);
+  scene_add_inst(&scn, &scn.bvhs[MESH_CNT - 1], MAT_CNT - 1, identity);
 
   gathered_smpls = TEMPORAL_WEIGHT * config.spp;
 }
