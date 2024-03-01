@@ -7,10 +7,16 @@
 
 void mesh_init(mesh *m, uint32_t tri_cnt)
 {
-  m->tri_cnt = tri_cnt;
-  
-  m->tris = buf_acquire(TRI, tri_cnt);
-  m->centers = malloc(tri_cnt * sizeof(*m->centers));
+  m->tri_cnt  = tri_cnt;
+  m->tris     = malloc(tri_cnt * sizeof(*m->tris));
+  m->centers  = malloc(tri_cnt * sizeof(*m->centers));
+  m->ofs      = 0;
+}
+
+void mesh_release(mesh *m)
+{
+  free(m->centers);
+  free(m->tris);
 }
 
 void mesh_read(mesh *m, const uint8_t *data)
@@ -66,44 +72,6 @@ void mesh_read(mesh *m, const uint8_t *data)
 
     m->centers[i] = tri_calc_center(t);
   }
-}
-
-void mesh_make_quad(mesh *m, vec3 pos, vec3 nrm, float w, float h)
-{
-  mesh_init(m, 2);
-  
-  nrm = vec3_unit(nrm);
-  
-  vec3 r = (fabsf(nrm.x) > 0.9) ? (vec3){ 0.0, 1.0, 0.0 } : (vec3){ 0.0, 0.0, 1.0 };
-  vec3 t = vec3_cross(nrm, r);
-  vec3 b = vec3_cross(t, nrm);
-
-  t = vec3_scale(t, 0.5f * w);
-  b = vec3_scale(b, 0.5f * h);
-
-  tri *tri = &m->tris[0];
-  tri->v0 = vec3_sub(vec3_sub(pos, t), b);
-  tri->v1 = vec3_add(vec3_sub(pos, t), b);
-  tri->v2 = vec3_add(vec3_add(pos, t), b);
-  tri->n0 = tri->n1 = tri->n2 = nrm;
-#ifdef TEXTURE_SUPPORT // Untested
-  tri->uv0[0] = 0.0f; tri->uv0[1] = 0.0f;
-  tri->uv1[0] = 0.0f; tri->uv1[1] = 1.0f;
-  tri->uv2[0] = 1.0f; tri->uv2[1] = 1.0f;
-#endif
-  m->centers[0] = tri_calc_center(tri);
-
-  tri = &m->tris[1];
-  tri->v0 = vec3_sub(vec3_sub(pos, t), b);
-  tri->v1 = vec3_add(vec3_add(pos, t), b);
-  tri->v2 = vec3_sub(vec3_add(pos, t), b);
-  tri->n0 = tri->n1 = tri->n2 = nrm;
-#ifdef TEXTURE_SUPPORT // Untested
-  tri->uv0[0] = 0.0f; tri->uv0[1] = 0.0f;
-  tri->uv1[0] = 1.0f; tri->uv1[1] = 1.0f;
-  tri->uv2[0] = 1.0f; tri->uv2[1] = 0.0f;
-#endif
-  m->centers[1] = tri_calc_center(tri);
 }
 
 void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals)
@@ -191,74 +159,6 @@ void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals)
   }
 }
 
-void mesh_make_uvsphere(mesh *m, float radius, uint32_t subx, uint32_t suby, bool face_normals)
-{
-  mesh_init(m, 2 * subx * suby);
-
-  float dphi = 2 * PI / subx;
-  float dtheta = PI / suby;
-  float inv_r = 1.0f / radius;
-
-  float theta = 0.0f;
-  for(uint32_t j=0; j<suby; j++) {
-    float phi = 0.0f;
-    for(uint32_t i=0; i<subx; i++) {
-      uint32_t ofs = 2 * (subx * j + i);
-
-      vec3 a = vec3_scale(vec3_spherical(theta + dtheta, phi), radius);
-      vec3 b = vec3_scale(vec3_spherical(theta, phi), radius);
-      vec3 c = vec3_scale(vec3_spherical(theta, phi + dphi), radius);
-      vec3 d = vec3_scale(vec3_spherical(theta + dtheta, phi + dphi), radius);
-
-      tri *t1 = &m->tris[ofs];
-      *t1 = (tri){ .v0 = a, .v1 = b, .v2 = c,
-#ifdef TEXTURE_SUPPORT // Untested
-        .uv0[0] = phi / 2.0f * PI, .uv0[1] = (theta + dtheta) / PI,
-        .uv1[0] = phi / 2.0f * PI, .uv1[1] = theta / PI,
-        .uv2[0] = (phi + dphi) / 2.0f * PI, .uv2[1] = theta / PI,
-#endif
-      };
-      
-      m->centers[ofs] = tri_calc_center(t1);
-      
-      if(face_normals) {
-        t1->n0 = vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b)));
-        t1->n1 = t1->n0;
-        t1->n2 = t1->n0;
-      } else {
-        t1->n0 = vec3_scale(a, inv_r);
-        t1->n1 = vec3_scale(b, inv_r);
-        t1->n2 = vec3_scale(c, inv_r);
-      }
-
-      tri *t2 = &m->tris[ofs + 1];
-      *t2 = (tri){ .v0 = a, .v1 = c, .v2 = d,
-#ifdef TEXTURE_SUPPORT // Untested
-        .uv0[0] = t1->uv0[0], .uv0[1] = t1->uv0[1],
-        .uv1[0] = t1->uv2[0], .uv1[1] = t1->uv1[1],
-        .uv2[0] = t1->uv2[0], .uv2[1] = t1->uv0[1],
-#endif
-      };
-      
-      m->centers[ofs + 1] = tri_calc_center(t2);
-      
-      if(face_normals) {
-        t2->n0 = vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c)));
-        t2->n1 = t2->n0;
-        t2->n2 = t2->n0;
-      } else {
-        t2->n0 = vec3_scale(a, inv_r);
-        t2->n1 = vec3_scale(c, inv_r);
-        t2->n2 = vec3_scale(d, inv_r);
-      }
-
-      phi += dphi;
-    }
-
-    theta += dtheta;
-  }
-}
-
 void mesh_make_uvcylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, bool face_normals)
 {
   mesh_init(m, 2 * subx * suby);
@@ -332,9 +232,4 @@ void mesh_make_uvcylinder(mesh *m, float radius, float height, uint32_t subx, ui
 
     h += dh;
   }
-}
-
-void mesh_release(mesh *m)
-{
-  free(m->centers);
 }

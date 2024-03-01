@@ -21,27 +21,14 @@
 #include "data/dragon.h"
 #include "data/icosahedron.h"
 
-// TEST SCENE
-/*
-//#define TRI_CNT         (1024 + 19332 + 2) // dragon/teapot
-#define TRI_CNT           (320 + 20 + 2) // icospheres
-#define MESH_CNT          3 // icospheres
-#define INST_CNT          37 // dragon/teapot/icospheres
-#define MAT_CNT           37 // dragon/teapot/icospheres
-//*/
-
-// RIOW
 #define RIOW_SIZE         22
-//*
 #define TRI_CNT           1280 + 2
 #define MESH_CNT          2
 #define INST_CNT          (RIOW_SIZE * RIOW_SIZE + 4)
 #define MAT_CNT           INST_CNT
-//*/
 
 uint32_t  gathered_smpls = 0;
 vec3      bg_col = { 0.7f, 0.8f, 1.0f };
-//vec3      bg_col = { 0.005f, 0.006f, 0.007f };
 
 bool      orbit_cam = false;
 bool      paused = false;
@@ -116,105 +103,56 @@ void mouse_move(int32_t dx, int32_t dy)
   update_cam_view();
 }
 
-void update_scene(float time);
-
-void init_scene()
-{
-  scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
-  
-  scn.cam = (cam){ .vert_fov = 60.0f, .foc_dist = 3.0f, .foc_angle = 0.0f };
-  cam_set(&scn.cam, (vec3){ 0.0f, 3.0f, 12.5f }, (vec3){ 0.0f, 0.0f, -2.0f });
-
-  // Meshes load or generate
-  //mesh_read(&scn.meshes[0], dragon); // dragon/teapot
-  //mesh_read(&scn.meshes[1], teapot);
-  mesh_make_icosphere(&scn.meshes[0], 2, false); // icospheres
-  mesh_make_icosphere(&scn.meshes[1], 0, true);
-  mesh_make_quad(&scn.meshes[2], (vec3){ 0.0f, -1.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 12.0f, 12.0f);
-
-  for(uint32_t i=0; i<MESH_CNT; i++) {
-    bvh_init(&scn.bvhs[i], &scn.meshes[i]);
-    bvh_build(&scn.bvhs[i]);
-  }
-
-  for(uint32_t i=0; i<MAT_CNT - 1; i++) {
-    uint8_t mat_type = i % 3;
-    if(mat_type == 0) // Lambert
-      scene_add_mat(&scn, &(mat){ .color = vec3_rand(), .value = 0.0f });
-    else if(mat_type == 1) // Metal
-      scene_add_mat(&scn, &(mat){ .color = (vec3){ 0.75f, 0.75f, 0.75f }, .value = 0.001f });
-    else if(mat_type == 2) // Dielectric
-      scene_add_mat(&scn, &(mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.33f });
-    else if(mat_type == 3) // Emitter
-      scene_add_mat(&scn, &(mat){ .color = (vec3){ 10.0f, 10.0f, 10.0f } });
-  }
-
-  scene_add_mat(&scn, &(mat){ .color = vec3_rand(), .value = 0.0f });
-
-  update_scene(0);
-}
-
 void init_scene_riow()
 {
-  scene_init(&scn, MESH_CNT, INST_CNT, MAT_CNT);
+  scene_init(&scn, MESH_CNT, MAT_CNT, INST_CNT);
 
   scn.cam = (cam){ .vert_fov = 20.0f, .foc_dist = 10.0f, .foc_angle = 0.6f };
   cam_set(&scn.cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   // Mesh
-  mesh_make_uvsphere(&scn.meshes[0], 1.0f, 20, 20, false);
-  //mesh_make_uvcylinder(&scn.meshes[0], 1.0f, 2.0f, 20, 4, false);
-  //mesh_make_icosphere(&scn.meshes[0], 3, true);
-  //mesh_read(&scn.meshes[0], icosahedron);
-  bvh_init(&scn.bvhs[0], &scn.meshes[0]);
-  bvh_build(&scn.bvhs[0]);
+  scene_add_uvsphere(&scn, 1.0f, 20, 20, false);
+  scene_add_quad(&scn, (vec3){ 0.0f, 0.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
+  scene_build_bvhs(&scn);
 
-  mesh_make_quad(&scn.meshes[1], (vec3){ 0.0f, 0.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
-  bvh_init(&scn.bvhs[1], &scn.meshes[1]);
-  bvh_build(&scn.bvhs[1]);
- 
-  mat4 scale, translation, transform;
-
-  uint32_t n = 0;
-
-  // Instances
+  // Floor instance
+  mat4 translation;
   mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
-  scene_add_mat(&scn, &(mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
-  scene_add_inst(&scn, &scn.bvhs[1], n, translation);
-  n++;
+  uint32_t mat_id = scene_add_mat(&scn, &(mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
+  scene_add_inst(&scn, 1, mat_id, translation); 
 
+  // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  scene_add_mat(&scn, &(mat){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
-  scene_add_inst(&scn, &scn.bvhs[0], n, translation);
-  n++;
+  mat_id = scene_add_mat(&scn, &(mat){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  scene_add_inst(&scn, 0, mat_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  scene_add_mat(&scn, &(mat){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
-  scene_add_inst(&scn, &scn.bvhs[0], n, translation);
-  n++;
+  mat_id = scene_add_mat(&scn, &(mat){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
+  scene_add_inst(&scn, 0, mat_id, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
-  scene_add_mat(&scn, &(mat){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f });
-  scene_add_inst(&scn, &scn.bvhs[0], n, translation);
-  n++;
+  mat_id = scene_add_mat(&scn, &(mat){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f });
+  scene_add_inst(&scn, 0, mat_id, translation);
 
+  mat4 scale;
+  mat4_scale(scale, 0.2f);
+  
   for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
     for(int b=-RIOW_SIZE/2; b<RIOW_SIZE/2; b++) {
       float mat_p = pcg_randf();
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
         if(mat_p < 0.8f)
-          scene_add_mat(&scn, &(mat){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f });
+          mat_id = scene_add_mat(&scn, &(mat){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f });
         else if(mat_p < 0.95f)
-          scene_add_mat(&scn, &(mat){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) });
+          mat_id = scene_add_mat(&scn, &(mat){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) });
         else
-          scene_add_mat(&scn, &(mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f });
+          mat_id = scene_add_mat(&scn, &(mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f });
         
-        mat4_scale(scale, 0.2f);
+        mat4 transform;
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_inst(&scn, &scn.bvhs[0], n, transform);
-        n++;
+        scene_add_inst(&scn, 0, mat_id, transform);
       }
     }
   }
@@ -239,7 +177,6 @@ void init(uint32_t width, uint32_t height)
   
   config = (cfg){ width, height, 2, 5 };
 
-  //init_scene();
   init_scene_riow();
 
   // Create GPU buffer
@@ -261,47 +198,12 @@ void init(uint32_t width, uint32_t height)
 
 void update_scene(float time)
 {
-  uint32_t dim = (uint32_t)sqrtf(INST_CNT - 1);
-  for(uint32_t j=0; j<dim; j++) {
-    for(uint32_t i=0; i<dim; i++) {
-
-      uint32_t cnt = dim * j + i;    
-     
-      mat4 rot;
-      mat4_rot_y(rot, 1.412f * cnt + time * 0.8f);
-
-      mat4 scale;
-      //mat4_scale(scale, (cnt % 2 == 1) ? 0.7f : 0.008f);
-      mat4_identity(scale);
-      
-      mat4 translation;
-#define SPACE 2.0f
-      mat4_trans(translation, (vec3){
-          i * SPACE - dim * SPACE / 2.0f + SPACE / 2.0f,
-          0.0f,
-          j * SPACE - dim * SPACE / 2.0f + SPACE / 2.0f });
-
-      mat4 transform;
-      //mat4_identity(transform);
-      mat4_mul(transform, rot, scale);
-      mat4_mul(transform, translation, transform);
-    
-      scene_add_inst(&scn, &scn.bvhs[cnt % (MESH_CNT - 1)], cnt % (MAT_CNT - 1), transform);
-    }
-  }
-
-  // Floor
-  mat4 identity;
-  mat4_identity(identity);
-  scene_add_inst(&scn, &scn.bvhs[MESH_CNT - 1], MAT_CNT - 1, identity);
-
-  gathered_smpls = TEMPORAL_WEIGHT * config.spp;
+  // TODO
 }
 
 __attribute__((visibility("default")))
 void update(float time)
 {
-  // Orbit cam
   if(orbit_cam) {
     float s = 0.5f;
     float r = 16.0f;
@@ -311,16 +213,14 @@ void update(float time)
     update_cam_view();
   }
  
-  if(!paused) {
-    //update_scene(time);
+  if(!paused)
+    update_scene(time);
 
-    // Build tlas
-    tlas_build(scn.tlas_nodes, scn.instances, INST_CNT);
+  scene_prepare_render(&scn);
 
-    // Write tlas and instance buffer
-    gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
-    gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
-  }
+  // Write tlas and instance buffer
+  gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
+  gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
 
   // Push frame data
   float frame[8] = { pcg_randf(), config.spp / (float)(gathered_smpls + config.spp),
