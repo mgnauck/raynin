@@ -62,7 +62,7 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
 
   // Create GPU buffer
   gpu_create_res(GLOB_BUF_SZ, total_tri_cnt * sizeof(tri), total_tri_cnt * sizeof(uint32_t),
-      2 * total_tri_cnt * sizeof(bvh_node), (2 * s->inst_cnt + 1) * sizeof(tlas_node),
+      2 * total_tri_cnt * sizeof(bvh_node), 2 * s->inst_cnt * sizeof(tlas_node),
       s->inst_cnt * sizeof(inst), s->mtl_cnt * sizeof(mtl));
 
   return rd;
@@ -138,7 +138,7 @@ void renderer_update(render_data *rd, float time)
 
   // Push TLAS and instances
   if(rd->scene->dirty & RT_INST) {
-    gpu_write_buf(BT_TLAS_NODE, 0, s->tlas_nodes, (2 * s->inst_cnt + 1) * sizeof(*s->tlas_nodes));
+    gpu_write_buf(BT_TLAS_NODE, 0, s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
     gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
     scene_unset_dirty(s, RT_INST);
   }

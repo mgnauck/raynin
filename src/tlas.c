@@ -36,8 +36,8 @@ void tlas_build(tlas_node *nodes, const inst *instances, uint32_t inst_cnt)
   uint32_t node_indices_cnt = inst_cnt;
   uint32_t node_indices[inst_cnt];
 
-  // Reserve space for root node + skipped 1st node
-  uint32_t ofs = 2;
+  // Reserve space for root node
+  uint32_t ofs = 1;
 
   // Construct leaf node for each instance
   for(uint32_t i=0; i<inst_cnt; i++) {
@@ -87,6 +87,6 @@ void tlas_build(tlas_node *nodes, const inst *instances, uint32_t inst_cnt)
     }
   }
 
-  // Root node was formed last (at 2*n+1), move it to reserved index 0
+  // Root node was formed last (at 2*n), move it to reserved index 0
   nodes[0] = nodes[--node_cnt];
 }

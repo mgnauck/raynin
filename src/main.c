@@ -11,7 +11,7 @@
 #include "data/icosahedron.h"
 
 #define RIOW_SIZE   22
-#define TRI_CNT     1280 + 2
+#define TRI_CNT     800 + 2
 #define MESH_CNT    2
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4)
 #define MTL_CNT     INST_CNT
@@ -89,10 +89,10 @@ void init_scene_riow(scene *s)
 
   // Meshes
   scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
-  //scene_add_uvsphere(s, 1.0f, 20, 20, false);
+  scene_add_uvsphere(s, 1.0f, 20, 20, false);
   //scene_add_icosphere(s, 0, true);
   //scene_add_mesh(s, icosahedron);
-  scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, false);
+  //scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, false);
   scene_build_bvhs(s);
 
   mat4 translation;
