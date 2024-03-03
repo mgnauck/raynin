@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include "mutil.h"
 #include "vec3.h"
-#include "mesh.h"
 #include "mtl.h"
 #include "scene.h"
 #include "renderer.h"
@@ -19,6 +18,7 @@
 #define MTL_CNT     INST_CNT
 
 scene       scn;
+scene       *cs = &scn;
 render_data *rd;
 
 bool        orbit_cam = false;
@@ -31,28 +31,28 @@ void key_down(unsigned char key)
 
   switch(key) {
     case 'a':
-      scn.cam.eye = vec3_add(scn.cam.eye, vec3_scale(scn.cam.right, -MOVE_VEL));
+      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.right, -MOVE_VEL));
       break;
     case 'd':
-      scn.cam.eye = vec3_add(scn.cam.eye, vec3_scale(scn.cam.right, MOVE_VEL));
+      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.right, MOVE_VEL));
       break;
     case 'w':
-      scn.cam.eye = vec3_add(scn.cam.eye, vec3_scale(scn.cam.fwd, -MOVE_VEL));
+      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.fwd, -MOVE_VEL));
      break;
     case 's':
-      scn.cam.eye = vec3_add(scn.cam.eye, vec3_scale(scn.cam.fwd, MOVE_VEL));
+      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.fwd, MOVE_VEL));
       break;
     case 'i':
-      scn.cam.foc_dist += 0.1f;
+      cs->cam.foc_dist += 0.1f;
       break;
     case 'k':
-      scn.cam.foc_dist = max(scn.cam.foc_dist - 0.1f, 0.1f);
+      cs->cam.foc_dist = max(cs->cam.foc_dist - 0.1f, 0.1f);
       break;
     case 'j':
-      scn.cam.foc_angle = max(scn.cam.foc_angle - 0.1f, 0.1f);
+      cs->cam.foc_angle = max(cs->cam.foc_angle - 0.1f, 0.1f);
       break;
     case 'l':
-      scn.cam.foc_angle += 0.1f;
+      cs->cam.foc_angle += 0.1f;
       break;
     case 'o':
       orbit_cam = !orbit_cam;
@@ -65,7 +65,7 @@ void key_down(unsigned char key)
       break;
   }
 
-  renderer_set_dirty(rd, CAM_VIEW);
+  scene_set_dirty(cs, RT_CAM_VIEW);
 }
 
 __attribute__((visibility("default")))
@@ -73,12 +73,12 @@ void mouse_move(int32_t dx, int32_t dy)
 {
 #define LOOK_VEL 0.015f
   
-  float theta = min(max(acosf(-scn.cam.fwd.y) + (float)dy * LOOK_VEL, 0.01f), 0.99f * PI);
-  float phi = fmodf(atan2f(-scn.cam.fwd.z, scn.cam.fwd.x) + PI - (float)dx * LOOK_VEL, 2.0f * PI);
+  float theta = min(max(acosf(-cs->cam.fwd.y) + (float)dy * LOOK_VEL, 0.01f), 0.99f * PI);
+  float phi = fmodf(atan2f(-cs->cam.fwd.z, cs->cam.fwd.x) + PI - (float)dx * LOOK_VEL, 2.0f * PI);
   
-  cam_set_dir(&scn.cam, vec3_spherical(theta, phi));
+  cam_set_dir(&cs->cam, vec3_spherical(theta, phi));
   
-  renderer_set_dirty(rd, CAM_VIEW);
+  scene_set_dirty(cs, RT_CAM_VIEW);
 }
 
 void init_scene_riow(scene *s)
@@ -141,24 +141,24 @@ void init(uint32_t width, uint32_t height)
 {
   pcg_srand(42u, 303u);
 
-  init_scene_riow(&scn);
+  init_scene_riow(cs);
 
-  rd = renderer_init(&scn, width, height, 2);
-  
-  renderer_push_static_res(rd);
+  rd = renderer_init(cs, width, height, 2);  
+
+  renderer_push_static(rd);
   renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
 }
 
-void update_scene(float time)
+void update_scene(scene *s, float time)
 {
   // Update camera
   if(orbit_cam) {
-    float s = 0.5f;
+    float v = 0.5f;
     float r = 16.0f;
     float h = 2.0f;
-    vec3 pos = (vec3){ r * sinf(time * s * s), 0.2f + h + h * sinf(time * s * 0.7f), r * cosf(time * s) };
-    cam_set(&scn.cam, pos, vec3_neg(pos));
-    renderer_set_dirty(rd, CAM_VIEW);
+    vec3 pos = (vec3){ r * sinf(time * v * v), 0.2f + h + h * sinf(time * v * 0.7f), r * cosf(time * v) };
+    cam_set(&s->cam, pos, vec3_neg(pos));
+    scene_set_dirty(s, RT_CAM_VIEW);
   }
 
   // Update instances
@@ -167,7 +167,7 @@ void update_scene(float time)
 __attribute__((visibility("default")))
 void update(float time)
 {
-  update_scene(time);
+  update_scene(cs, time);
   renderer_update(rd, time);
 }
 

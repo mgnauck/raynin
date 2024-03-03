@@ -1,13 +1,12 @@
 #include "scene.h"
 #include "sutil.h"
 #include "mutil.h"
-#include "types.h"
 #include "tri.h"
 #include "aabb.h"
-#include "mesh.h"
-#include "inst.h"
 #include "mtl.h"
+#include "mesh.h"
 #include "bvh.h"
+#include "inst.h"
 #include "tlas.h"
 
 typedef struct inst_state {
@@ -29,7 +28,7 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt
   s->inst_cnt = 0;
   s->curr_ofs = 0;
 
-  s->dirty = CAM_VIEW | MESH | MTL | INST;
+  scene_set_dirty(s, RT_CAM_VIEW | RT_MESH | RT_MTL | RT_INST);
 }
 
 void scene_release(scene *s)
@@ -43,6 +42,16 @@ void scene_release(scene *s)
   free(s->bvhs);
   free(s->meshes);
   free(s->mtls);
+}
+
+void scene_set_dirty(scene *s, res_type r)
+{
+  s->dirty |= r;
+}
+
+void scene_unset_dirty(scene *s, res_type r)
+{
+  s->dirty &= ~r;
 }
 
 void scene_build_bvhs(scene *s)
@@ -90,7 +99,7 @@ void scene_prepare_render(scene *s)
 
   if(rebuild_tlas) {
     tlas_build(s->tlas_nodes, s->instances, s->inst_cnt);
-    s->dirty |= INST;
+    scene_set_dirty(s, RT_INST);
   }
 }
 
@@ -103,7 +112,7 @@ uint32_t scene_add_mtl(scene *s, mtl *mtl)
 void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
 {
   memcpy(&s->mtls[mtl_id], mtl, sizeof(*s->mtls));
-  s->dirty |= MTL;
+  scene_set_dirty(s, RT_MTL);
 }
 
 uint32_t scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mtl_id, mat4 transform)
@@ -123,8 +132,8 @@ uint32_t scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mtl_id, mat4 transf
 
 void scene_upd_inst(scene *s, uint32_t inst_id, mat4 transform)
 {
-  s->inst_states[inst_id].dirty = true;
   memcpy(s->instances[inst_id].transform, transform, sizeof(mat4));
+  s->inst_states[inst_id].dirty = true;
 }
 
 void update_ofs(scene *s, mesh *m)

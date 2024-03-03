@@ -3,8 +3,15 @@
 
 #include <stdint.h>
 #include "mat4.h"
-#include "view.h"
 #include "cam.h"
+#include "view.h"
+
+typedef enum res_type {
+  RT_CAM_VIEW  = 1,
+  RT_MESH      = 2,
+  RT_MTL       = 4,
+  RT_INST      = 8
+} res_type;
 
 typedef struct mtl mtl;
 typedef struct mesh mesh;
@@ -32,8 +39,10 @@ typedef struct scene {
 void      scene_init(scene *scene, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt);
 void      scene_release();
 
-void      scene_build_bvhs(scene *s);
+void      scene_set_dirty(scene *s, res_type r);
+void      scene_unset_dirty(scene *s, res_type r);
 
+void      scene_build_bvhs(scene *s);
 void      scene_prepare_render(scene *s);
 
 uint32_t  scene_add_mtl(scene *s, mtl *mtl);
