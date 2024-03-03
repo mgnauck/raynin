@@ -72,22 +72,21 @@ void scene_prepare_render(scene *s)
       inst *inst = &s->instances[i];
       
       // Calc inverse transform
-      mat4 *t = &inst->transform;
-      mat4_inv(inst->inv_transform, *t);
+      mat4_inv(inst->inv_transform, inst->transform);
   
       // Store root node bounds transformed into world space
       aabb a = aabb_init();
       vec3 mi = s->bvhs[state->mesh_id].nodes[0].min;
       vec3 ma = s->bvhs[state->mesh_id].nodes[0].max;
 
-      aabb_grow(&a, mat4_mul_pos(*t, (vec3){ mi.x, mi.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(*t, (vec3){ ma.x, mi.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(*t, (vec3){ mi.x, ma.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(*t, (vec3){ ma.x, ma.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(*t, (vec3){ mi.x, mi.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(*t, (vec3){ ma.x, mi.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(*t, (vec3){ mi.x, ma.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(*t, (vec3){ ma.x, ma.y, ma.z }));
+      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, mi.y, mi.z }));
+      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, mi.y, mi.z }));
+      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, ma.y, mi.z }));
+      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, ma.y, mi.z }));
+      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, mi.y, ma.z }));
+      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, mi.y, ma.z }));
+      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, ma.y, ma.z }));
+      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, ma.y, ma.z }));
 
       inst->min = a.min;
       inst->max = a.max;
@@ -122,8 +121,8 @@ uint32_t scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mtl_id, mat4 transf
   inst_state->dirty = true;
 
   inst *inst = &s->instances[s->inst_cnt];
-  inst->id = (mtl_id << 16) | s->inst_cnt;
-  inst->ofs = s->meshes[s->inst_cnt].ofs;
+  inst->id = (mtl_id << 16) | (s->inst_cnt & 0xffff);
+  inst->ofs = s->meshes[mesh_id].ofs;
 
   scene_upd_inst(s, s->inst_cnt, transform);
 
@@ -138,7 +137,7 @@ void scene_upd_inst(scene *s, uint32_t inst_id, mat4 transform)
 
 void update_ofs(scene *s, mesh *m)
 {
-  m->ofs = s->curr_ofs * sizeof(tri);
+  m->ofs = s->curr_ofs;
   s->curr_ofs += m->tri_cnt;
 }
 

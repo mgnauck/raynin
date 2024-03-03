@@ -10,6 +10,7 @@
 #include "tlas.h"
 #include "tri.h"
 
+// Global buffer size and offsets
 #define GLOB_BUF_SZ         144
 #define GLOB_BUF_OFS_CFG    0
 #define GLOB_BUF_OFS_FRAME  16
@@ -32,7 +33,7 @@ typedef struct render_data {
   uint16_t  height;
   uint8_t   spp;
   uint8_t   bounces;
-  uint32_t  gathered_samples;
+  uint32_t  gathered_spp;
   vec3      bg_col;
 } render_data;
 
@@ -52,6 +53,7 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
   rd->height = height;
   rd->spp = spp;
   rd->bounces = 5; // TODO RR
+  rd->gathered_spp = 0;
 
   // Calc total number of tris in scene
   uint32_t total_tri_cnt = 0;
@@ -73,7 +75,7 @@ void renderer_release(render_data *rd)
 
 void reset_samples(render_data *rd)
 {
-  rd->gathered_samples = TEMPORAL_WEIGHT * rd->spp;
+  rd->gathered_spp = 0; // TEMPORAL_WEIGHT * rd->spp;
 }
 
 void renderer_set_bg_col(render_data *rd, vec3 bg_col)
@@ -84,18 +86,18 @@ void renderer_set_bg_col(render_data *rd, vec3 bg_col)
 
 void renderer_push_static(render_data *rd)
 {
+  scene *s = rd->scene;
+  
   // Push part of globals
   uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, 4 * sizeof(cfg));
-
-  scene *s = rd->scene;
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
 
   // Push tris, indices and bvh nodes
   uint32_t cnt = 0;
   for(uint32_t i=0; i<s->mesh_cnt; i++) {    
     mesh *m = &s->meshes[i];
     gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
-  
+
     bvh *b = &s->bvhs[i];
     gpu_write_buf(BT_INDEX, cnt * sizeof(*b->indices), b->indices, m->tri_cnt * sizeof(*b->indices));
     gpu_write_buf(BT_BVH_NODE, 2 * cnt * sizeof(*b->nodes), b->nodes, 2 * m->tri_cnt * sizeof(*b->nodes));
@@ -111,8 +113,10 @@ void renderer_push_static(render_data *rd)
 
 void renderer_update(render_data *rd, float time)
 {
+  scene *s = rd->scene;
+
   // Finalize instances and TLAS
-  scene_prepare_render(rd->scene);
+  scene_prepare_render(s);
 
   // Invalidate previous samples
   if(rd->scene->dirty > 0)
@@ -120,29 +124,29 @@ void renderer_update(render_data *rd, float time)
 
   // Push camera and view
   if(rd->scene->dirty & RT_CAM_VIEW) {
-    view_calc(&rd->scene->view, rd->width, rd->height, &rd->scene->cam);
-    gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, &rd->scene->cam, CAM_BUF_SIZE);
-    gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_VIEW, &rd->scene->view, sizeof(view));
-    scene_unset_dirty(rd->scene, RT_CAM_VIEW);
+    view_calc(&s->view, rd->width, rd->height, &s->cam);
+    gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, &s->cam, CAM_BUF_SIZE);
+    gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_VIEW, &s->view, sizeof(s->view));
+    scene_unset_dirty(s, RT_CAM_VIEW);
   }
 
   // Push materials
   if(rd->scene->dirty & RT_MTL) {
-    gpu_write_buf(BT_MTL, 0, rd->scene->mtls, rd->scene->mtl_cnt * sizeof(*rd->scene->mtls));
-    scene_unset_dirty(rd->scene, RT_MTL);
+    gpu_write_buf(BT_MTL, 0, rd->scene->mtls, s->mtl_cnt * sizeof(*s->mtls));
+    scene_unset_dirty(s, RT_MTL);
   }
 
   // Push TLAS and instances
   if(rd->scene->dirty & RT_INST) {
-    gpu_write_buf(BT_TLAS_NODE, 0, rd->scene->tlas_nodes, (2 * rd->scene->inst_cnt + 1) * sizeof(*rd->scene->tlas_nodes));
-    gpu_write_buf(BT_INST, 0, rd->scene->instances, rd->scene->inst_cnt * sizeof(*rd->scene->instances));
-    scene_unset_dirty(rd->scene, RT_INST);
+    gpu_write_buf(BT_TLAS_NODE, 0, s->tlas_nodes, (2 * s->inst_cnt + 1) * sizeof(*s->tlas_nodes));
+    gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
+    scene_unset_dirty(s, RT_INST);
   }
 
   // Push frame data
-  float frame[8] = { pcg_randf(), rd->spp / (float)(rd->gathered_samples + rd->spp),
+  float frame[8] = { pcg_randf(), rd->spp / (float)(rd->gathered_spp + rd->spp),
     time, 0.0f, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, 0.0f };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frame, 8 * sizeof(frame));
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frame, sizeof(frame));
 
-  rd->gathered_samples += rd->spp;
+  rd->gathered_spp += rd->spp;
 }

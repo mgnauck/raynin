@@ -89,28 +89,30 @@ void init_scene_riow(scene *s)
   cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   // Meshes
+  scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
   scene_add_uvsphere(s, 1.0f, 20, 20, false);
-  scene_add_quad(s, (vec3){ 0.0f, 0.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
   scene_build_bvhs(s);
 
-  // Floor instance
   mat4 translation;
+  uint32_t mtl_id;
+
+  // Floor instance
   mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
-  uint32_t mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
-  scene_add_inst(s, 1, mtl_id, translation); 
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
+  scene_add_inst(s, 0, mtl_id, translation); 
 
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
-  scene_add_inst(s, 0, mtl_id, translation);
+  scene_add_inst(s, 1, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
-  scene_add_inst(s, 0, mtl_id, translation);
+  scene_add_inst(s, 1, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f });
-  scene_add_inst(s, 0, mtl_id, translation);
+  scene_add_inst(s, 1, mtl_id, translation);
 
   mat4 scale;
   mat4_scale(scale, 0.2f);
@@ -130,7 +132,7 @@ void init_scene_riow(scene *s)
         mat4 transform;
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_inst(s, 0, mtl_id, transform);
+        scene_add_inst(s, 1, mtl_id, transform);
       }
     }
   }
