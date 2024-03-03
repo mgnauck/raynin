@@ -52,6 +52,9 @@ uint32_t  scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mtl_id, mat4 trans
 void      scene_upd_inst(scene *s, uint32_t inst_id, mat4 transform);
 
 uint32_t  scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h);
+uint32_t  scene_add_icosphere(scene *s, uint8_t steps, bool face_normals);
 uint32_t  scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby, bool face_normals);
+uint32_t  scene_add_uvcylinder(scene *s, float radius, float height, uint32_t subx, uint32_t suby, bool face_normals);
+uint32_t  scene_add_mesh(scene *s, const uint8_t *data);
 
 #endif

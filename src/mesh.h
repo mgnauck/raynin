@@ -17,9 +17,4 @@ typedef struct mesh {
 void mesh_init(mesh *m, uint32_t tri_cnt);
 void mesh_release(mesh *m);
 
-// TODO Move
-void mesh_read(mesh *m, const uint8_t *data);
-void mesh_make_icosphere(mesh *m, uint8_t steps, bool face_normals);
-void mesh_make_uvcylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, bool face_normals);
-
 #endif

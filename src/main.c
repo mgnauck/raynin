@@ -5,7 +5,6 @@
 #include "mtl.h"
 #include "scene.h"
 #include "renderer.h"
-#include "log.h"
 
 #include "data/teapot.h"
 #include "data/dragon.h"
@@ -90,7 +89,10 @@ void init_scene_riow(scene *s)
 
   // Meshes
   scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
-  scene_add_uvsphere(s, 1.0f, 20, 20, false);
+  //scene_add_uvsphere(s, 1.0f, 20, 20, false);
+  //scene_add_icosphere(s, 0, true);
+  //scene_add_mesh(s, icosahedron);
+  scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, false);
   scene_build_bvhs(s);
 
   mat4 translation;
@@ -164,6 +166,7 @@ void update_scene(scene *s, float time)
   }
 
   // Update instances
+  // ..
 }
 
 __attribute__((visibility("default")))
