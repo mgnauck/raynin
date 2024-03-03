@@ -1,6 +1,5 @@
 #include "tlas.h"
 #include <float.h>
-#include "buf.h"
 #include "aabb.h"
 #include "inst.h"
 

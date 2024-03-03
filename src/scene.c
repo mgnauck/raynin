@@ -1,11 +1,12 @@
 #include "scene.h"
 #include "sutil.h"
 #include "mutil.h"
+#include "types.h"
 #include "tri.h"
 #include "aabb.h"
 #include "mesh.h"
 #include "inst.h"
-#include "mat.h"
+#include "mtl.h"
 #include "bvh.h"
 #include "tlas.h"
 
@@ -14,22 +15,21 @@ typedef struct inst_state {
   bool      dirty;
 } inst_state;
 
-void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mat_cnt, uint32_t inst_cnt)
+void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt)
 {
-  s->materials    = malloc(mat_cnt * sizeof(*s->materials)); 
+  s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
   s->meshes       = malloc(mesh_cnt * sizeof(*s->meshes));
   s->bvhs         = malloc(mesh_cnt * sizeof(bvh));
   s->instances    = malloc(inst_cnt * sizeof(*s->instances));
   s->inst_states  = malloc(inst_cnt * sizeof(*s->inst_states));
   s->tlas_nodes   = malloc((2 * inst_cnt + 1) * sizeof(*s->tlas_nodes)); // TODO Switch to 2 * inst_cnt only
 
-  s->mat_cnt  = 0;
+  s->mtl_cnt  = 0;
   s->mesh_cnt = 0;
   s->inst_cnt = 0;
   s->curr_ofs = 0;
 
-  s->meshes_dirty     = true;
-  s->materials_dirty  = true;
+  s->dirty = CAM_VIEW | MESH | MTL | INST;
 }
 
 void scene_release(scene *s)
@@ -38,10 +38,11 @@ void scene_release(scene *s)
     mesh_release(&s->meshes[i]);
 
   free(s->tlas_nodes);
+  free(s->inst_states);
   free(s->instances);
   free(s->bvhs);
   free(s->meshes);
-  free(s->materials);
+  free(s->mtls);
 }
 
 void scene_build_bvhs(scene *s)
@@ -87,30 +88,32 @@ void scene_prepare_render(scene *s)
     }
   }
 
-  if(rebuild_tlas)
+  if(rebuild_tlas) {
     tlas_build(s->tlas_nodes, s->instances, s->inst_cnt);
+    s->dirty |= INST;
+  }
 }
 
-uint32_t scene_add_mat(scene *s, mat *material)
+uint32_t scene_add_mtl(scene *s, mtl *mtl)
 {
-  scene_upd_mat(s, s->mat_cnt, material);
-  return s->mat_cnt++;
+  scene_upd_mtl(s, s->mtl_cnt, mtl);
+  return s->mtl_cnt++;
 }
 
-void scene_upd_mat(scene *s, uint32_t mat_id, mat *material)
+void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
 {
-  memcpy(&s->materials[mat_id], material, sizeof(*s->materials));
-  s->materials_dirty = true;
+  memcpy(&s->mtls[mtl_id], mtl, sizeof(*s->mtls));
+  s->dirty |= MTL;
 }
 
-uint32_t scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mat_id, mat4 transform)
+uint32_t scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mtl_id, mat4 transform)
 {
   inst_state *inst_state = &s->inst_states[s->inst_cnt];
   inst_state->mesh_id = mesh_id;
   inst_state->dirty = true;
 
   inst *inst = &s->instances[s->inst_cnt];
-  inst->id = (mat_id << 16) | s->inst_cnt;
+  inst->id = (mtl_id << 16) | s->inst_cnt;
   inst->ofs = s->meshes[s->inst_cnt].ofs;
 
   scene_upd_inst(s, s->inst_cnt, transform);

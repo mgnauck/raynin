@@ -1,6 +1,6 @@
 #include "bvh.h"
 #include <float.h>
-#include "buf.h"
+#include "sutil.h"
 #include "mutil.h"
 #include "tri.h"
 #include "aabb.h"
@@ -23,9 +23,9 @@ void bvh_init(bvh *b, mesh *m)
 {
   // Would be 2 * tri_cnt - 1 but we skip one node
   b->node_cnt = 0;
-  b->nodes = buf_acquire(BVH_NODE, 2 * m->tri_cnt);
-  b->indices = buf_acquire(INDEX, m->tri_cnt);
-  b->mesh = m;
+  b->nodes    = malloc(2 * m->tri_cnt * sizeof(*b->nodes));
+  b->indices  = malloc(m->tri_cnt * sizeof(*b->indices));
+  b->mesh     = m;
 }
 
 // Guenther et al: Realtime Ray Tracing on GPU with BVH-based Packet Traversal

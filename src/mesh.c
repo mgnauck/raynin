@@ -1,9 +1,7 @@
 #include "mesh.h"
 #include "sutil.h"
 #include "mutil.h"
-#include "buf.h"
 #include "tri.h"
-#include "cfg.h" // TEXTURE_SUPPORT flag
 
 void mesh_init(mesh *m, uint32_t tri_cnt)
 {

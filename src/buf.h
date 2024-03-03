@@ -2,7 +2,6 @@
 #define BUF_H
 
 #include <stdint.h>
-#include "gutil.h"
 
 void      buf_init(uint32_t buf_cnt);
 void      buf_reserve(buf_type type, uint32_t buf_type_size, uint32_t elem_cnt);

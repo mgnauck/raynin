@@ -1,5 +1,4 @@
 #include "intersect.h"
-#include "buf.h"
 #include "mutil.h"
 #include "ray.h"
 #include "tri.h"
@@ -121,8 +120,9 @@ void intersect_inst(const ray *r, const inst *inst, hit *h)
   ray r_obj;
   ray_transform(&r_obj, inst->inv_transform, r);
 
-  intersect_bvh(&r_obj, buf_ptr(BVH_NODE, 2 * inst->ofs),
-      buf_ptr(INDEX, inst->ofs), buf_ptr(TRI, inst->ofs), inst->id & 0xffff, h);
+// TODO
+//  intersect_bvh(&r_obj, buf_ptr(BVH_NODE, 2 * inst->ofs),
+//      buf_ptr(INDEX, inst->ofs), buf_ptr(TRI, inst->ofs), inst->id & 0xffff, h);
 }
 
 void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, hit *h)

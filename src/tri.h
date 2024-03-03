@@ -2,7 +2,6 @@
 #define TRI_H
 
 #include "vec3.h"
-#include "cfg.h" // TEXTURE_SUPPORT flag
 
 typedef struct tri {
   vec3 v0;

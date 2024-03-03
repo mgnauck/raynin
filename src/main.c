@@ -1,52 +1,30 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include "sutil.h"
 #include "mutil.h"
-#include "buf.h"
 #include "vec3.h"
-#include "ray.h"
-#include "tri.h"
-#include "cfg.h"
 #include "mesh.h"
-#include "bvh.h"
-#include "inst.h"
-#include "mat.h"
-#include "tlas.h"
+#include "mtl.h"
 #include "scene.h"
-#include "intersect.h"
+#include "renderer.h"
 #include "log.h"
 
-// data
 #include "data/teapot.h"
 #include "data/dragon.h"
 #include "data/icosahedron.h"
 
-#define RIOW_SIZE         22
-#define TRI_CNT           1280 + 2
-#define MESH_CNT          2
-#define INST_CNT          (RIOW_SIZE * RIOW_SIZE + 4)
-#define MAT_CNT           INST_CNT
+#define RIOW_SIZE   22
+#define TRI_CNT     1280 + 2
+#define MESH_CNT    2
+#define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4)
+#define MTL_CNT     INST_CNT
 
-uint32_t  gathered_smpls = 0;
-vec3      bg_col = { 0.7f, 0.8f, 1.0f };
+scene       scn;
+render_data *rd;
 
-bool      orbit_cam = false;
-bool      paused = false;
+bool        orbit_cam = false;
+bool        paused = false;
 
-cfg       config;
-scene     scn;
-
-void update_cam_view()
-{
-  view_calc(&scn.view, config.width, config.height, &scn.cam);
-
-  gpu_write_buf(GLOB, GLOB_BUF_OFS_CAM, &scn.cam, CAM_BUF_SIZE);
-  gpu_write_buf(GLOB, GLOB_BUF_OFS_VIEW, &scn.view, sizeof(view));
-  
-  gathered_smpls = TEMPORAL_WEIGHT * config.spp;
-}
-
-__attribute__((visibility("default")))
+  __attribute__((visibility("default")))
 void key_down(unsigned char key)
 {
 #define MOVE_VEL 0.1f
@@ -87,7 +65,7 @@ void key_down(unsigned char key)
       break;
   }
 
-  update_cam_view();
+  renderer_set_dirty(rd, CAM_VIEW);
 }
 
 __attribute__((visibility("default")))
@@ -100,59 +78,59 @@ void mouse_move(int32_t dx, int32_t dy)
   
   cam_set_dir(&scn.cam, vec3_spherical(theta, phi));
   
-  update_cam_view();
+  renderer_set_dirty(rd, CAM_VIEW);
 }
 
-void init_scene_riow()
+void init_scene_riow(scene *s)
 {
-  scene_init(&scn, MESH_CNT, MAT_CNT, INST_CNT);
+  scene_init(s, MESH_CNT, MTL_CNT, INST_CNT);
 
-  scn.cam = (cam){ .vert_fov = 20.0f, .foc_dist = 10.0f, .foc_angle = 0.6f };
-  cam_set(&scn.cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+  s->cam = (cam){ .vert_fov = 20.0f, .foc_dist = 10.0f, .foc_angle = 0.6f };
+  cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
-  // Mesh
-  scene_add_uvsphere(&scn, 1.0f, 20, 20, false);
-  scene_add_quad(&scn, (vec3){ 0.0f, 0.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
-  scene_build_bvhs(&scn);
+  // Meshes
+  scene_add_uvsphere(s, 1.0f, 20, 20, false);
+  scene_add_quad(s, (vec3){ 0.0f, 0.f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
+  scene_build_bvhs(s);
 
   // Floor instance
   mat4 translation;
   mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
-  uint32_t mat_id = scene_add_mat(&scn, &(mat){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
-  scene_add_inst(&scn, 1, mat_id, translation); 
+  uint32_t mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
+  scene_add_inst(s, 1, mtl_id, translation); 
 
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  mat_id = scene_add_mat(&scn, &(mat){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
-  scene_add_inst(&scn, 0, mat_id, translation);
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  scene_add_inst(s, 0, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  mat_id = scene_add_mat(&scn, &(mat){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
-  scene_add_inst(&scn, 0, mat_id, translation);
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
+  scene_add_inst(s, 0, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
-  mat_id = scene_add_mat(&scn, &(mat){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f });
-  scene_add_inst(&scn, 0, mat_id, translation);
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f });
+  scene_add_inst(s, 0, mtl_id, translation);
 
   mat4 scale;
   mat4_scale(scale, 0.2f);
   
   for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
     for(int b=-RIOW_SIZE/2; b<RIOW_SIZE/2; b++) {
-      float mat_p = pcg_randf();
+      float mtl_p = pcg_randf();
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
-        if(mat_p < 0.8f)
-          mat_id = scene_add_mat(&scn, &(mat){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f });
-        else if(mat_p < 0.95f)
-          mat_id = scene_add_mat(&scn, &(mat){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) });
+        if(mtl_p < 0.8f)
+          mtl_id = scene_add_mtl(s, &(mtl){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f });
+        else if(mtl_p < 0.95f)
+          mtl_id = scene_add_mtl(s, &(mtl){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) });
         else
-          mat_id = scene_add_mat(&scn, &(mat){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f });
+          mtl_id = scene_add_mtl(s, &(mtl){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f });
         
         mat4 transform;
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_inst(&scn, 0, mat_id, transform);
+        scene_add_inst(s, 0, mtl_id, transform);
       }
     }
   }
@@ -163,76 +141,39 @@ void init(uint32_t width, uint32_t height)
 {
   pcg_srand(42u, 303u);
 
-  // Reserve buffer space
-  buf_init(7);
-  buf_reserve(GLOB, sizeof(char), GLOB_BUF_SIZE);
-  buf_reserve(TRI, sizeof(tri), TRI_CNT);
-  buf_reserve(INDEX, sizeof(uint32_t), TRI_CNT);
-  buf_reserve(BVH_NODE, sizeof(bvh_node), 2 * TRI_CNT);
-  buf_reserve(TLAS_NODE, sizeof(tlas_node), 2 * INST_CNT + 1);
-  buf_reserve(INST, sizeof(inst), INST_CNT);
-  buf_reserve(MAT, sizeof(mat), MAT_CNT);
+  init_scene_riow(&scn);
 
-  buf_acquire(GLOB, GLOB_BUF_SIZE);
+  rd = renderer_init(&scn, width, height, 2);
   
-  config = (cfg){ width, height, 2, 5 };
-
-  init_scene_riow();
-
-  // Create GPU buffer
-  gpu_create_res(buf_len(GLOB), buf_len(TRI), buf_len(INDEX),
-      buf_len(BVH_NODE), buf_len(TLAS_NODE), buf_len(INST), buf_len(MAT));
-
-  // Write config into globals
-  gpu_write_buf(GLOB, GLOB_BUF_OFS_CFG, &config, sizeof(cfg));
-
-  // Write all static data buffer
-  gpu_write_buf(TRI, 0, buf_ptr(TRI, 0), buf_len(TRI));
-  gpu_write_buf(INDEX, 0, buf_ptr(INDEX, 0), buf_len(INDEX));
-  gpu_write_buf(BVH_NODE, 0, buf_ptr(BVH_NODE, 0), buf_len(BVH_NODE));
-  gpu_write_buf(MAT, 0, buf_ptr(MAT, 0), buf_len(MAT));
-
-  // Write initial view and cam into globals
-  update_cam_view();
+  renderer_push_static_res(rd);
+  renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
 }
 
 void update_scene(float time)
 {
-  // TODO
-}
-
-__attribute__((visibility("default")))
-void update(float time)
-{
+  // Update camera
   if(orbit_cam) {
     float s = 0.5f;
     float r = 16.0f;
     float h = 2.0f;
     vec3 pos = (vec3){ r * sinf(time * s * s), 0.2f + h + h * sinf(time * s * 0.7f), r * cosf(time * s) };
     cam_set(&scn.cam, pos, vec3_neg(pos));
-    update_cam_view();
+    renderer_set_dirty(rd, CAM_VIEW);
   }
- 
-  if(!paused)
-    update_scene(time);
 
-  scene_prepare_render(&scn);
+  // Update instances
+}
 
-  // Write tlas and instance buffer
-  gpu_write_buf(TLAS_NODE, 0, buf_ptr(TLAS_NODE, 0), buf_len(TLAS_NODE));
-  gpu_write_buf(INST, 0, buf_ptr(INST, 0), buf_len(INST));
-
-  // Push frame data
-  float frame[8] = { pcg_randf(), config.spp / (float)(gathered_smpls + config.spp),
-    time, 0.0f, bg_col.x, bg_col.y, bg_col.z, 0.0f };
-  gpu_write_buf(GLOB, GLOB_BUF_OFS_FRAME, frame, 8 * sizeof(float));
-
-  gathered_smpls += config.spp;
+__attribute__((visibility("default")))
+void update(float time)
+{
+  update_scene(time);
+  renderer_update(rd, time);
 }
 
 __attribute__((visibility("default")))
 void release()
 {
+  renderer_release(rd);
   scene_release(&scn);
-  buf_release();
 }
