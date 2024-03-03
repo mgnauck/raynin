@@ -44,6 +44,13 @@ extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz,
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
 
+void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
+{
+  gpu_create_res(GLOB_BUF_SZ, total_tri_cnt * sizeof(tri), total_tri_cnt * sizeof(uint32_t),
+      2 * total_tri_cnt * sizeof(bvh_node), 2 * total_inst_cnt * sizeof(tlas_node),
+      total_inst_cnt * sizeof(inst), total_mtl_cnt * sizeof(mtl));
+}
+
 render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t spp)
 {
   render_data *rd = malloc(sizeof(*rd));
@@ -52,18 +59,9 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
   rd->width = width;
   rd->height = height;
   rd->spp = spp;
-  rd->bounces = 5; // TODO RR
+  rd->bounces = 5;
   rd->gathered_spp = 0;
-
-  // Calc total number of tris in scene
-  uint32_t total_tri_cnt = 0;
-  for(uint32_t i=0; i<s->mesh_cnt; i++)
-    total_tri_cnt += s->meshes[i].tri_cnt;
-
-  // Create GPU buffer
-  gpu_create_res(GLOB_BUF_SZ, total_tri_cnt * sizeof(tri), total_tri_cnt * sizeof(uint32_t),
-      2 * total_tri_cnt * sizeof(bvh_node), 2 * s->inst_cnt * sizeof(tlas_node),
-      s->inst_cnt * sizeof(inst), s->mtl_cnt * sizeof(mtl));
+  rd->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
 
   return rd;
 }
@@ -84,7 +82,7 @@ void renderer_set_bg_col(render_data *rd, vec3 bg_col)
   reset_samples(rd);
 }
 
-void renderer_push_static(render_data *rd)
+void renderer_update_static(render_data *rd)
 {
   scene *s = rd->scene;
   

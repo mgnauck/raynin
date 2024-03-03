@@ -147,10 +147,11 @@ void init(uint32_t width, uint32_t height)
 
   init_scene_riow(cs);
 
-  rd = renderer_init(cs, width, height, 2);  
+  renderer_gpu_alloc(TRI_CNT, MTL_CNT, INST_CNT);
 
-  renderer_push_static(rd);
+  rd = renderer_init(cs, width, height, 2);
   renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
+  renderer_update_static(rd);
 }
 
 void update_scene(scene *s, float time)

@@ -7,6 +7,7 @@
 #include "mesh.h"
 #include "bvh.h"
 #include "inst.h"
+#include "settings.h"
 #include "tlas.h"
 
 typedef struct inst_state {

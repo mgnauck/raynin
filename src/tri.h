@@ -1,6 +1,7 @@
 #ifndef TRI_H
 #define TRI_H
 
+#include "settings.h"
 #include "vec3.h"
 
 typedef struct tri {
