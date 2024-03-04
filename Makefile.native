@@ -1,0 +1,23 @@
+SRC=sutil.c mutil.c printf.c log.c vec3.c mat4.c ray.c tri.c aabb.c cam.c view.c mesh.c bvh.c tlas.c scene.c renderer.c intersect.c main.c
+OBJ=$(patsubst %.c,obj/%.o,$(SRC))
+OUT=main
+
+CC=clang
+CFLAGS=-std=c2x -O2 -ffast-math -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter $(shell sdl2-config --cflags)
+LDFLAGS=-s -fuse-ld=lld
+#LDFLAGS=-s
+LIBS=-lc -lm $(shell sdl2-config --libs)
+
+all: $(OUT)
+
+.PHONY: all clean
+
+$(OUT): $(OBJ)
+	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
+
+obj/%.o: src/%.c
+	@mkdir -p `dirname $@`
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	rm -rf obj $(OUT)

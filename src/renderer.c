@@ -10,6 +10,12 @@
 #include "tlas.h"
 #include "tri.h"
 
+#ifdef NATIVE_BUILD
+#include <SDL.h>
+#include "ray.h"
+#include "intersect.h"
+#endif
+
 // Global buffer size and offsets
 #define GLOB_BUF_SZ         144
 #define GLOB_BUF_OFS_CFG    0
@@ -37,12 +43,21 @@ typedef struct render_data {
   vec3      bg_col;
 } render_data;
 
+#ifndef NATIVE_BUILD
+
 extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz,
     uint32_t index_sz, uint32_t bvh_node_sz, uint32_t tlas_node_sz, uint32_t inst_sz,
     uint32_t mtl_sz);
 
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
+
+#else
+
+#define gpu_create_res(...)
+#define gpu_write_buf(...)
+
+#endif
 
 void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
@@ -148,3 +163,39 @@ void renderer_update(render_data *rd, float time)
 
   rd->gathered_spp += rd->spp;
 }
+
+#ifdef NATIVE_BUILD
+
+void renderer_render(render_data *rd, SDL_Surface *surface)
+{
+#define BLOCK_SIZE 4
+  for(uint32_t j=0; j<rd->height; j+=BLOCK_SIZE) {
+    for(uint32_t i=0; i<rd->width; i+=BLOCK_SIZE) {
+      for(uint32_t y=0; y<BLOCK_SIZE; y++) {
+        for(uint32_t x=0; x<BLOCK_SIZE; x++) {
+          ray r;
+          ray_create_primary(&r, (float)(i + x), (float)(j + y), &rd->scene->view, &rd->scene->cam);
+          hit h = (hit){ .t = MAX_DISTANCE };
+          intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, &h);
+          vec3 c = rd->bg_col;
+          if(h.t < MAX_DISTANCE) {
+            inst *inst = &rd->scene->instances[h.id & 0xffff];
+            uint32_t tri_idx = h.id >> 16;
+            tri* tri = &rd->scene->meshes[inst->ofs].tris[tri_idx];
+            vec3 nrm = vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
+            nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
+            nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
+            c = vec3_mul(nrm, rd->scene->mtls[(inst->id >> 16) & 0xfff].color);
+            //c = rd->scene->materials[(inst->id >> 16) & 0xfff].color;
+          }
+          uint32_t cr = min(255, (uint32_t)(255 * c.x));  
+          uint32_t cg = min(255, (uint32_t)(255 * c.y));
+          uint32_t cb = min(255, (uint32_t)(255 * c.z));
+          ((uint32_t *)surface->pixels)[rd->width * (j + y) + (i + x)] = 0xff << 24 | cr << 16 | cg << 8 | cb;
+        }
+      }
+    }
+  }
+}
+
+#endif

@@ -5,10 +5,18 @@
 #include "mtl.h"
 #include "scene.h"
 #include "renderer.h"
+#include "settings.h"
 
 #include "data/teapot.h"
 #include "data/dragon.h"
 #include "data/icosahedron.h"
+
+#ifdef NATIVE_BUILD
+#include <SDL.h>
+#define NO_KEY_OR_MOUSE_HANDLING
+#define WIDTH       1280
+#define HEIGHT      800
+#endif
 
 #define RIOW_SIZE   22
 #define TRI_CNT     800 + 2
@@ -16,12 +24,12 @@
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4)
 #define MTL_CNT     INST_CNT
 
-scene       scn;
-scene       *cs = &scn;
-render_data *rd;
+scene         scn;
+scene         *cs = &scn;
+render_data   *rd;
 
-bool        orbit_cam = false;
-bool        paused = false;
+bool          orbit_cam = false;
+bool          paused = false;
 
   __attribute__((visibility("default")))
 void key_down(unsigned char key)
@@ -183,3 +191,76 @@ void release()
   renderer_release(rd);
   scene_release(&scn);
 }
+
+#ifdef NATIVE_BUILD
+
+int main(int argc, char *argv[])
+{
+  int32_t code = EXIT_SUCCESS;
+ 
+  if(SDL_Init(SDL_INIT_VIDEO) < 0)
+    return EXIT_FAILURE;
+  
+  SDL_Window *window = SDL_CreateWindow("unik",
+      SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
+  if(!window) {
+    code = EXIT_FAILURE;
+    goto clean_sdl;
+  }
+
+  SDL_Surface *screen = SDL_GetWindowSurface(window);
+  if(!screen) {
+    code = EXIT_FAILURE;
+    goto clean_window;
+  }
+
+#ifndef NO_KEY_OR_MOUSE_HANDLING
+  if(SDL_SetRelativeMouseMode(SDL_TRUE) < 0) {
+    code = EXIT_FAILURE;
+    goto clean_window;
+  }
+#endif
+
+  init(WIDTH, HEIGHT);
+
+  bool      quit = false;
+  uint64_t  start = SDL_GetTicks64();
+  uint64_t  last = start;
+
+  while(!quit)
+  {
+    SDL_Event event;
+    while(SDL_PollEvent(&event)) {
+      if(event.type == SDL_QUIT)
+        quit = true;
+#ifndef NO_KEY_OR_MOUSE_HANDLING
+      else if(event.type == SDL_KEYDOWN)
+        handle_keypress(&event.key.keysym);
+      else if(event.type == SDL_MOUSEMOTION)
+        handle_mouse_motion(&event.motion);
+#endif
+    }
+
+    uint64_t frame = SDL_GetTicks64() - last;
+    char title[256];
+    snprintf(title, 256, "%ld ms / %6.3f / %4.2fM rays/s", frame, 1000.0f / frame, WIDTH * HEIGHT / (frame * 1000.0f));
+    SDL_SetWindowTitle(window, title);
+    last = SDL_GetTicks64();
+
+    update((last - start) / 1000.0f);
+    renderer_render(rd, screen);
+
+    SDL_UpdateWindowSurface(window);
+  }
+
+  release();
+
+clean_window:
+  SDL_DestroyWindow(window);
+clean_sdl:
+  SDL_Quit();
+ 
+  return code;
+}
+
+#endif

@@ -1,5 +1,7 @@
 #include "sutil.h"
 
+#ifndef NATIVE_BUILD
+
 extern unsigned char __heap_base;
 static unsigned long heap_pos = (unsigned long)&__heap_base;
 
@@ -25,3 +27,5 @@ void *memcpy(void *dest, const void *src, size_t cnt)
 {
   return __builtin_memcpy(dest, src, cnt);
 }
+
+#endif

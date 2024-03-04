@@ -123,7 +123,11 @@ uint32_t scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mtl_id, mat4 transf
 
   inst *inst = &s->instances[s->inst_cnt];
   inst->id = (mtl_id << 16) | (s->inst_cnt & 0xffff);
+#ifndef NATIVE_BUILD
   inst->ofs = s->meshes[mesh_id].ofs;
+#else
+  inst->ofs = mesh_id;
+#endif
 
   scene_upd_inst(s, s->inst_cnt, transform);
 

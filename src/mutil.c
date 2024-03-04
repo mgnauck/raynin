@@ -1,5 +1,4 @@
 #include "mutil.h"
-#include <stdint.h>
 
 typedef struct pcg_state_setseq_64 {
   uint64_t state;

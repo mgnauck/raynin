@@ -2,6 +2,7 @@
 #define MUTIL_H
 
 #include <stdint.h>
+#include "settings.h"
 
 #define PI      3.141592654f
 #define TWO_PI  6.283185307f
@@ -10,6 +11,8 @@
 // Beware of double evaluation
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
+
+#ifndef NATIVE_BUILD
 
 // Imported
 extern float sqrtf(float a);
@@ -25,6 +28,12 @@ float     fabsf(float v);
 float     floorf(float v);
 float     truncf(float v);
 float     fmodf(float x, float y);
+
+#else
+
+#include <math.h>
+
+#endif
 
 void      pcg_srand(uint64_t seed, uint64_t seq);
 uint32_t  pcg_rand(void);
