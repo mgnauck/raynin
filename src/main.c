@@ -13,7 +13,6 @@
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
-#define NO_KEY_OR_MOUSE_HANDLING
 #define WIDTH       1280
 #define HEIGHT      800
 #endif
@@ -214,16 +213,10 @@ int main(int argc, char *argv[])
     goto clean_window;
   }
 
-#ifndef NO_KEY_OR_MOUSE_HANDLING
-  if(SDL_SetRelativeMouseMode(SDL_TRUE) < 0) {
-    code = EXIT_FAILURE;
-    goto clean_window;
-  }
-#endif
-
   init(WIDTH, HEIGHT);
 
   bool      quit = false;
+  bool      lock_mouse = false;
   uint64_t  start = SDL_GetTicks64();
   uint64_t  last = start;
 
@@ -233,12 +226,17 @@ int main(int argc, char *argv[])
     while(SDL_PollEvent(&event)) {
       if(event.type == SDL_QUIT)
         quit = true;
-#ifndef NO_KEY_OR_MOUSE_HANDLING
       else if(event.type == SDL_KEYDOWN)
-        handle_keypress(&event.key.keysym);
-      else if(event.type == SDL_MOUSEMOTION)
-        handle_mouse_motion(&event.motion);
-#endif
+        key_down(event.key.keysym.sym);
+      else if(event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+        lock_mouse = !lock_mouse;
+        if(SDL_SetRelativeMouseMode(lock_mouse ? SDL_TRUE : SDL_FALSE) < 0) {
+          code = EXIT_FAILURE;
+          goto clean_window;
+        }
+      }
+      else if(lock_mouse && event.type == SDL_MOUSEMOTION)
+        mouse_move(event.motion.xrel, event.motion.yrel);
     }
 
     uint64_t frame = SDL_GetTicks64() - last;
