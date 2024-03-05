@@ -115,27 +115,42 @@ void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
   scene_set_dirty(s, RT_MTL);
 }
 
-uint32_t scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mtl_id, mat4 transform)
+uint32_t scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
 {
   inst_state *inst_state = &s->inst_states[s->inst_cnt];
   inst_state->mesh_id = mesh_id;
   inst_state->dirty = true;
 
   inst *inst = &s->instances[s->inst_cnt];
-  inst->id = (mtl_id << 16) | (s->inst_cnt & 0xffff);
+  // Lowest 16 bits are instance id, i.e. max 65536 instances
+  inst->id = (s->inst_cnt & 0xffff);
 #ifndef NATIVE_BUILD
-  inst->ofs = s->meshes[mesh_id].ofs;
+  // Lowest 31 bits are offset into tris/indices and 2 * ofs into bvhs
+  // i.e. 2147483647 triangles :)
+  inst->ofs = s->meshes[mesh_id].ofs & 0x7fffffff;
 #else
-  inst->ofs = mesh_id;
+  // For native build, lowest 31 bits are simply the mesh id
+  inst->ofs = mesh_id & 0x7fffffff;
 #endif
 
-  scene_upd_inst(s, s->inst_cnt, transform);
+  // Set transform and mtl override id to instance
+  // No material override if mtl id < 0
+  scene_upd_inst(s, s->inst_cnt, mtl_id, transform);
 
   return s->inst_cnt++;
 }
 
-void scene_upd_inst(scene *s, uint32_t inst_id, mat4 transform)
+void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
 {
+  inst *inst = &s->instances[inst_id];
+
+  if(mtl_id >= 0) {
+    // Highest 16 bits are mtl override id, i.e. max 65536 materials
+    inst->id |= (mtl_id << 16);
+    // Highest bit indicates if material override is active
+    inst->ofs |= 0x80000000;
+  }
+
   memcpy(s->instances[inst_id].transform, transform, sizeof(mat4));
   s->inst_states[inst_id].dirty = true;
 }

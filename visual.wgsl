@@ -75,10 +75,10 @@ struct Inst
   transform: mat4x4f,
   invTransform: mat4x4f,
   aabbMin: vec3f,
-  id: u32,          // (mat id << 16) | (inst id & 0xffff)
+  id: u32,          // (mtl override id << 16) | (inst id & 0xffff)
   aabbMax: vec3f,
-  ofs: u32          // ofs into tri/indices and 2*ofs into bvhNodes
-}
+  ofs: u32          // bits 0-31: ofs into tri/indices and 2*ofs into bvhNodes
+}                   // bit 32: material override active
 
 struct Mat
 {
@@ -304,7 +304,7 @@ fn intersectInst(ray: Ray, inst: Inst, h: ptr<function, Hit>)
   rayObjSpace.dir = (vec4f(ray.dir, 0.0) * inst.invTransform).xyz;
   rayObjSpace.invDir = 1.0 / rayObjSpace.dir;
 
-  intersectBvh(rayObjSpace, inst.id & 0xffff, inst.ofs, h);
+  intersectBvh(rayObjSpace, inst.id & 0xffff, inst.ofs & 0x7fffffff, h);
 }
 
 fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
@@ -367,7 +367,7 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
 fn calcNormal(r: Ray, h: Hit, nrm: ptr<function, vec3f>) -> bool
 {
   let inst = &instances[h.id & 0xffff];
-  let ofs = (*inst).ofs;
+  let ofs = (*inst).ofs & 0x7fffffff;
   let tri = &tris[ofs + (h.id >> 16)]; // Using (*inst).ofs directly results in SPIRV error :(
 
   var n = (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v);
@@ -438,7 +438,7 @@ fn evalMaterialDielectric(r: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, a
 fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let inst = &instances[h.id & 0xffff];
-  let mat = materials[(*inst).id >> 16];
+  let mat = materials[(*inst).id >> 16]; // TODO Currently only using material override
 
   if(any(mat.color > vec3f(1.0))) {
     *emission = mat.color;

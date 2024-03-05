@@ -133,7 +133,7 @@ void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances,
     if(node->children == 0) {
       // Leaf node with a single instance assigned
       const inst *inst = &instances[node->inst];
-      intersect_inst(r, inst, &bvhs[inst->ofs], h);
+      intersect_inst(r, inst, &bvhs[inst->ofs & 0x7fffffff], h);
       if(stack_pos > 0)
         node = node_stack[--stack_pos];
       else

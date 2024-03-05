@@ -48,8 +48,9 @@ void      scene_prepare_render(scene *s);
 uint32_t  scene_add_mtl(scene *s, mtl *mtl);
 void      scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl);
 
-uint32_t  scene_add_inst(scene *s, uint32_t mesh_id, uint32_t mtl_id, mat4 transform);
-void      scene_upd_inst(scene *s, uint32_t inst_id, mat4 transform);
+// mtl_id < 0 -> no material override
+uint32_t  scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform);
+void      scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform);
 
 uint32_t  scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h);
 uint32_t  scene_add_icosphere(scene *s, uint8_t steps, bool face_normals);
