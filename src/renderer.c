@@ -98,10 +98,19 @@ void renderer_set_bg_col(render_data *rd, vec3 bg_col)
   reset_samples(rd);
 }
 
+void push_mtls(render_data *rd)
+{
+  scene *s = rd->scene;
+#ifndef NATIVE_BUILD // Avoid unused variable compiler warning
+  gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
+#endif
+  scene_unset_dirty(s, RT_MTL);
+}
+
 void renderer_update_static(render_data *rd)
 {
   scene *s = rd->scene;
-  
+
 #ifndef NATIVE_BUILD // Avoid unused variable compiler warning
   // Push part of globals
   uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
@@ -120,11 +129,10 @@ void renderer_update_static(render_data *rd)
     cnt += m->tri_cnt;
   }
 #endif
-
-  // Push mtls
-  gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
-
-  scene_unset_dirty(s, RT_MESH | RT_MTL);
+  
+  scene_unset_dirty(s, RT_MESH);
+  
+  push_mtls(rd);
 }
 
 void renderer_update(render_data *rd, float time)
@@ -147,10 +155,8 @@ void renderer_update(render_data *rd, float time)
   }
 
   // Push materials
-  if(rd->scene->dirty & RT_MTL) {
-    gpu_write_buf(BT_MTL, 0, rd->scene->mtls, s->mtl_cnt * sizeof(*s->mtls));
-    scene_unset_dirty(s, RT_MTL);
-  }
+  if(rd->scene->dirty & RT_MTL)
+    push_mtls(rd);
 
   // Push TLAS and instances
   if(rd->scene->dirty & RT_INST) {
@@ -170,7 +176,6 @@ void renderer_update(render_data *rd, float time)
 }
 
 #ifdef NATIVE_BUILD
-
 void renderer_render(render_data *rd, SDL_Surface *surface)
 {
   float weight = rd->spp / (float)rd->gathered_spp;
@@ -205,5 +210,4 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
     }
   }
 }
-
 #endif
