@@ -103,6 +103,11 @@ float vec3_max_comp(vec3 v)
   return max(max(v.x, v.y), v.z);
 }
 
+vec3 vec3_uint32(uint32_t v)
+{
+  return (vec3){ ((v >> 16) & 0xff) / 255.0f, ((v >> 8) & 0xff) / 255.0f, (v & 0xff) / 255.0f };
+}
+
 vec3 vec3_spherical(float theta, float phi)
 {
   return (vec3){ -cosf(phi) * sinf(theta), -cosf(theta), sinf(phi) * sinf(theta) };

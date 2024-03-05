@@ -13,8 +13,8 @@
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
-#define WIDTH       1280
-#define HEIGHT      800
+#define WIDTH       800
+#define HEIGHT      600
 #endif
 
 #define RIOW_SIZE   22
@@ -226,15 +226,18 @@ int main(int argc, char *argv[])
     while(SDL_PollEvent(&event)) {
       if(event.type == SDL_QUIT)
         quit = true;
-      else if(event.type == SDL_KEYDOWN)
-        key_down(event.key.keysym.sym);
-      else if(event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+      else if((event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) ||
+          (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
+        if(!lock_mouse && event.type == SDL_KEYDOWN)
+          quit = true;
         lock_mouse = !lock_mouse;
         if(SDL_SetRelativeMouseMode(lock_mouse ? SDL_TRUE : SDL_FALSE) < 0) {
           code = EXIT_FAILURE;
           goto clean_window;
         }
       }
+      else if(event.type == SDL_KEYDOWN)
+        key_down(event.key.keysym.sym);
       else if(lock_mouse && event.type == SDL_MOUSEMOTION)
         mouse_move(event.motion.xrel, event.motion.yrel);
     }

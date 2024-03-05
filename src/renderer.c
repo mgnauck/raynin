@@ -172,6 +172,7 @@ void renderer_update(render_data *rd, float time)
 
 void renderer_render(render_data *rd, SDL_Surface *surface)
 {
+  float weight = rd->spp / (float)rd->gathered_spp;
 #define BLOCK_SIZE 4
   for(uint32_t j=0; j<rd->height; j+=BLOCK_SIZE) {
     for(uint32_t i=0; i<rd->width; i+=BLOCK_SIZE) {
@@ -192,10 +193,12 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
             c = vec3_mul(nrm, rd->scene->mtls[(inst->id >> 16) & 0xfff].color);
             //c = rd->scene->mtls[(inst->id >> 16) & 0xfff].color;
           }
+          uint32_t index = rd->width * (j + y) + (i + x);
+          c = vec3_add(vec3_scale(vec3_uint32(((uint32_t *)surface->pixels)[index]), 1.0f - weight), vec3_scale(c, weight));
           uint32_t cr = min(255, (uint32_t)(255 * c.x));  
           uint32_t cg = min(255, (uint32_t)(255 * c.y));
           uint32_t cb = min(255, (uint32_t)(255 * c.z));
-          ((uint32_t *)surface->pixels)[rd->width * (j + y) + (i + x)] = 0xff << 24 | cr << 16 | cg << 8 | cb;
+          ((uint32_t *)surface->pixels)[index] = 0xff << 24 | cr << 16 | cg << 8 | cb;
         }
       }
     }
