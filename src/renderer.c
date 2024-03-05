@@ -101,6 +101,7 @@ void renderer_update_static(render_data *rd)
 {
   scene *s = rd->scene;
   
+#ifndef NATIVE_BUILD // Avoid compiler warning
   // Push part of globals
   uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
@@ -117,6 +118,7 @@ void renderer_update_static(render_data *rd)
 
     cnt += m->tri_cnt;
   }
+#endif
 
   // Push mtls
   gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
@@ -156,10 +158,12 @@ void renderer_update(render_data *rd, float time)
     scene_unset_dirty(s, RT_INST);
   }
 
+#ifndef NATIVE_BUILD // Avoid compiler warning
   // Push frame data
   float frame[8] = { pcg_randf(), rd->spp / (float)(rd->gathered_spp + rd->spp),
     time, 0.0f, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, 0.0f };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frame, sizeof(frame));
+#endif
 
   rd->gathered_spp += rd->spp;
 }
@@ -176,7 +180,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
           ray r;
           ray_create_primary(&r, (float)(i + x), (float)(j + y), &rd->scene->view, &rd->scene->cam);
           hit h = (hit){ .t = MAX_DISTANCE };
-          intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, &h);
+          intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, rd->scene->bvhs, &h);
           vec3 c = rd->bg_col;
           if(h.t < MAX_DISTANCE) {
             inst *inst = &rd->scene->instances[h.id & 0xffff];
@@ -186,7 +190,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
             nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
             nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
             c = vec3_mul(nrm, rd->scene->mtls[(inst->id >> 16) & 0xfff].color);
-            //c = rd->scene->materials[(inst->id >> 16) & 0xfff].color;
+            //c = rd->scene->mtls[(inst->id >> 16) & 0xfff].color;
           }
           uint32_t cr = min(255, (uint32_t)(255 * c.x));  
           uint32_t cg = min(255, (uint32_t)(255 * c.y));

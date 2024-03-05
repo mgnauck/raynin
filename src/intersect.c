@@ -115,17 +115,14 @@ void intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices,
   }
 }
 
-void intersect_inst(const ray *r, const inst *inst, hit *h)
+void intersect_inst(const ray *r, const inst *inst, const bvh *bvh, hit *h)
 {
   ray r_obj;
   ray_transform(&r_obj, inst->inv_transform, r);
-
-// TODO
-//  intersect_bvh(&r_obj, buf_ptr(BVH_NODE, 2 * inst->ofs),
-//      buf_ptr(INDEX, inst->ofs), buf_ptr(TRI, inst->ofs), inst->id & 0xffff, h);
+  intersect_bvh(&r_obj, bvh->nodes, bvh->indices, bvh->mesh->tris, inst->id & 0xffff, h);
 }
 
-void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, hit *h)
+void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, const bvh *bvhs, hit *h)
 {
 #define NODE_STACK_SIZE 64
   uint32_t        stack_pos = 0;
@@ -135,7 +132,8 @@ void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances,
   while(true) {
     if(node->children == 0) {
       // Leaf node with a single instance assigned
-      intersect_inst(r, &instances[node->inst], h);
+      const inst *inst = &instances[node->inst];
+      intersect_inst(r, inst, &bvhs[inst->ofs], h);
       if(stack_pos > 0)
         node = node_stack[--stack_pos];
       else
