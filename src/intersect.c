@@ -60,14 +60,14 @@ void intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id
     h->t = dist;
     h->u = u;
     h->v = v;
-    // tri_id is relative to mesh (i.e. together with inst->tri_ofs)
+    // tri_id is relative to mesh (i.e. together with inst->ofs)
     h->id = (tri_id << 16) | (inst_id & 0xffff);
   }
 }
 
 void intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices, const tri *tris, uint32_t inst_id, hit *h)
 {
-#define NODE_STACK_SIZE 64
+#define NODE_STACK_SIZE 32
   uint32_t        stack_pos = 0;
   const bvh_node  *node_stack[NODE_STACK_SIZE];
   const bvh_node  *node = nodes;
@@ -124,7 +124,7 @@ void intersect_inst(const ray *r, const inst *inst, const bvh *bvh, hit *h)
 
 void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, const bvh *bvhs, hit *h)
 {
-#define NODE_STACK_SIZE 64
+#define NODE_STACK_SIZE 32
   uint32_t        stack_pos = 0;
   const tlas_node *node_stack[NODE_STACK_SIZE];
   const tlas_node *node = nodes;

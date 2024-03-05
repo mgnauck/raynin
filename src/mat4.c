@@ -199,8 +199,8 @@ bool mat4_inv(mat4 d, const mat4 m)
   return true;
 }
 
-void mat4_log(mat4 m)
+void mat4_logc(mat4 m)
 {
   for(uint8_t i=0; i<4; i++)
-    log("%6.3f %6.3f %6.3f %6.3f", m[4 * i], m[4 * i + 1], m[4 * i + 2], m[4 * i + 3]); 
+    logc("%6.3f %6.3f %6.3f %6.3f", m[4 * i], m[4 * i + 1], m[4 * i + 2], m[4 * i + 3]); 
 }

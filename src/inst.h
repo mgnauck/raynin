@@ -11,6 +11,6 @@ typedef struct inst {
   uint32_t    id;   // (mtl id << 16) | (inst id & 0xffff)
   vec3        max;
   uint32_t    ofs;  // ofs into tris/indices and 2 * ofs into bvh_nodes
-} inst;
+} inst;             // In case of native build, this is simply the mesh id.
 
 #endif

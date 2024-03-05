@@ -31,6 +31,6 @@ vec3 mat4_mul_dir(const mat4 m, const vec3 v);
 
 bool mat4_inv(mat4 dest, const mat4 src);
 
-void mat4_log(mat4 m);
+void mat4_logc(mat4 m);
 
 #endif

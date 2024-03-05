@@ -23,6 +23,7 @@
 #define GLOB_BUF_OFS_CAM    48
 #define GLOB_BUF_OFS_VIEW   96
 
+// GPU buffer types
 typedef enum buf_type {
   BT_GLOB = 0,
   BT_TRI,
@@ -101,7 +102,7 @@ void renderer_update_static(render_data *rd)
 {
   scene *s = rd->scene;
   
-#ifndef NATIVE_BUILD // Avoid compiler warning
+#ifndef NATIVE_BUILD // Avoid unused variable compiler warning
   // Push part of globals
   uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
@@ -158,7 +159,7 @@ void renderer_update(render_data *rd, float time)
     scene_unset_dirty(s, RT_INST);
   }
 
-#ifndef NATIVE_BUILD // Avoid compiler warning
+#ifndef NATIVE_BUILD // Avoid unused variable compiler warning
   // Push frame data
   float frame[8] = { pcg_randf(), rd->spp / (float)(rd->gathered_spp + rd->spp),
     time, 0.0f, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, 0.0f };

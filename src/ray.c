@@ -2,8 +2,7 @@
 #include "mutil.h"
 #include "view.h"
 #include "cam.h"
-
-//#define JITTER_AA
+#include "settings.h"
 
 void ray_create(ray *ray, vec3 ori, vec3 dir)
 {
@@ -18,7 +17,7 @@ void ray_create_primary(ray *ray, float x, float y, const view *v, const cam *c)
   vec3 pix_smpl = vec3_add(v->pix_top_left, vec3_add(
         vec3_scale(v->pix_delta_x, x), vec3_scale(v->pix_delta_y, y)));
 
-#ifdef JITTER_AA
+#ifdef ANTIALIASING
   // Jitter viewplane position (AA)
   pix_smpl = vec3_add(pix_smpl, vec3_add(
         vec3_scale(v->pix_delta_x, pcg_randf() - 0.5f),
