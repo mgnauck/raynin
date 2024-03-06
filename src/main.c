@@ -96,9 +96,9 @@ void init_scene_riow(scene *s)
 
   // Meshes
   scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
-  scene_add_uvsphere(s, 1.0f, 20, 20, false);
-  //scene_add_icosphere(s, 0, true);
-  //scene_add_mesh(s, icosahedron);
+  //scene_add_uvsphere(s, 1.0f, 20, 20, false);
+  scene_add_icosphere(s, 0, true);
+  //scene_add_mesh(s, teapot);
   //scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, false);
   scene_build_bvhs(s);
 
@@ -168,13 +168,19 @@ void update_scene(scene *s, float time)
     float v = 0.5f;
     float r = 16.0f;
     float h = 2.0f;
-    vec3 pos = (vec3){ r * sinf(time * v * v), 0.2f + h + h * sinf(time * v * 0.7f), r * cosf(time * v) };
+    vec3 pos = (vec3){ r * sinf(time * v * v), 1.2f + h + h * sinf(time * v * 0.7f), r * cosf(time * v) };
     cam_set(&s->cam, pos, vec3_neg(pos));
     scene_set_dirty(s, RT_CAM_VIEW);
   }
 
   // Update instances
-  // ..
+  /*mat4 translation;
+  mat4_trans(translation, (vec3){ 4.0f, 2.0f + sinf(time * 0.6f), 0.0f });
+  scene_upd_inst(s, 1, -1, translation);
+  mat4_trans(translation, (vec3){ 0.0f, 2.0f + sinf(time * 0.6f + 0.6f), 0.0f });
+  scene_upd_inst(s, 2, -1, translation);
+  mat4_trans(translation, (vec3){ -4.0f, 2.0f + sinf(time * 0.6f + 1.2f), 0.0f });
+  scene_upd_inst(s, 3, -1, translation);*/
 }
 
 __attribute__((visibility("default")))

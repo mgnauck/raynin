@@ -134,7 +134,6 @@ uint32_t scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transfo
 #endif
 
   // Set transform and mtl override id to instance
-  // No material override if mtl id < 0
   scene_upd_inst(s, s->inst_cnt, mtl_id, transform);
 
   return s->inst_cnt++;
@@ -144,12 +143,16 @@ void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
 {
   inst *inst = &s->instances[inst_id];
 
+  // No material override if mtl id < 0
   if(mtl_id >= 0) {
     // Highest 16 bits are mtl override id, i.e. max 65536 materials
-    inst->id |= (mtl_id << 16);
-    // Highest bit indicates if material override is active
+    inst->id = (mtl_id << 16) | (inst->id & 0xffff);
+    // Set highest bit to enable the material override
     inst->ofs |= 0x80000000;
   }
+  else
+    // Clear material override bit
+    inst->ofs = inst->ofs & 0x7fffffff;
 
   memcpy(s->instances[inst_id].transform, transform, sizeof(mat4));
   s->inst_states[inst_id].dirty = true;
