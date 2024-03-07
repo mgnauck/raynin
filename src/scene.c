@@ -164,7 +164,7 @@ void update_ofs(scene *s, mesh *m)
   s->curr_ofs += m->tri_cnt;
 }
 
-uint32_t scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h)
+uint32_t scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h, uint32_t mtl)
 {
   mesh *m = &s->meshes[s->mesh_cnt];
   mesh_init(m, 2);
@@ -188,6 +188,7 @@ uint32_t scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h)
   tri->uv1[0] = 0.0f; tri->uv1[1] = 1.0f;
   tri->uv2[0] = 1.0f; tri->uv2[1] = 1.0f;
 #endif
+  tri->mtl = mtl;
   m->centers[0] = tri_calc_center(tri);
 
   tri = &m->tris[1];
@@ -200,13 +201,14 @@ uint32_t scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h)
   tri->uv1[0] = 1.0f; tri->uv1[1] = 1.0f;
   tri->uv2[0] = 1.0f; tri->uv2[1] = 0.0f;
 #endif
+  tri->mtl = mtl;
   m->centers[1] = tri_calc_center(tri);
 
   update_ofs(s, m);
   return s->mesh_cnt++;
 }
 
-uint32_t scene_add_icosphere(scene *s, uint8_t steps, bool face_normals)
+uint32_t scene_add_icosphere(scene *s, uint8_t steps, uint32_t mtl)
 {
   mesh *m = &s->meshes[s->mesh_cnt];
   mesh_init(m, 20 * (1 << (2 * steps)));
@@ -267,11 +269,12 @@ uint32_t scene_add_icosphere(scene *s, uint8_t steps, bool face_normals)
 
   free(temp_tris);
 
-  // Centers, normals and uvs
+  // Materials, centers, normals and uvs
   for(uint32_t i=0; i<m->tri_cnt; i++) {
     tri *t = &m->tris[i];
+    t->mtl = mtl;
     m->centers[i] = tri_calc_center(t);
-    if(face_normals) {
+    if((mtl >> 16) & MF_FLAT) {
       vec3 n = vec3_unit(m->centers[i]);
       t->n0 = n;
       t->n1 = n;
@@ -295,7 +298,7 @@ uint32_t scene_add_icosphere(scene *s, uint8_t steps, bool face_normals)
   return s->mesh_cnt++;
 }
 
-uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby, bool face_normals)
+uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby, uint32_t mtl)
 {
   mesh *m = &s->meshes[s->mesh_cnt];
   mesh_init(m, 2 * subx * suby);
@@ -324,9 +327,10 @@ uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby
 #endif
       };
       
+      t1->mtl = mtl;
       m->centers[ofs] = tri_calc_center(t1);
       
-      if(face_normals) {
+      if((mtl >> 16) & MF_FLAT) {
         t1->n0 = vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b)));
         t1->n1 = t1->n0;
         t1->n2 = t1->n0;
@@ -345,9 +349,10 @@ uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby
 #endif
       };
       
+      t2->mtl = mtl;
       m->centers[ofs + 1] = tri_calc_center(t2);
       
-      if(face_normals) {
+      if((mtl >> 16) & MF_FLAT) {
         t2->n0 = vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c)));
         t2->n1 = t2->n0;
         t2->n2 = t2->n0;
@@ -367,7 +372,7 @@ uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby
   return s->mesh_cnt++;
 }
 
-uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t subx, uint32_t suby, bool face_normals)
+uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t subx, uint32_t suby, uint32_t mtl)
 {
   mesh *m = &s->meshes[s->mesh_cnt];
   mesh_init(m, 2 * subx * suby);
@@ -403,9 +408,10 @@ uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t sub
 #endif
       };
       
+      t1->mtl = mtl;
       m->centers[ofs] = tri_calc_center(t1);
       
-      if(face_normals) {
+      if((mtl >> 16) & MF_FLAT) {
         t1->n0 = vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b)));
         t1->n1 = t1->n0;
         t1->n2 = t1->n0;
@@ -424,9 +430,10 @@ uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t sub
 #endif
       };
       
+      t2->mtl = mtl;
       m->centers[ofs + 1] = tri_calc_center(t2);
       
-      if(face_normals) {
+      if((mtl >> 16) & MF_FLAT) {
         t2->n0 = vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c)));
         t2->n1 = t2->n0;
         t2->n2 = t2->n0;
@@ -446,7 +453,7 @@ uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t sub
   return s->mesh_cnt++;
 }
 
-uint32_t scene_add_mesh(scene *s, const uint8_t *data)
+uint32_t scene_add_mesh(scene *s, const uint8_t *data, uint32_t mtl)
 {
   uint32_t ofs = 0;
 
@@ -492,12 +499,14 @@ uint32_t scene_add_mesh(scene *s, const uint8_t *data)
       memcpy(t->uv2, &uvs[2 * indices[index + items + items + 1]], 2 * sizeof(*t->uv2));
     }
 #endif
-    if(normal_cnt > 0) {
+    if(!((mtl >> 16) & MF_FLAT) && normal_cnt > 0) {
       memcpy(&t->n0, &normals[3 * indices[index + 2]], sizeof(t->n0));
       memcpy(&t->n1, &normals[3 * indices[index + items + 2]], sizeof(t->n1));
       memcpy(&t->n2, &normals[3 * indices[index + items + items + 2]], sizeof(t->n2));
-    }
+    } else 
+      t->n0 = t->n1 = t->n2 = vec3_unit(vec3_cross(vec3_sub(t->v0, t->v1), vec3_sub(t->v2, t->v1)));
 
+    t->mtl = mtl;
     m->centers[i] = tri_calc_center(t);
   }
 

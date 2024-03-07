@@ -193,11 +193,13 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
             inst *inst = &rd->scene->instances[h.id & 0xffff];
             uint32_t tri_idx = h.id >> 16;
             tri* tri = &rd->scene->meshes[inst->ofs & 0x7fffffff].tris[tri_idx];
-            vec3 nrm = vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
+            vec3 nrm = (tri->mtl >> 16) & MF_FLAT ?
+              tri->n1 : vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
             nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
             nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
-            c = vec3_mul(nrm, rd->scene->mtls[(inst->id >> 16) & 0xfff].color);
-            //c = rd->scene->mtls[(inst->id >> 16) & 0xfff].color;
+            uint32_t mtl_id = (inst->ofs & 0x80000000) ? (inst->id >> 16) : (tri->mtl & 0xffff);
+            c = vec3_mul(nrm, rd->scene->mtls[mtl_id].color);
+            //c = rd->scene->mtls[mtl_id].color;
           }
           uint32_t index = rd->width * (j + y) + (i + x);
           c = vec3_add(vec3_scale(vec3_uint32(((uint32_t *)surface->pixels)[index]), 1.0f - weight), vec3_scale(c, weight));

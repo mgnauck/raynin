@@ -33,22 +33,22 @@ struct Ray
 
 struct Tri
 {
-  v0: vec3f,
-  pad0: f32,
-  v1: vec3f,
+  v0:   vec3f,
+  mtl:  u32,        // (mtl flags << 16) | (mtl id & 0xffff)
+  v1:   vec3f,
   pad1: f32,
-  v2: vec3f,
+  v2:   vec3f,
   pad2: f32,
-  n0: vec3f,
+  n0:   vec3f,
   pad3: f32,
-  n1: vec3f,
+  n1:   vec3f,
   pad4: f32,
-  n2: vec3f,
+  n2:   vec3f,
   pad5: f32,
 //#ifdef TEXTURE_SUPPORT
-/*uv0: vec2f,
-  uv1: vec2f,
-  uv2: vec2f,
+/*uv0:  vec2f,
+  uv1:  vec2f,
+  uv2:  vec2f,
   pad6: f32,
   pad7: f32*/
 //#endif
@@ -80,7 +80,7 @@ struct Inst
   ofs: u32          // bits 0-31: ofs into tri/indices and 2*ofs into bvhNodes
 }                   // bit 32: material override active
 
-struct Mat
+struct Mtl
 {
   color: vec3f,
   value: f32
@@ -94,6 +94,10 @@ struct Hit
   id: u32,          // (tri id << 16) | (inst id & 0xffff)
 }
 
+// Material flags
+const FLAT = 1u;
+
+// Math constants
 const EPSILON = 0.0001;
 const PI = 3.141592;
 const MAX_DISTANCE = 3.402823466e+38;
@@ -104,7 +108,7 @@ const MAX_DISTANCE = 3.402823466e+38;
 @group(0) @binding(3) var<storage, read> bvhNodes: array<BvhNode>;
 @group(0) @binding(4) var<storage, read> tlasNodes: array<TlasNode>;
 @group(0) @binding(5) var<storage, read> instances: array<Inst>;
-@group(0) @binding(6) var<storage, read> materials: array<Mat>;
+@group(0) @binding(6) var<storage, read> materials: array<Mtl>;
 @group(0) @binding(7) var<storage, read_write> buffer: array<vec4f>;
 
 var<private> bvhNodeStack: array<u32, 32>;
@@ -232,7 +236,7 @@ fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hi
     (*h).t = dist;
     (*h).u = u;
     (*h).v = v;
-    (*h).id = (triId << 16) | (instId & 0xffff);
+    (*h).id = (triId << 16) | (instId & 0xffff); // instId >> 16 = mtl override id!
   }
 }
 
@@ -304,7 +308,7 @@ fn intersectInst(ray: Ray, inst: Inst, h: ptr<function, Hit>)
   rayObjSpace.dir = (vec4f(ray.dir, 0.0) * inst.invTransform).xyz;
   rayObjSpace.invDir = 1.0 / rayObjSpace.dir;
 
-  intersectBvh(rayObjSpace, inst.id & 0xffff, inst.ofs & 0x7fffffff, h);
+  intersectBvh(rayObjSpace, inst.id, inst.ofs & 0x7fffffff, h);
 }
 
 fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
@@ -352,7 +356,7 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
           nodeStackIndex++;
         }
       } else {
-        // Did miss both children, so check stack
+        // Did miss tris[ofs + (h.id >> 16)]both children, so check stack
         if(nodeStackIndex > 0) {
           nodeStackIndex--;
           nodeIndex = tlasNodeStack[nodeStackIndex];
@@ -370,7 +374,14 @@ fn calcNormal(r: Ray, h: Hit, nrm: ptr<function, vec3f>) -> bool
   let ofs = (*inst).ofs & 0x7fffffff;
   let tri = &tris[ofs + (h.id >> 16)]; // Using (*inst).ofs directly results in SPIRV error :(
 
-  var n = (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v);
+  var n = select(
+    // Interpolate tri normals
+    (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v),
+    // n0 is face normal
+    (*tri).n0,
+    // Material flag
+    (((*tri).mtl >> 16) & FLAT) > 0);
+ 
   n = normalize((vec4f(n, 0.0) * (*inst).transform).xyz);
 
   let inside = dot(r.dir, n) > 0;
@@ -438,17 +449,19 @@ fn evalMaterialDielectric(r: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, a
 fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let inst = &instances[h.id & 0xffff];
-  let mat = materials[(*inst).id >> 16]; // TODO Currently only using material override
+  // Either use the material id from the triangle or the material override from the instance
+  let mtl = select(tris[((*inst).ofs & 0x7fffffff) + (h.id >> 16)].mtl & 0xffff, (*inst).id >> 16, ((*inst).ofs & 0x80000000) > 0);
+  let data = materials[mtl];
 
-  if(any(mat.color > vec3f(1.0))) {
-    *emission = mat.color;
+  if(any(data.color > vec3f(1.0))) {
+    *emission = data.color;
     return false;
-  } else if(mat.value > 1.0) {
-    return evalMaterialDielectric(r, h, mat.color, mat.value, attenuation, scatterDir);
-  } else if(mat.value > 0.0) {
-    return evalMaterialMetal(r, h, mat.color, mat.value, attenuation, scatterDir);
+  } else if(data.value > 1.0) {
+    return evalMaterialDielectric(r, h, data.color, data.value, attenuation, scatterDir);
+  } else if(data.value > 0.0) {
+    return evalMaterialMetal(r, h, data.color, data.value, attenuation, scatterDir);
   } else {
-    return evalMaterialLambert(r, h, mat.color, attenuation, scatterDir);
+    return evalMaterialLambert(r, h, data.color, attenuation, scatterDir);
   }
 }
 

@@ -18,7 +18,7 @@
 #endif
 
 #define RIOW_SIZE   22
-#define TRI_CNT     800 + 2
+#define TRI_CNT     1024 + 2
 #define MESH_CNT    2
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4)
 #define MTL_CNT     INST_CNT
@@ -94,26 +94,26 @@ void init_scene_riow(scene *s)
   s->cam = (cam){ .vert_fov = 20.0f, .foc_dist = 10.0f, .foc_angle = 0.6f };
   cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
-  // Meshes
-  scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f);
-  //scene_add_uvsphere(s, 1.0f, 20, 20, false);
-  scene_add_icosphere(s, 0, true);
-  //scene_add_mesh(s, teapot);
-  //scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, false);
+  // Floor mesh
+  uint16_t mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
+  scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f, MF_FLAT << 16 | mtl_id);
+
+  // Sphere mesh
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  scene_add_uvsphere(s, 1.0f, 20, 20, mtl_id);
+  //scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
+  //scene_add_mesh(s, teapot, mtl_id);
+  //scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1);
   scene_build_bvhs(s);
 
-  mat4 translation;
-  uint32_t mtl_id;
-
   // Floor instance
+  mat4 translation;
   mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
-  scene_add_inst(s, 0, mtl_id, translation); 
+  scene_add_inst(s, 0, -1, translation); 
 
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
-  scene_add_inst(s, 1, mtl_id, translation);
+  scene_add_inst(s, 1, -1, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
@@ -173,14 +173,16 @@ void update_scene(scene *s, float time)
     scene_set_dirty(s, RT_CAM_VIEW);
   }
 
-  // Update instances
-  /*mat4 translation;
-  mat4_trans(translation, (vec3){ 4.0f, 2.0f + sinf(time * 0.6f), 0.0f });
-  scene_upd_inst(s, 1, -1, translation);
-  mat4_trans(translation, (vec3){ 0.0f, 2.0f + sinf(time * 0.6f + 0.6f), 0.0f });
-  scene_upd_inst(s, 2, -1, translation);
-  mat4_trans(translation, (vec3){ -4.0f, 2.0f + sinf(time * 0.6f + 1.2f), 0.0f });
-  scene_upd_inst(s, 3, -1, translation);*/
+  if(!paused) {
+    // Update instances
+    /*mat4 translation;
+    mat4_trans(translation, (vec3){ 4.0f, 2.0f + sinf(time * 0.6f), 0.0f });
+    scene_upd_inst(s, 1, -1, translation);
+    mat4_trans(translation, (vec3){ 0.0f, 2.0f + sinf(time * 0.6f + 0.6f), 0.0f });
+    scene_upd_inst(s, 2, 2, translation);
+    mat4_trans(translation, (vec3){ -4.0f, 2.0f + sinf(time * 0.6f + 1.2f), 0.0f });
+    scene_upd_inst(s, 3, 3, translation);//*/
+  }
 }
 
 __attribute__((visibility("default")))

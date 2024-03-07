@@ -119,7 +119,7 @@ void intersect_inst(const ray *r, const inst *inst, const bvh *bvh, hit *h)
 {
   ray r_obj;
   ray_transform(&r_obj, inst->inv_transform, r);
-  intersect_bvh(&r_obj, bvh->nodes, bvh->indices, bvh->mesh->tris, inst->id & 0xffff, h);
+  intersect_bvh(&r_obj, bvh->nodes, bvh->indices, bvh->mesh->tris, inst->id, h);
 }
 
 void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, const bvh *bvhs, hit *h)
