@@ -356,7 +356,7 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
           nodeStackIndex++;
         }
       } else {
-        // Did miss tris[ofs + (h.id >> 16)]both children, so check stack
+        // Did miss both children, so check stack
         if(nodeStackIndex > 0) {
           nodeStackIndex--;
           nodeIndex = tlasNodeStack[nodeStackIndex];
@@ -368,46 +368,17 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
   }
 }
 
-fn calcNormal(r: Ray, h: Hit, nrm: ptr<function, vec3f>) -> bool
+fn evalMaterialLambert(r: Ray, nrm: vec3f, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let inst = &instances[h.id & 0xffff];
-  let ofs = (*inst).ofs & 0x7fffffff;
-  let tri = &tris[ofs + (h.id >> 16)]; // Using (*inst).ofs directly results in SPIRV error :(
-
-  var n = select(
-    // Interpolate tri normals
-    (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v),
-    // n0 is face normal
-    (*tri).n0,
-    // Material flag
-    (((*tri).mtl >> 16) & FLAT) > 0);
- 
-  n = normalize((vec4f(n, 0.0) * (*inst).transform).xyz);
-
-  let inside = dot(r.dir, n) > 0;
-  *nrm = select(n, -n, inside);
-
-  return inside;
-}
-
-fn evalMaterialLambert(r: Ray, h: Hit, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
-{
-  var nrm: vec3f;
-  _ = calcNormal(r, h, &nrm);
   let dir = nrm + rand3UnitSphere();
-
   *scatterDir = select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
   *attenuation = albedo;
   return true;
 }
 
-fn evalMaterialMetal(r: Ray, h: Hit, albedo: vec3f, fuzzRadius: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterialMetal(r: Ray, nrm: vec3f, albedo: vec3f, fuzzRadius: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  var nrm: vec3f;
-  _ = calcNormal(r, h, &nrm); 
-  
   let dir = reflect(r.dir, nrm);
-
   *scatterDir = normalize(dir + fuzzRadius * rand3UnitSphere());
   *attenuation = albedo;
   return dot(*scatterDir, nrm) > 0;
@@ -420,10 +391,8 @@ fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
   return r0 + (1 - r0) * pow(1 - cosTheta, 5);
 }
 
-fn evalMaterialDielectric(r: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterialDielectric(r: Ray, nrm: vec3f, inside: bool, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  var nrm: vec3f;
-  let inside = calcNormal(r, h, &nrm);
   let refracIndexRatio = select(1 / refractionIndex, refractionIndex, inside);
   
   let cosTheta = min(dot(-r.dir, nrm), 1);
@@ -449,19 +418,35 @@ fn evalMaterialDielectric(r: Ray, h: Hit, albedo: vec3f, refractionIndex: f32, a
 fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let inst = &instances[h.id & 0xffff];
+  let ofs = (*inst).ofs & 0x7fffffff;
+  let tri = &tris[ofs + (h.id >> 16)];
+
   // Either use the material id from the triangle or the material override from the instance
-  let mtl = select(tris[((*inst).ofs & 0x7fffffff) + (h.id >> 16)].mtl & 0xffff, (*inst).id >> 16, ((*inst).ofs & 0x80000000) > 0);
+  let mtl = select((*tri).mtl & 0xffff, (*inst).id >> 16, ((*inst).ofs & 0x80000000) > 0);
   let data = materials[mtl];
 
   if(any(data.color > vec3f(1.0))) {
     *emission = data.color;
     return false;
-  } else if(data.value > 1.0) {
-    return evalMaterialDielectric(r, h, data.color, data.value, attenuation, scatterDir);
+  }
+
+  // Calc normal
+  var nrm = select(
+    (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
+    (*tri).n0, // Simply use face normal in n0
+    (((*tri).mtl >> 16) & FLAT) > 0);
+ 
+  nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+
+  let inside = dot(r.dir, nrm) > 0;
+  nrm = select(nrm, -nrm, inside);
+
+  if(data.value > 1.0) {
+    return evalMaterialDielectric(r, nrm, inside, data.color, data.value, attenuation, scatterDir);
   } else if(data.value > 0.0) {
-    return evalMaterialMetal(r, h, data.color, data.value, attenuation, scatterDir);
+    return evalMaterialMetal(r, nrm, data.color, data.value, attenuation, scatterDir);
   } else {
-    return evalMaterialLambert(r, h, data.color, attenuation, scatterDir);
+    return evalMaterialLambert(r, nrm, data.color, attenuation, scatterDir);
   }
 }
 
