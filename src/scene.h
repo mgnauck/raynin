@@ -13,6 +13,12 @@ typedef enum res_type {
   RT_INST      = 8
 } res_type;
 
+typedef enum shape_type {
+  ST_SPHERE   = 0,
+  ST_CYLINDER,
+  ST_BOX
+} shape_type;
+
 typedef struct mtl mtl;
 typedef struct mesh mesh;
 typedef struct bvh bvh;
@@ -49,7 +55,8 @@ uint32_t  scene_add_mtl(scene *s, mtl *mtl);
 void      scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl);
 
 // (mtl_id < 0) -> no material override
-uint32_t  scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform);
+uint32_t  scene_add_inst_mesh(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform);
+uint32_t  scene_add_inst_shape(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform);
 void      scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform);
 
 uint32_t  scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h, uint32_t mtl);

@@ -60,8 +60,8 @@ void intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id
     h->t = dist;
     h->u = u;
     h->v = v;
-    // tri_id is relative to mesh (i.e. together with inst->ofs)
-    h->id = (tri_id << 16) | (inst_id & 0xffff);
+    // tri_id is relative to mesh (i.e. together with inst->data)
+    h->e = (tri_id << 16) | (inst_id & 0xffff);
   }
 }
 
@@ -115,11 +115,19 @@ void intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices,
   }
 }
 
-void intersect_inst(const ray *r, const inst *inst, const bvh *bvh, hit *h)
+void intersect_inst(const ray *r, const inst *inst, const bvh *bvhs, hit *h)
 {
   ray r_obj;
   ray_transform(&r_obj, inst->inv_transform, r);
-  intersect_bvh(&r_obj, bvh->nodes, bvh->indices, bvh->mesh->tris, inst->id, h);
+
+  if(inst->data & 0x40000000) {
+    // TODO Shape type
+    // inst.ofs & 0x3fffffff -> shape type (write to h.e << 16 finally, like tri idx)
+  } else {
+    // Mesh type
+    const bvh *bvh = &bvhs[inst->data & 0x3fffffff];
+    intersect_bvh(&r_obj, bvh->nodes, bvh->indices, bvh->mesh->tris, inst->id, h);
+  }
 }
 
 void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, const bvh *bvhs, hit *h)
@@ -133,7 +141,7 @@ void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances,
     if(node->children == 0) {
       // Leaf node with a single instance assigned
       const inst *inst = &instances[node->inst];
-      intersect_inst(r, inst, &bvhs[inst->ofs & 0x7fffffff], h);
+      intersect_inst(r, inst, bvhs, h);
       if(stack_pos > 0)
         node = node_stack[--stack_pos];
       else

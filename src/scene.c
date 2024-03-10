@@ -11,7 +11,7 @@
 #include "tlas.h"
 
 typedef struct inst_state {
-  uint32_t  mesh_id;
+  uint32_t  mesh_shape;
   bool      dirty;
 } inst_state;
 
@@ -77,8 +77,17 @@ void scene_prepare_render(scene *s)
   
       // Store root node bounds transformed into world space
       aabb a = aabb_init();
-      vec3 mi = s->bvhs[state->mesh_id].nodes[0].min;
-      vec3 ma = s->bvhs[state->mesh_id].nodes[0].max;
+      vec3 mi, ma;
+
+      if(inst->data & 0x40000000) { // Bit 30 indicates shape or mesh type
+        // All shape types are of unit size
+        mi = (vec3){ -1.0f, -1.0f, -1.0f };
+        ma = (vec3){ 1.0f, 1.0f, 1.0f };
+      } else {
+        // Mesh type
+        mi = s->bvhs[state->mesh_shape].nodes[0].min;
+        ma = s->bvhs[state->mesh_shape].nodes[0].max;
+      }
 
       aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, mi.y, mi.z }));
       aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, mi.y, mi.z }));
@@ -115,28 +124,43 @@ void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
   scene_set_dirty(s, RT_MTL);
 }
 
-uint32_t scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
+uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
 {
   inst_state *inst_state = &s->inst_states[s->inst_cnt];
-  inst_state->mesh_id = mesh_id;
+  inst_state->mesh_shape = mesh_shape;
   inst_state->dirty = true;
 
   inst *inst = &s->instances[s->inst_cnt];
   // Lowest 16 bits are instance id, i.e. max 65536 instances
   inst->id = (s->inst_cnt & 0xffff);
+
 #ifndef NATIVE_BUILD
-  // Lowest 31 bits are offset into tris/indices and 2 * ofs into bvhs
-  // i.e. 2147483647 triangles :)
-  inst->ofs = s->meshes[mesh_id].ofs & 0x7fffffff;
+  // Lowest 30 bits are shape type (if bit 31 is set) or
+  // data is offset into tris/indices and 2 * data into bvhs
+  // i.e. max offset is triangle 1073741823 :)
+  inst->data = mesh_shape & 0x40000000 ? mesh_shape : s->meshes[mesh_shape].ofs;
 #else
-  // For native build, lowest 31 bits are simply the mesh id
-  inst->ofs = mesh_id & 0x7fffffff;
+  // For native build, lowest 30 bits are simply the shape type or mesh id
+  inst->data = mesh_shape;
 #endif
 
   // Set transform and mtl override id to instance
   scene_upd_inst(s, s->inst_cnt, mtl_id, transform);
 
   return s->inst_cnt++;
+}
+
+uint32_t scene_add_inst_mesh(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
+{
+  // Bit 30 not set indicates mesh type
+  return add_inst(s, mesh_id & 0x3fffffff, mtl_id, transform);
+}
+
+uint32_t scene_add_inst_shape(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform)
+{
+  // Shape types are always using the material override
+  // Bit 30 set indicates shape type
+  return add_inst(s, 0x40000000 | (shape & 0x3fffffff), mtl_id, transform);
 }
 
 void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
@@ -148,17 +172,17 @@ void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
     // Highest 16 bits are mtl override id, i.e. max 65536 materials
     inst->id = (mtl_id << 16) | (inst->id & 0xffff);
     // Set highest bit to enable the material override
-    inst->ofs |= 0x80000000;
+    inst->data |= 0x80000000;
   }
-  else
-    // Clear material override bit
-    inst->ofs = inst->ofs & 0x7fffffff;
+  else if(!(inst->data & 0x40000000))
+    // Only for mesh types: Clear material override bit
+    inst->data = inst->data & 0x7fffffff;
 
   memcpy(s->instances[inst_id].transform, transform, sizeof(mat4));
   s->inst_states[inst_id].dirty = true;
 }
 
-void update_ofs(scene *s, mesh *m)
+void update_data_ofs(scene *s, mesh *m)
 {
   m->ofs = s->curr_ofs;
   s->curr_ofs += m->tri_cnt;
@@ -204,7 +228,7 @@ uint32_t scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h, uint32_t
   tri->mtl = mtl;
   m->centers[1] = tri_calc_center(tri);
 
-  update_ofs(s, m);
+  update_data_ofs(s, m);
   return s->mesh_cnt++;
 }
 
@@ -294,7 +318,7 @@ uint32_t scene_add_icosphere(scene *s, uint8_t steps, uint32_t mtl)
 #endif
   }
 
-  update_ofs(s, m);
+  update_data_ofs(s, m);
   return s->mesh_cnt++;
 }
 
@@ -368,7 +392,7 @@ uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby
     theta += dtheta;
   }
 
-  update_ofs(s, m);
+  update_data_ofs(s, m);
   return s->mesh_cnt++;
 }
 
@@ -449,7 +473,7 @@ uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t sub
     h += dh;
   }
 
-  update_ofs(s, m);
+  update_data_ofs(s, m);
   return s->mesh_cnt++;
 }
 
@@ -510,6 +534,6 @@ uint32_t scene_add_mesh(scene *s, const uint8_t *data, uint32_t mtl)
     m->centers[i] = tri_calc_center(t);
   }
 
-  update_ofs(s, m);
+  update_data_ofs(s, m);
   return s->mesh_cnt++;
 }

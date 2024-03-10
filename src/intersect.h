@@ -18,8 +18,8 @@ typedef struct hit {
   float     t;
   float     u;
   float     v;
-  uint32_t  id; // (tri id << 16) | (inst id & 0xffff)
-} hit;
+  uint32_t  e;  // mesh type instance: (tri id << 16) | (inst id & 0xffff)
+} hit;          // shape type instance: (shape type << 16) | (inst id & 0xffff)
 
 float intersect_aabb(const ray *r, float curr_dist, vec3 min_ext, vec3 max_ext);
 

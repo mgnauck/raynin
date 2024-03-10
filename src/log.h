@@ -6,7 +6,7 @@
 #ifndef SILENT
   #define logc(...) log_msg(__FILE__, __LINE__, __VA_ARGS__)
 #else
-  #define logc(...)
+  #define logc(...) ((void)0)
 #endif
 
 void log_msg(const char *file, uint32_t line, const char *fmt, ...);

@@ -109,19 +109,19 @@ void init_scene_riow(scene *s)
   // Floor instance
   mat4 translation;
   mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
-  scene_add_inst(s, 0, -1, translation); 
+  scene_add_inst_mesh(s, 0, -1, translation); 
 
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  scene_add_inst(s, 1, -1, translation);
+  scene_add_inst_mesh(s, 1, -1, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
-  scene_add_inst(s, 1, mtl_id, translation);
+  scene_add_inst_mesh(s, 1, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f });
-  scene_add_inst(s, 1, mtl_id, translation);
+  scene_add_inst_mesh(s, 1, mtl_id, translation);
 
   mat4 scale;
   mat4_scale(scale, 0.2f);
@@ -141,7 +141,7 @@ void init_scene_riow(scene *s)
         mat4 transform;
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_inst(s, 1, mtl_id, transform);
+        scene_add_inst_mesh(s, 1, mtl_id, transform);
       }
     }
   }

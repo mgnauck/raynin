@@ -77,8 +77,8 @@ struct Inst
   aabbMin: vec3f,
   id: u32,          // (mtl override id << 16) | (inst id & 0xffff)
   aabbMax: vec3f,
-  ofs: u32          // bits 0-31: ofs into tri/indices and 2*ofs into bvhNodes
-}                   // bit 32: material override active
+  data: u32         // See comment on data in inst.h
+}
 
 struct Mtl
 {
@@ -91,7 +91,7 @@ struct Hit
   t: f32,
   u: f32,
   v: f32,
-  id: u32,          // (tri id << 16) | (inst id & 0xffff)
+  e: u32,           // (tri id << 16) | (inst id & 0xffff)
 }
 
 // Material flags
@@ -236,7 +236,7 @@ fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hi
     (*h).t = dist;
     (*h).u = u;
     (*h).v = v;
-    (*h).id = (triId << 16) | (instId & 0xffff); // instId >> 16 = mtl override id!
+    (*h).e = (triId << 16) | (instId & 0xffff);
   }
 }
 
@@ -300,7 +300,7 @@ fn intersectBvh(ray: Ray, instId: u32, dataOfs: u32, h: ptr<function, Hit>)
   }
 }
 
-fn intersectInst(ray: Ray, inst: Inst, h: ptr<function, Hit>)
+fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, h: ptr<function, Hit>)
 {
   // Transform ray into object space of the instance
   var rayObjSpace: Ray;
@@ -308,7 +308,13 @@ fn intersectInst(ray: Ray, inst: Inst, h: ptr<function, Hit>)
   rayObjSpace.dir = (vec4f(ray.dir, 0.0) * inst.invTransform).xyz;
   rayObjSpace.invDir = 1.0 / rayObjSpace.dir;
 
-  intersectBvh(rayObjSpace, inst.id, inst.ofs & 0x7fffffff, h);
+  if(((*inst).data & 0x40000000) > 0) {
+    // TODO Shape type
+    // inst.data & 0x3fffffff -> shape type (write to h.e << 16 finally, like tri idx)
+  } else {
+    // Mesh type
+    intersectBvh(rayObjSpace, (*inst).id, (*inst).data & 0x3fffffff, h);
+  }
 }
 
 fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
@@ -322,7 +328,7 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
    
     if(nodeChildren == 0) {
       // Leaf node with a single instance assigned 
-      intersectInst(ray, instances[(*node).inst], h);
+      intersectInst(ray, &instances[(*node).inst], h);
       if(nodeStackIndex > 0) {
         nodeStackIndex--;
         nodeIndex = tlasNodeStack[nodeStackIndex];
@@ -417,12 +423,12 @@ fn evalMaterialDielectric(r: Ray, nrm: vec3f, inside: bool, albedo: vec3f, refra
 
 fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let inst = &instances[h.id & 0xffff];
-  let ofs = (*inst).ofs & 0x7fffffff;
-  let tri = &tris[ofs + (h.id >> 16)];
+  let inst = &instances[h.e & 0xffff];
+  let ofs = (*inst).data & 0x3fffffff;
+  let tri = &tris[ofs + (h.e >> 16)];
 
   // Either use the material id from the triangle or the material override from the instance
-  let mtl = select((*tri).mtl & 0xffff, (*inst).id >> 16, ((*inst).ofs & 0x80000000) > 0);
+  let mtl = select((*tri).mtl & 0xffff, (*inst).id >> 16, ((*inst).data & 0x80000000) > 0);
   let data = materials[mtl];
 
   if(any(data.color > vec3f(1.0))) {
