@@ -94,8 +94,11 @@ void init_scene_riow(scene *s)
   s->cam = (cam){ .vert_fov = 20.0f, .foc_dist = 10.0f, .foc_angle = 0.6f };
   cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
+  uint16_t mtl_id;
+  mat4 translation;
+
   // Floor mesh
-  uint16_t mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
   scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 40.0f, 40.0f, MF_FLAT << 16 | mtl_id);
 
   // Sphere mesh
@@ -107,13 +110,13 @@ void init_scene_riow(scene *s)
   scene_build_bvhs(s);
 
   // Floor instance
-  mat4 translation;
   mat4_trans(translation, (vec3){ 0.0f, 0.0f, 0.0f });
   scene_add_inst_mesh(s, 0, -1, translation);
-
+  
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  scene_add_inst_mesh(s, 1, -1, translation);
+  //scene_add_inst_mesh(s, 1, -1, translation);
+  scene_add_inst_shape(s, ST_SPHERE, 1, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });

@@ -19,31 +19,28 @@ float intersect_aabb(const ray *r, float curr_t, vec3 min_ext, vec3 max_ext)
   float tfar = vec3_min_comp(vec3_max(t0, t1));
 
   return tnear <= tfar && tnear < curr_t && tfar > EPSILON ? tnear : MAX_DISTANCE;
-  //return tnear <= tfar && tnear < curr_t && tfar > EPSILON ? (tnear > EPSILON ? tnear : tfar) : MAX_DISTANCE;
 }
 
 void intersect_unitsphere(const ray *r, uint32_t inst_id, hit *h)
 {
-  float a = vec3_dot(r->ori, r->dir);
-  float d = a * a - vec3_dot(r->ori, r->ori) + 1.0f;
+  float a = vec3_dot(r->dir, r->dir);
+  float b = vec3_dot(r->ori, r->dir); // half
+  float c = vec3_dot(r->ori, r->ori) - 1.0f;
 
-  if(d < 0.0f)
+  float d = b * b - a * c;
+  if(d < 0)
     return;
 
   d = sqrtf(d);
-
-  float t = -a - d;
-  if(t < h->t && t > EPSILON) {
-    h->t = t; 
-    h->e = (ST_SPHERE << 16) | (inst_id & 0xffff);
-    return;
+  float t = (-b - d) / a;
+  if(t <= EPSILON || h->t <= t) {
+    t = (-b + d) / a;
+    if(t <= EPSILON || h->t <= t)
+      return;
   }
 
-  t = -a + d;
-  if(t < h->t && t > EPSILON) {
-    h->t = t;
-    h->e = (ST_SPHERE << 16) | (inst_id & 0xffff);
-  }
+  h->t = t;
+  h->e = (ST_SPHERE << 16) | (inst_id & 0xffff);
 }
 
 void intersect_unitcylinder(const ray *r, uint32_t inst_id, hit *h)
