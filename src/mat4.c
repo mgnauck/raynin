@@ -199,6 +199,11 @@ bool mat4_inv(mat4 d, const mat4 m)
   return true;
 }
 
+vec3 mat4_get_trans(const mat4 m)
+{
+  return (vec3){ m[3], m[7], m[11] };
+}
+
 void mat4_logc(mat4 m)
 {
   for(uint8_t i=0; i<4; i++)

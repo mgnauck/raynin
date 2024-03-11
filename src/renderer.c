@@ -9,6 +9,7 @@
 #include "sutil.h"
 #include "tlas.h"
 #include "tri.h"
+#include "log.h"
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
@@ -191,13 +192,37 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
           vec3 c = rd->bg_col;
           if(h.t < MAX_DISTANCE) {
             inst *inst = &rd->scene->instances[h.e & 0xffff];
-            uint32_t tri_idx = h.e >> 16;
-            tri* tri = &rd->scene->meshes[inst->data & 0x3fffffff].tris[tri_idx];
-            vec3 nrm = (tri->mtl >> 16) & MF_FLAT ?
-              tri->n1 : vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
-            nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
+            vec3 nrm;
+            uint16_t mtl_id;
+            if(!(inst->data & SHAPE_TYPE_BIT)) {
+              // Mesh
+              uint32_t tri_idx = h.e >> 16;
+              tri* tri = &rd->scene->meshes[inst->data & MESH_SHAPE_MASK].tris[tri_idx];
+              nrm = (tri->mtl >> 16) & MF_FLAT ?
+                tri->n1 : vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
+              nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
+              mtl_id = (inst->data & MTL_OVERRIDE_BIT) ? (inst->id >> 16) : (tri->mtl & 0xffff);
+            } else {
+              // Shape
+              switch((shape_type)(h.e >> 16)) {
+                case ST_SPHERE:
+                  {
+                    vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
+                    nrm = vec3_unit(vec3_sub(hit_pos, mat4_get_trans(inst->transform)));
+                  }
+                  break;
+                case ST_BOX:
+                  // TODO
+                  nrm = (vec3){ 1.0f, 0.0f, 0.0f };
+                  break;
+                case ST_CYLINDER:
+                  // TODO
+                  nrm = (vec3){ 1.0f, 0.0f, 0.0f };
+                  break;
+              }
+              mtl_id = inst->id >> 16;
+            }
             nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
-            uint32_t mtl_id = (inst->data & 0x80000000) ? (inst->id >> 16) : (tri->mtl & 0xffff);
             c = vec3_mul(nrm, rd->scene->mtls[mtl_id].color);
             //c = rd->scene->mtls[mtl_id].color;
           }

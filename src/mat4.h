@@ -24,12 +24,14 @@ void mat4_rot_z(mat4 dest, float radians);
 
 void mat4_scale(mat4 dest, float s);
 
+bool mat4_inv(mat4 dest, const mat4 src);
+
 void mat4_mul(mat4 dest, const mat4 a, const mat4 b);
 
 vec3 mat4_mul_pos(const mat4 m, const vec3 v);
 vec3 mat4_mul_dir(const mat4 m, const vec3 v);
 
-bool mat4_inv(mat4 dest, const mat4 src);
+vec3 mat4_get_trans(const mat4 m);
 
 void mat4_logc(mat4 m);
 

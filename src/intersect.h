@@ -22,7 +22,9 @@ typedef struct hit {
 } hit;          // shape type instance: (shape type << 16) | (inst id & 0xffff)
 
 float intersect_aabb(const ray *r, float curr_dist, vec3 min_ext, vec3 max_ext);
-
+void  intersect_unitsphere(const ray *r, uint32_t inst_id, hit *h);
+void  intersect_unitcylinder(const ray *r, uint32_t inst_id, hit *h);
+void  intersect_unitbox(const ray *r, uint32_t inst_id, hit *h);
 void  intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id, hit *h);
 void  intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices, const tri *tris, uint32_t inst_id, hit *h);
 void  intersect_inst(const ray *r, const inst *b, const bvh *bvh, hit *h);

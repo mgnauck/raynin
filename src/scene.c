@@ -75,16 +75,15 @@ void scene_prepare_render(scene *s)
       // Calc inverse transform
       mat4_inv(inst->inv_transform, inst->transform);
   
-      // Store root node bounds transformed into world space
       aabb a = aabb_init();
       vec3 mi, ma;
 
-      if(inst->data & 0x40000000) { // Bit 30 indicates shape or mesh type
-        // All shape types are of unit size
+      if(inst->data & SHAPE_TYPE_BIT) {
+        // Shape type are all unit size 
         mi = (vec3){ -1.0f, -1.0f, -1.0f };
-        ma = (vec3){ 1.0f, 1.0f, 1.0f };
+        ma = (vec3){  1.0f,  1.0f,  1.0f };
       } else {
-        // Mesh type
+        // Mesh type: Store root node bounds transformed into world space
         mi = s->bvhs[state->mesh_shape].nodes[0].min;
         ma = s->bvhs[state->mesh_shape].nodes[0].max;
       }
@@ -136,9 +135,9 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
 
 #ifndef NATIVE_BUILD
   // Lowest 30 bits are shape type (if bit 31 is set) or
-  // data is offset into tris/indices and 2 * data into bvhs
+  // offset into tris/indices and 2 * data into bvhs
   // i.e. max offset is triangle 1073741823 :)
-  inst->data = mesh_shape & 0x40000000 ? mesh_shape : s->meshes[mesh_shape].ofs;
+  inst->data = (mesh_shape & SHAPE_TYPE_BIT) ? mesh_shape : s->meshes[mesh_shape].ofs;
 #else
   // For native build, lowest 30 bits are simply the shape type or mesh id
   inst->data = mesh_shape;
@@ -153,14 +152,14 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
 uint32_t scene_add_inst_mesh(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
 {
   // Bit 30 not set indicates mesh type
-  return add_inst(s, mesh_id & 0x3fffffff, mtl_id, transform);
+  return add_inst(s, mesh_id & MESH_SHAPE_MASK, mtl_id, transform);
 }
 
 uint32_t scene_add_inst_shape(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform)
 {
-  // Shape types are always using the material override
   // Bit 30 set indicates shape type
-  return add_inst(s, 0x40000000 | (shape & 0x3fffffff), mtl_id, transform);
+  // Shape types are always using the material override
+  return add_inst(s, SHAPE_TYPE_BIT | (shape & MESH_SHAPE_MASK), mtl_id, transform);
 }
 
 void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
@@ -172,11 +171,11 @@ void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
     // Highest 16 bits are mtl override id, i.e. max 65536 materials
     inst->id = (mtl_id << 16) | (inst->id & 0xffff);
     // Set highest bit to enable the material override
-    inst->data |= 0x80000000;
+    inst->data |= MTL_OVERRIDE_BIT;
   }
-  else if(!(inst->data & 0x40000000))
+  else if(!(inst->data & SHAPE_TYPE_BIT))
     // Only for mesh types: Clear material override bit
-    inst->data = inst->data & 0x7fffffff;
+    inst->data = inst->data & INST_DATA_MASK;
 
   memcpy(s->instances[inst_id].transform, transform, sizeof(mat4));
   s->inst_states[inst_id].dirty = true;
