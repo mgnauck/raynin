@@ -131,7 +131,7 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
 
   inst *inst = &s->instances[s->inst_cnt];
   // Lowest 16 bits are instance id, i.e. max 65536 instances
-  inst->id = (s->inst_cnt & 0xffff);
+  inst->id = (s->inst_cnt & INST_ID_MASK);
 
 #ifndef NATIVE_BUILD
   // Lowest 30 bits are shape type (if bit 31 is set) or
@@ -169,7 +169,7 @@ void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
   // No material override if mtl id < 0
   if(mtl_id >= 0) {
     // Highest 16 bits are mtl override id, i.e. max 65536 materials
-    inst->id = (mtl_id << 16) | (inst->id & 0xffff);
+    inst->id = (mtl_id << 16) | (inst->id & INST_ID_MASK);
     // Set highest bit to enable the material override
     inst->data |= MTL_OVERRIDE_BIT;
   }

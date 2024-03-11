@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "mat4.h"
 
+#define INST_ID_MASK      0xffff
 #define SHAPE_TYPE_BIT    0x40000000
 #define MESH_SHAPE_MASK   0x3fffffff
 #define MTL_OVERRIDE_BIT  0x80000000

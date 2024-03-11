@@ -1,6 +1,7 @@
 #include "vec3.h"
 #include <stddef.h>
 #include "mutil.h"
+#include "log.h"
 
 void vec3_set(vec3 *v, uint8_t idx, float val)
 {
@@ -103,6 +104,11 @@ float vec3_max_comp(vec3 v)
   return max(max(v.x, v.y), v.z);
 }
 
+vec3 vec3_abs(vec3 v)
+{
+  return (vec3){ fabsf(v.x), fabsf(v.y), fabsf(v.z) };
+}
+
 vec3 vec3_uint32(uint32_t v)
 {
   return (vec3){ ((v >> 16) & 0xff) / 255.0f, ((v >> 8) & 0xff) / 255.0f, (v & 0xff) / 255.0f };
@@ -111,4 +117,9 @@ vec3 vec3_uint32(uint32_t v)
 vec3 vec3_spherical(float theta, float phi)
 {
   return (vec3){ -cosf(phi) * sinf(theta), -cosf(theta), sinf(phi) * sinf(theta) };
+}
+
+void vec3_logc(vec3 v)
+{
+  logc("%6.3f %6.3f %6.3f", v.x, v.y, v.z);
 }

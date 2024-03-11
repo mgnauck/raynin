@@ -21,10 +21,31 @@ float intersect_aabb(const ray *r, float curr_t, vec3 min_ext, vec3 max_ext)
   return tnear <= tfar && tnear < curr_t && tfar > EPSILON ? tnear : MAX_DISTANCE;
 }
 
+void intersect_unitbox(const ray *r, uint32_t inst_id, hit *h)
+{
+  vec3 t0 = vec3_mul(vec3_sub((vec3){ -1.0f, -1.0f, -1.0f }, r->ori), r->inv_dir);
+  vec3 t1 = vec3_mul(vec3_sub((vec3){  1.0f,  1.0f,  1.0f }, r->ori), r->inv_dir);
+
+  float tnear = vec3_max_comp(vec3_min(t0, t1));
+  float tfar = vec3_min_comp(vec3_max(t0, t1));
+
+  if(tnear <= tfar) {
+    if(tnear < h->t && tnear > EPSILON) {
+      h->t = tnear;
+      h->e = (ST_BOX << 16) | (inst_id & INST_ID_MASK);
+      return;
+    }
+    if (tfar < h->t && tfar > EPSILON) {
+      h->t = tfar;
+      h->e = (ST_BOX << 16) | (inst_id & INST_ID_MASK);
+    }
+  }
+}
+
 void intersect_unitsphere(const ray *r, uint32_t inst_id, hit *h)
 {
   float a = vec3_dot(r->dir, r->dir);
-  float b = vec3_dot(r->ori, r->dir); // half
+  float b = vec3_dot(r->ori, r->dir);
   float c = vec3_dot(r->ori, r->ori) - 1.0f;
 
   float d = b * b - a * c;
@@ -40,32 +61,12 @@ void intersect_unitsphere(const ray *r, uint32_t inst_id, hit *h)
   }
 
   h->t = t;
-  h->e = (ST_SPHERE << 16) | (inst_id & 0xffff);
+  h->e = (ST_SPHERE << 16) | (inst_id & INST_ID_MASK);
 }
 
 void intersect_unitcylinder(const ray *r, uint32_t inst_id, hit *h)
 {
   // TODO: ST_CYLINDER
-}
-
-void intersect_unitbox(const ray *r, uint32_t inst_id, hit *h)
-{
-  vec3 t0 = vec3_mul(vec3_sub((vec3){ -1.0f, -1.0f, -1.0f }, r->ori), r->inv_dir);
-  vec3 t1 = vec3_mul(vec3_sub((vec3){  1.0f,  1.0f,  1.0f }, r->ori), r->inv_dir);
-
-  float tnear = vec3_max_comp(vec3_min(t0, t1));
-  float tfar = vec3_min_comp(vec3_max(t0, t1));
-
-  if(tnear <= tfar) {
-    if(tnear < h->t && tnear > EPSILON) {
-      h->t = tnear;
-      h->e = (ST_BOX << 16) | (inst_id & 0xffff);
-      return;
-    } else if (tfar < h->t && tfar > EPSILON) {
-      h->t = tfar;
-      h->e = (ST_BOX << 16) | (inst_id & 0xffff);
-    }
-  }
 }
 
 // Moeller/Trumbore ray-triangle intersection
@@ -109,7 +110,7 @@ void intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id
     h->u = u;
     h->v = v;
     // tri_id is relative to mesh (i.e. together with inst->data)
-    h->e = (tri_id << 16) | (inst_id & 0xffff);
+    h->e = (tri_id << 16) | (inst_id & INST_ID_MASK);
   }
 }
 

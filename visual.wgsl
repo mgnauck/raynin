@@ -94,13 +94,27 @@ struct Hit
   e: u32,           // (tri id << 16) | (inst id & 0xffff)
 }
 
+// Bit handling
+const INST_ID_MASK      = 0xffffu;
+const MTL_ID_MASK       = 0xffffu;
+const TLAS_NODE_MASK    = 0xffffu;
+
+const SHAPE_TYPE_BIT    = 0x40000000u;
+const MESH_SHAPE_MASK   = 0x3fffffffu;
+const MTL_OVERRIDE_BIT  = 0x80000000u;
+
+// Shape types
+const ST_BOX            = 0u;
+const ST_SPHERE         = 1u;
+const ST_CYLINDER       = 2u;
+
 // Material flags
-const FLAT = 1u;
+const FLAT              = 1u;
 
 // Math constants
-const EPSILON = 0.0001;
-const PI = 3.141592;
-const MAX_DISTANCE = 3.402823466e+38;
+const EPSILON           = 0.0001;
+const PI                = 3.141592;
+const MAX_DISTANCE      = 3.402823466e+38;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -193,6 +207,56 @@ fn intersectAabb(ray: Ray, currT: f32, minExt: vec3f, maxExt: vec3f) -> f32
   return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < currT && tmax > EPSILON);
 }
 
+fn intersectUnitBox(ray: Ray, instId: u32, h: ptr<function, Hit>)
+{
+  let t0 = (vec3f(-1.0) - ray.ori) * ray.invDir;
+  let t1 = (vec3f( 1.0) - ray.ori) * ray.invDir;
+
+  let tmin = maxComp(min(t0, t1));
+  let tmax = minComp(max(t0, t1));
+ 
+  if(tmin <= tmax) {
+    if(tmin < (*h).t && tmin > EPSILON) {
+      (*h).t = tmin;
+      (*h).e = (ST_BOX << 16) | (instId & INST_ID_MASK);
+      return;
+    }
+    if(tmax < (*h).t && tmax > EPSILON) {
+      (*h).t = tmax;
+      (*h).e = (ST_BOX << 16) | (instId & INST_ID_MASK);
+    }
+  }
+}
+
+fn intersectUnitSphere(ray: Ray, instId: u32, h: ptr<function, Hit>)
+{
+  let a = dot(ray.dir, ray.dir);
+  let b = dot(ray.ori, ray.dir);
+  let c = dot(ray.ori, ray.ori) - 1.0;
+
+  var d = b * b - a * c;
+  if(d < 0.0) {
+    return;
+  }
+
+  d = sqrt(d);
+  var t = (-b - d) / a;
+  if(t <= EPSILON || (*h).t <= t) {
+    t = (-b + d) / a;
+    if(t <= EPSILON || (*h).t <= t) {
+      return;
+    }
+  }
+
+  (*h).t = t;
+  (*h).e = (ST_SPHERE << 16) | (instId & INST_ID_MASK);
+}
+
+fn intersectUnitCylinder(ray: Ray, instId: u32, h: ptr<function, Hit>)
+{
+  // TODO
+}
+
 // Moeller/Trumbore ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
 fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hit>)
@@ -236,7 +300,7 @@ fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hi
     (*h).t = dist;
     (*h).u = u;
     (*h).v = v;
-    (*h).e = (triId << 16) | (instId & 0xffff);
+    (*h).e = (triId << 16) | (instId & INST_ID_MASK);
   }
 }
 
@@ -308,12 +372,26 @@ fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, h: ptr<function, Hit>)
   rayObjSpace.dir = (vec4f(ray.dir, 0.0) * inst.invTransform).xyz;
   rayObjSpace.invDir = 1.0 / rayObjSpace.dir;
 
-  if(((*inst).data & 0x40000000) > 0) {
-    // TODO Shape type
-    // inst.data & 0x3fffffff -> shape type (write to h.e << 16 finally, like tri idx)
+  if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
+    // Shape type
+    switch((*inst).data & MESH_SHAPE_MASK) {
+      case ST_SPHERE: {
+        intersectUnitSphere(rayObjSpace, (*inst).id, h);
+      }
+      case ST_CYLINDER: {
+        intersectUnitCylinder(rayObjSpace, (*inst).id, h);
+        return;
+      }
+      case ST_BOX: {
+        intersectUnitBox(rayObjSpace, (*inst).id, h);
+      }
+      default: {
+        return;
+      }
+    }
   } else {
     // Mesh type
-    intersectBvh(rayObjSpace, (*inst).id, (*inst).data & 0x3fffffff, h);
+    intersectBvh(rayObjSpace, (*inst).id, (*inst).data & MESH_SHAPE_MASK, h);
   }
 }
 
@@ -337,7 +415,7 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
       }
     } else {
       // Interior node, check aabbs of children
-      let leftChildIndex = nodeChildren & 0xffff;
+      let leftChildIndex = nodeChildren & TLAS_NODE_MASK;
       let rightChildIndex = nodeChildren >> 16;
 
       let leftChildNode = &tlasNodes[leftChildIndex];
@@ -423,26 +501,58 @@ fn evalMaterialDielectric(r: Ray, nrm: vec3f, inside: bool, albedo: vec3f, refra
 
 fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let inst = &instances[h.e & 0xffff];
-  let ofs = (*inst).data & 0x3fffffff;
-  let tri = &tris[ofs + (h.e >> 16)];
+  let inst = &instances[h.e & INST_ID_MASK];
 
-  // Either use the material id from the triangle or the material override from the instance
-  let mtl = select((*tri).mtl & 0xffff, (*inst).id >> 16, ((*inst).data & 0x80000000) > 0);
-  let data = materials[mtl];
+  var mtlId: u32;
+  var nrm: vec3f;
+
+  if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
+    // For shapes we simply the override material id from the instance
+    mtlId = (*inst).id >> 16;
+    // Calculate normal for different shapes
+    switch((*inst).data & MESH_SHAPE_MASK) {
+      case ST_BOX: {
+        // TODO
+        nrm = vec3f(1.0, 0.0, 0.0);
+        nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+      }
+      case ST_SPHERE: {
+        let pos = r.ori + h.t * r.dir;
+        let m = (*inst).transform;
+        nrm = normalize(pos - vec3f(m[0][3], m[1][3], m[2][3]));
+      }
+      case ST_CYLINDER: {
+        // TODO
+        nrm = vec3f(0.0);
+      }
+      default: {
+        // Error
+        nrm = vec3f(0.0);
+      }
+    }
+  } else {
+    // Mesh
+    let ofs = (*inst).data & MESH_SHAPE_MASK;
+    let tri = &tris[ofs + (h.e >> 16)];
+
+    // Either use the material id from the triangle or the material override from the instance
+    mtlId = select((*tri).mtl & MTL_ID_MASK, (*inst).id >> 16, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
+
+    // Calc normal
+    nrm = select(
+      (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
+      (*tri).n0, // Simply use face normal in n0
+      (((*tri).mtl >> 16) & FLAT) > 0);    
+    nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+  }
+
+  // Get actual material data
+  let data = materials[mtlId];
 
   if(any(data.color > vec3f(1.0))) {
     *emission = data.color;
     return false;
   }
-
-  // Calc normal
-  var nrm = select(
-    (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
-    (*tri).n0, // Simply use face normal in n0
-    (((*tri).mtl >> 16) & FLAT) > 0);
- 
-  nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
 
   let inside = dot(r.dir, nrm) > 0;
   nrm = select(nrm, -nrm, inside);

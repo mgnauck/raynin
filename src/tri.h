@@ -4,6 +4,8 @@
 #include "settings.h"
 #include "vec3.h"
 
+#define MTL_ID_MASK 0xffff
+
 typedef struct tri {
   vec3      v0;
   uint32_t  mtl;    // (mtl_flags << 16) | (mtl_id & 0xffff)
