@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "vec3.h"
 
+#define TLAS_NODE_MASK 0xffff
+
 typedef struct inst inst;
 
 typedef struct tlas_node {

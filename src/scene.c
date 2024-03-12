@@ -79,9 +79,16 @@ void scene_prepare_render(scene *s)
       vec3 mi, ma;
 
       if(inst->data & SHAPE_TYPE_BIT) {
-        // Shape type are all unit size 
-        mi = (vec3){ -1.0f, -1.0f, -1.0f };
-        ma = (vec3){  1.0f,  1.0f,  1.0f };
+        // Shape type
+        if((inst->data & MESH_SHAPE_MASK) != ST_PLANE) {
+          // Box and sphere are of unit size
+          mi = (vec3){ -1.0f, -1.0f, -1.0f };
+          ma = (vec3){  1.0f,  1.0f,  1.0f };
+        } else {
+          // Plane is in XZ and has a default size
+          mi = (vec3){ -PLANE_DEFAULT_SIZE, -EPSILON, -PLANE_DEFAULT_SIZE }; 
+          ma = (vec3){  PLANE_DEFAULT_SIZE,  EPSILON,  PLANE_DEFAULT_SIZE };
+        }
       } else {
         // Mesh type: Store root node bounds transformed into world space
         mi = s->bvhs[state->mesh_shape].nodes[0].min;

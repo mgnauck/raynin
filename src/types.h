@@ -9,9 +9,9 @@ typedef enum res_type {
 } res_type;
 
 typedef enum shape_type {
-  ST_BOX      = 0,
-  ST_SPHERE,
-  ST_CYLINDER
+  ST_PLANE    = 0,
+  ST_BOX,
+  ST_SPHERE
 } shape_type;
 
 #endif

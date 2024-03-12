@@ -205,11 +205,8 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
             } else {
               // Shape
               switch((shape_type)(h.e >> 16)) {
-                case ST_SPHERE:
-                  {
-                    vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
-                    nrm = vec3_unit(vec3_sub(hit_pos, mat4_get_trans(inst->transform)));
-                  }
+                case ST_PLANE: 
+                  nrm = vec3_unit(mat4_mul_dir(inst->transform, (vec3){ 0.0f, 1.0f, 0.0f }));
                   break;
                 case ST_BOX:
                   {
@@ -222,17 +219,19 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
                     nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
                   }
                   break;
-                case ST_CYLINDER:
-                  // TODO
-                  nrm = (vec3){ 1.0f, 0.0f, 0.0f };
+                case ST_SPHERE:
+                  {
+                    vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
+                    nrm = vec3_unit(vec3_sub(hit_pos, mat4_get_trans(inst->transform)));
+                  }
                   break;
               }
               mtl_id = inst->id >> 16;
             }
-            //nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
-            //c = vec3_mul(nrm, rd->scene->mtls[mtl_id].color);
+            nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
+            c = vec3_mul(nrm, rd->scene->mtls[mtl_id].color);
             //c = rd->scene->mtls[mtl_id].color;
-            c = nrm;
+            //c = nrm;
           }
           uint32_t index = rd->width * (j + y) + (i + x);
           c = vec3_add(vec3_scale(vec3_uint32(((uint32_t *)surface->pixels)[index]), 1.0f - weight), vec3_scale(c, weight));

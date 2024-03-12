@@ -21,6 +21,19 @@ float intersect_aabb(const ray *r, float curr_t, vec3 min_ext, vec3 max_ext)
   return tnear <= tfar && tnear < curr_t && tfar > EPSILON ? tnear : MAX_DISTANCE;
 }
 
+void intersect_plane(const ray *r, uint32_t inst_id, hit *h)
+{
+  // Plane is infinite and at origin in XZ
+  float d = r->dir.y;
+  if(fabsf(d) > EPSILON) {
+    float t = -r->ori.y / d;
+    if(t < h->t && t > EPSILON) {
+      h->t = t;
+      h->e = (ST_PLANE << 16) | (inst_id & INST_ID_MASK);
+    }
+  }
+}
+
 void intersect_unitbox(const ray *r, uint32_t inst_id, hit *h)
 {
   vec3 t0 = vec3_mul(vec3_sub((vec3){ -1.0f, -1.0f, -1.0f }, r->ori), r->inv_dir);
@@ -62,11 +75,6 @@ void intersect_unitsphere(const ray *r, uint32_t inst_id, hit *h)
 
   h->t = t;
   h->e = (ST_SPHERE << 16) | (inst_id & INST_ID_MASK);
-}
-
-void intersect_unitcylinder(const ray *r, uint32_t inst_id, hit *h)
-{
-  // TODO: ST_CYLINDER
 }
 
 // Moeller/Trumbore ray-triangle intersection
@@ -170,20 +178,20 @@ void intersect_inst(const ray *r, const inst *inst, const bvh *bvhs, hit *h)
   ray_transform(&r_obj, inst->inv_transform, r);
 
   if(inst->data & SHAPE_TYPE_BIT) {
-    // Shape type
+    // Intersect shape type
     switch((shape_type)(inst->data & MESH_SHAPE_MASK)) {
-      case ST_SPHERE:
-        intersect_unitsphere(&r_obj, inst->id, h);
-        break;
-      case ST_CYLINDER:
-        intersect_unitcylinder(&r_obj, inst->id, h);
+      case ST_PLANE:
+        intersect_plane(&r_obj, inst->id, h);
         break;
       case ST_BOX:
         intersect_unitbox(&r_obj, inst->id, h);
         break;
+      case ST_SPHERE:
+        intersect_unitsphere(&r_obj, inst->id, h);
+        break;
     }
   } else {
-    // Mesh type
+    // Intersect mesh type via its bvh
     const bvh *bvh = &bvhs[inst->data & MESH_SHAPE_MASK];
     intersect_bvh(&r_obj, bvh->nodes, bvh->indices, bvh->mesh->tris, inst->id, h);
   }
@@ -207,7 +215,7 @@ void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances,
         break;
     } else {
       // Interior node, check aabbs of children
-      const tlas_node *c1 = &nodes[node->children & 0xffff];
+      const tlas_node *c1 = &nodes[node->children & TLAS_NODE_MASK];
       const tlas_node *c2 = &nodes[node->children >> 16];
       float d1 = intersect_aabb(r, h->t, c1->min, c1->max);
       float d2 = intersect_aabb(r, h->t, c2->min, c2->max);

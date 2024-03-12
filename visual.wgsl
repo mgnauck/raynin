@@ -104,9 +104,9 @@ const MESH_SHAPE_MASK   = 0x3fffffffu;
 const MTL_OVERRIDE_BIT  = 0x80000000u;
 
 // Shape types
-const ST_BOX            = 0u;
-const ST_SPHERE         = 1u;
-const ST_CYLINDER       = 2u;
+const ST_PLANE          = 0u;
+const ST_BOX            = 1u;
+const ST_SPHERE         = 2u;
 
 // Material flags
 const FLAT              = 1u;
@@ -207,6 +207,18 @@ fn intersectAabb(ray: Ray, currT: f32, minExt: vec3f, maxExt: vec3f) -> f32
   return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < currT && tmax > EPSILON);
 }
 
+fn intersectPlane(ray: Ray, instId: u32, h: ptr<function, Hit>)
+{
+  let d = ray.dir.y;
+  if(abs(d) > EPSILON) {
+    let t = -ray.ori.y / d;
+    if(t < (*h).t && t > EPSILON) {
+      (*h).t = t;
+      (*h).e = (ST_PLANE << 16) | (instId & INST_ID_MASK);
+    }
+  }
+}
+
 fn intersectUnitBox(ray: Ray, instId: u32, h: ptr<function, Hit>)
 {
   let t0 = (vec3f(-1.0) - ray.ori) * ray.invDir;
@@ -250,11 +262,6 @@ fn intersectUnitSphere(ray: Ray, instId: u32, h: ptr<function, Hit>)
 
   (*h).t = t;
   (*h).e = (ST_SPHERE << 16) | (instId & INST_ID_MASK);
-}
-
-fn intersectUnitCylinder(ray: Ray, instId: u32, h: ptr<function, Hit>)
-{
-  // TODO
 }
 
 // Moeller/Trumbore ray-triangle intersection
@@ -375,15 +382,15 @@ fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, h: ptr<function, Hit>)
   if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
     // Shape type
     switch((*inst).data & MESH_SHAPE_MASK) {
-      case ST_SPHERE: {
-        intersectUnitSphere(rayObjSpace, (*inst).id, h);
-      }
-      case ST_CYLINDER: {
-        intersectUnitCylinder(rayObjSpace, (*inst).id, h);
+      case ST_PLANE: {
+        intersectPlane(rayObjSpace, (*inst).id, h);
         return;
       }
       case ST_BOX: {
         intersectUnitBox(rayObjSpace, (*inst).id, h);
+      }
+      case ST_SPHERE: {
+        intersectUnitSphere(rayObjSpace, (*inst).id, h);
       }
       default: {
         return;
@@ -507,7 +514,7 @@ fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr
   var nrm: vec3f;
 
   if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
-    // For shapes we simply the override material id from the instance
+    // Shapes always use the override material from the instance
     mtlId = (*inst).id >> 16;
     // Calculate normal for different shapes
     switch((*inst).data & MESH_SHAPE_MASK) {
@@ -522,9 +529,8 @@ fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr
         let m = (*inst).transform;
         nrm = normalize(pos - vec3f(m[0][3], m[1][3], m[2][3]));
       }
-      case ST_CYLINDER: {
-        // TODO
-        nrm = vec3f(0.0);
+      case ST_PLANE: {
+        nrm = normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
       }
       default: {
         // Error

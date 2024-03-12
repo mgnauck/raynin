@@ -3,7 +3,10 @@
 
 //#define NATIVE_BUILD
 //#define TEXTURE_SUPPORT
+
 #define ANTIALIASING
-#define TEMPORAL_WEIGHT 0.1f
+
+#define PLANE_DEFAULT_SIZE  10.0f
+#define TEMPORAL_WEIGHT     0.1f
 
 #endif
