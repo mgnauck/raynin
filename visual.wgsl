@@ -512,8 +512,9 @@ fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr
     // Calculate normal for different shapes
     switch((*inst).data & MESH_SHAPE_MASK) {
       case ST_BOX: {
-        // TODO
-        nrm = vec3f(1.0, 0.0, 0.0);
+        var pos = r.ori + h.t * r.dir;
+        pos = (vec4f(pos, 1.0) * (*inst).invTransform).xyz;
+        nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
         nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
       }
       case ST_SPHERE: {

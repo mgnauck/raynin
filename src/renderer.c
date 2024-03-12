@@ -213,17 +213,12 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
                   break;
                 case ST_BOX:
                   {
-                    // TODO Better properly calc normal
-                    vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
+                    vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t)); 
                     hit_pos = mat4_mul_pos(inst->inv_transform, hit_pos);
-                    nrm = (vec3){ 0.0f, 0.0f, 0.0f };
-                    for(uint8_t k=0; k<3; k++) {
-                      float v = vec3_get(hit_pos, k);
-                      if(fabsf(v) > 0.99f) {
-                        vec3_set(&nrm, k, v);
-                        break;
-                      }
-                    }
+                    nrm = (vec3){ 
+                      (float)((int32_t)(hit_pos.x * 1.0001f)),
+                      (float)((int32_t)(hit_pos.y * 1.0001f)),
+                      (float)((int32_t)(hit_pos.z * 1.0001f)) };
                     nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
                   }
                   break;
@@ -234,10 +229,10 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
               }
               mtl_id = inst->id >> 16;
             }
-            nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
-            c = vec3_mul(nrm, rd->scene->mtls[mtl_id].color);
+            //nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
+            //c = vec3_mul(nrm, rd->scene->mtls[mtl_id].color);
             //c = rd->scene->mtls[mtl_id].color;
-            //c = nrm;
+            c = nrm;
           }
           uint32_t index = rd->width * (j + y) + (i + x);
           c = vec3_add(vec3_scale(vec3_uint32(((uint32_t *)surface->pixels)[index]), 1.0f - weight), vec3_scale(c, weight));
