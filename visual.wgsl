@@ -102,6 +102,7 @@ const TLAS_NODE_MASK    = 0xffffu;
 const SHAPE_TYPE_BIT    = 0x40000000u;
 const MESH_SHAPE_MASK   = 0x3fffffffu;
 const MTL_OVERRIDE_BIT  = 0x80000000u;
+const INST_DATA_MASK    = 0x7fffffffu;
 
 // Shape types
 const ST_PLANE          = 0u;
@@ -379,26 +380,22 @@ fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, h: ptr<function, Hit>)
   rayObjSpace.dir = (vec4f(ray.dir, 0.0) * inst.invTransform).xyz;
   rayObjSpace.invDir = 1.0 / rayObjSpace.dir;
 
-  if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
-    // Shape type
-    switch((*inst).data & MESH_SHAPE_MASK) {
-      case ST_PLANE: {
-        intersectPlane(rayObjSpace, (*inst).id, h);
-        return;
-      }
-      case ST_BOX: {
-        intersectUnitBox(rayObjSpace, (*inst).id, h);
-      }
-      case ST_SPHERE: {
-        intersectUnitSphere(rayObjSpace, (*inst).id, h);
-      }
-      default: {
-        return;
-      }
+  switch((*inst).data & INST_DATA_MASK) {
+    case (SHAPE_TYPE_BIT | ST_PLANE): {
+      intersectPlane(rayObjSpace, (*inst).id, h);
+      return;
     }
-  } else {
-    // Mesh type
-    intersectBvh(rayObjSpace, (*inst).id, (*inst).data & MESH_SHAPE_MASK, h);
+    case (SHAPE_TYPE_BIT | ST_BOX): {
+      intersectUnitBox(rayObjSpace, (*inst).id, h);
+    }
+    case (SHAPE_TYPE_BIT | ST_SPHERE): {
+      intersectUnitSphere(rayObjSpace, (*inst).id, h);
+    }
+    default: {
+      // Mesh type
+      intersectBvh(rayObjSpace, (*inst).id, (*inst).data & MESH_SHAPE_MASK, h);
+      return;
+    }
   }
 }
 
@@ -509,48 +506,40 @@ fn evalMaterialDielectric(r: Ray, nrm: vec3f, inside: bool, albedo: vec3f, refra
 fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let inst = &instances[h.e & INST_ID_MASK];
-
-  var mtlId: u32;
+  var mtlId = (*inst).id >> 16; // Initialize with override material
   var nrm: vec3f;
 
-  if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
-    // Shapes always use the override material from the instance
-    mtlId = (*inst).id >> 16;
-    // Calculate normal for different shapes
-    switch((*inst).data & MESH_SHAPE_MASK) {
-      case ST_BOX: {
-        var pos = r.ori + h.t * r.dir;
-        pos = (vec4f(pos, 1.0) * (*inst).invTransform).xyz;
-        nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
-        nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
-      }
-      case ST_SPHERE: {
-        let pos = r.ori + h.t * r.dir;
-        let m = (*inst).transform;
-        nrm = normalize(pos - vec3f(m[0][3], m[1][3], m[2][3]));
-      }
-      case ST_PLANE: {
-        nrm = normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
-      }
-      default: {
-        // Error
-        nrm = vec3f(0.0);
-      }
+  // Calculate normal for different shapes or mesh
+  switch((*inst).data & INST_DATA_MASK) {
+    case (SHAPE_TYPE_BIT | ST_BOX): {
+      var pos = r.ori + h.t * r.dir;
+      pos = (vec4f(pos, 1.0) * (*inst).invTransform).xyz;
+      nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
+      nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
     }
-  } else {
-    // Mesh
-    let ofs = (*inst).data & MESH_SHAPE_MASK;
-    let tri = &tris[ofs + (h.e >> 16)];
+    case (SHAPE_TYPE_BIT | ST_SPHERE): {
+      let pos = r.ori + h.t * r.dir;
+      let m = (*inst).transform;
+      nrm = normalize(pos - vec3f(m[0][3], m[1][3], m[2][3]));
+    }
+    case (SHAPE_TYPE_BIT | ST_PLANE): {
+      nrm = normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
+    }
+    default: {
+      // Mesh type
+      let ofs = (*inst).data & MESH_SHAPE_MASK;
+      let tri = &tris[ofs + (h.e >> 16)];
 
-    // Either use the material id from the triangle or the material override from the instance
-    mtlId = select((*tri).mtl & MTL_ID_MASK, (*inst).id >> 16, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
+      // Either use the material id from the triangle or the material override from the instance
+      mtlId = select((*tri).mtl & MTL_ID_MASK, mtlId, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
 
-    // Calc normal
-    nrm = select(
-      (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
-      (*tri).n0, // Simply use face normal in n0
-      (((*tri).mtl >> 16) & FLAT) > 0);    
-    nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+      // Calc normal
+      nrm = select(
+        (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
+        (*tri).n0, // Simply use face normal in n0
+        (((*tri).mtl >> 16) & FLAT) > 0);    
+      nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+    }
   }
 
   // Get actual material data

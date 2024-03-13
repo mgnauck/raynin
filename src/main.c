@@ -28,7 +28,7 @@ scene         *cs = &scn;
 render_data   *rd;
 
 bool          orbit_cam = false;
-bool          paused = false;
+bool          paused = true;
 
   __attribute__((visibility("default")))
 void key_down(unsigned char key)
@@ -98,7 +98,7 @@ void init_scene_riow(scene *s)
   mat4 translation, scale;
 
   // Sphere mesh
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.1f, 0.2f, 0.4f }, .value = 0.0f });
   //scene_add_uvsphere(s, 1.0f, 6, 6, mtl_id);
   scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
   //scene_add_mesh(s, teapot, mtl_id);
@@ -112,8 +112,9 @@ void init_scene_riow(scene *s)
   
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  //scene_add_inst_mesh(s, 1, -1, translation);
-  scene_add_inst_shape(s, ST_SPHERE, 0, translation);
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  //scene_add_inst_mesh(s, 1, mtl_id, translation);
+  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
@@ -121,9 +122,8 @@ void init_scene_riow(scene *s)
   scene_add_inst_shape(s, ST_BOX, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.4f, 0.2f, 0.1f }, .value = 0.0f });
-  scene_add_inst_mesh(s, 0, mtl_id, translation);
-  //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
+  scene_add_inst_mesh(s, 0, 0, translation);
+  //scene_add_inst_shape(s, ST_SPHERE, 0, translation);
 
   mat4_scale(scale, 0.2f);
   
