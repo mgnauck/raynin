@@ -56,8 +56,8 @@ extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
 
 #else
 
-#define gpu_create_res(...)
-#define gpu_write_buf(...)
+#define gpu_create_res(...) ((void)0)
+#define gpu_write_buf(...) ((void)0)
 
 #endif
 
@@ -102,9 +102,7 @@ void renderer_set_bg_col(render_data *rd, vec3 bg_col)
 void push_mtls(render_data *rd)
 {
   scene *s = rd->scene;
-#ifndef NATIVE_BUILD // Avoid unused variable compiler warning
   gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
-#endif
   scene_unset_dirty(s, RT_MTL);
 }
 
@@ -112,28 +110,35 @@ void renderer_update_static(render_data *rd)
 {
   scene *s = rd->scene;
 
-#ifndef NATIVE_BUILD // Avoid unused variable compiler warning
+#ifndef NATIVE_BUILD
   // Push part of globals
   uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
+#endif
 
-  // Push tris, indices and bvh nodes
-  uint32_t cnt = 0;
-  for(uint32_t i=0; i<s->mesh_cnt; i++) {    
-    mesh *m = &s->meshes[i];
-    gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
+  if(s->dirty & RT_MESH) {
+    scene_build_bvhs(s);
 
-    bvh *b = &s->bvhs[i];
-    gpu_write_buf(BT_INDEX, cnt * sizeof(*b->indices), b->indices, m->tri_cnt * sizeof(*b->indices));
-    gpu_write_buf(BT_BVH_NODE, 2 * cnt * sizeof(*b->nodes), b->nodes, 2 * m->tri_cnt * sizeof(*b->nodes));
+#ifndef NATIVE_BUILD
+    // Push tris, indices and bvh nodes
+    uint32_t cnt = 0;
+    for(uint32_t i=0; i<s->mesh_cnt; i++) {    
+      mesh *m = &s->meshes[i];
+      gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
 
-    cnt += m->tri_cnt;
-  }
+      bvh *b = &s->bvhs[i];
+      gpu_write_buf(BT_INDEX, cnt * sizeof(*b->indices), b->indices, m->tri_cnt * sizeof(*b->indices));
+      gpu_write_buf(BT_BVH_NODE, 2 * cnt * sizeof(*b->nodes), b->nodes, 2 * m->tri_cnt * sizeof(*b->nodes));
+
+      cnt += m->tri_cnt;
+    }
 #endif
   
-  scene_unset_dirty(s, RT_MESH);
-  
-  push_mtls(rd);
+    scene_unset_dirty(s, RT_MESH);
+  } 
+ 
+  if(s->dirty & RT_MTL)
+    push_mtls(rd);
 }
 
 void renderer_update(render_data *rd, float time)
@@ -166,7 +171,7 @@ void renderer_update(render_data *rd, float time)
     scene_unset_dirty(s, RT_INST);
   }
 
-#ifndef NATIVE_BUILD // Avoid unused variable compiler warning
+#ifndef NATIVE_BUILD
   // Push frame data
   float frame[8] = { pcg_randf(), rd->spp / (float)(rd->gathered_spp + rd->spp),
     time, 0.0f, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, 0.0f };

@@ -19,6 +19,7 @@ typedef struct scene {
   mtl         *mtls;
   uint32_t    mesh_cnt;
   mesh        *meshes;
+  uint32_t    bvh_cnt;
   bvh         *bvhs;
   uint32_t    inst_cnt;
   inst        *instances;

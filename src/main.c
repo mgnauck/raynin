@@ -107,12 +107,13 @@ void init_scene_riow(scene *s)
   scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
   //scene_add_mesh(s, teapot, mtl_id);
   //scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1);
-  scene_build_bvhs(s);
+  
+  ////scene_build_bvhs(s);
 
   // Floor instance
   mat4_scale(scale, 2.0f);
-  //scene_add_inst_mesh(s, 0, -1, scale);
-  scene_add_inst_shape(s, ST_PLANE, 0, scale);
+  scene_add_inst_mesh(s, 0, -1, scale);
+  //scene_add_inst_shape(s, ST_PLANE, 0, scale);
   
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
@@ -181,7 +182,7 @@ void update_scene(scene *s, float time)
 
   if(!paused) {
     // Update instances
-    /*mat4 translation;
+    mat4 translation;
     mat4_trans(translation, (vec3){ 4.0f, 2.0f + sinf(time * 0.6f), 0.0f });
     scene_upd_inst(s, 1, -1, translation);
     mat4_trans(translation, (vec3){ 0.0f, 2.0f + sinf(time * 0.6f + 0.6f), 0.0f });

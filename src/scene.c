@@ -26,10 +26,11 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt
 
   s->mtl_cnt  = 0;
   s->mesh_cnt = 0;
+  s->bvh_cnt  = 0;
   s->inst_cnt = 0;
   s->curr_ofs = 0;
 
-  scene_set_dirty(s, RT_CAM_VIEW | RT_MESH | RT_MTL | RT_INST);
+  scene_set_dirty(s, RT_CAM_VIEW);
 }
 
 void scene_release(scene *s)
@@ -57,9 +58,14 @@ void scene_unset_dirty(scene *s, res_type r)
 
 void scene_build_bvhs(scene *s)
 {
-  for(uint32_t i=0; i<s->mesh_cnt; i++) {
-    bvh_init(&s->bvhs[i], &s->meshes[i]);
-    bvh_build(&s->bvhs[i]);
+  if(s->dirty & RT_MESH) {
+    for(uint32_t i=0; i<s->mesh_cnt; i++) {
+      if(s->bvh_cnt == i) {
+        bvh_init(&s->bvhs[i], &s->meshes[i]);
+        s->bvh_cnt++;
+      }
+      bvh_build(&s->bvhs[i]);
+    }
   }
 }
 
@@ -235,6 +241,7 @@ uint32_t scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h, uint32_t
   m->centers[1] = tri_calc_center(tri);
 
   update_data_ofs(s, m);
+  scene_set_dirty(s, RT_MESH);
   return s->mesh_cnt++;
 }
 
@@ -325,6 +332,7 @@ uint32_t scene_add_icosphere(scene *s, uint8_t steps, uint32_t mtl)
   }
 
   update_data_ofs(s, m);
+  scene_set_dirty(s, RT_MESH);
   return s->mesh_cnt++;
 }
 
@@ -399,6 +407,7 @@ uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby
   }
 
   update_data_ofs(s, m);
+  scene_set_dirty(s, RT_MESH);
   return s->mesh_cnt++;
 }
 
@@ -480,6 +489,7 @@ uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t sub
   }
 
   update_data_ofs(s, m);
+  scene_set_dirty(s, RT_MESH);
   return s->mesh_cnt++;
 }
 
@@ -541,5 +551,6 @@ uint32_t scene_add_mesh(scene *s, const uint8_t *data, uint32_t mtl)
   }
 
   update_data_ofs(s, m);
+  scene_set_dirty(s, RT_MESH);
   return s->mesh_cnt++;
 }
