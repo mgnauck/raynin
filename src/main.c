@@ -99,9 +99,9 @@ void init_scene_riow(scene *s)
   mat4 transform, translation, scale;
 
   // Sphere mesh
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.1f, 0.2f, 0.4f }, .value = 0.0f });
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.6f, 0.2f, 0.1f }, .value = 0.0f });
   //mesh_id = scene_add_uvsphere(s, 1.0f, 6, 6, mtl_id);
-  mesh_id = scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
+  //mesh_id = scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
   //mesh_id = scene_add_mesh(s, teapot, mtl_id);
   //mesh_id = scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1);
   
@@ -112,29 +112,30 @@ void init_scene_riow(scene *s)
   
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
   scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
-  scene_add_inst_shape(s, ST_BOX, mtl_id, translation);
+  //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
+  scene_add_inst_shape(s, ST_SPHERE, 0, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
-  scene_add_inst_mesh(s, mesh_id, -1, translation);
+  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
 
   mat4_scale(scale, 0.2f);
   
   for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
     for(int b=-RIOW_SIZE/2; b<RIOW_SIZE/2; b++) {
-      float mtl_p = pcg_randf();
+      //float mtl_p = pcg_randf();
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
-        if(mtl_p < 0.8f)
+        /*if(mtl_p < 0.8f)
           mtl_id = scene_add_mtl(s, &(mtl){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f });
         else if(mtl_p < 0.95f)
           mtl_id = scene_add_mtl(s, &(mtl){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) });
         else
           mtl_id = scene_add_mtl(s, &(mtl){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f });
+        */
 
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);

@@ -456,7 +456,7 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
   }
 }
 
-fn evalMaterialLambert(r: Ray, nrm: vec3f, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+/*fn evalMaterialLambert(r: Ray, nrm: vec3f, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   let dir = nrm + rand3UnitSphere();
   *scatterDir = select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
@@ -503,62 +503,54 @@ fn evalMaterialDielectric(r: Ray, nrm: vec3f, inside: bool, albedo: vec3f, refra
   return true;
 }
 
-fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn evalMaterial(r: Ray, nrm: vec3f, mtl: Mtl, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+{
+  let inside = dot(r.dir, nrm) > 0;
+  nrm = select(nrm, -nrm, inside);
+
+  if(mtl.value > 1.0) {
+    return evalMaterialDielectric(r, nrm, inside, mtl.color, mtl.value, attenuation, scatterDir);
+  } else if(mtl.value > 0.0) {
+    return evalMaterialMetal(r, nrm, mtl.color, mtl.value, attenuation, scatterDir);
+  }
+
+  return evalMaterialLambert(r, nrm, mtl.color, attenuation, scatterDir);
+}*/
+
+fn completeHit(h: Hit, hitPos: vec3f, mtlId: ptr<function, u32>) -> vec3f
 {
   let inst = &instances[h.e & INST_ID_MASK];
-  var mtlId = (*inst).id >> 16; // Initialize with override material
-  var nrm: vec3f;
+  
+  *mtlId = (*inst).id >> 16; // Initialize with override material
 
   // Calculate normal for different shapes or mesh
   switch((*inst).data & INST_DATA_MASK) {
     case (SHAPE_TYPE_BIT | ST_BOX): {
-      var pos = r.ori + h.t * r.dir;
-      pos = (vec4f(pos, 1.0) * (*inst).invTransform).xyz;
-      nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
-      nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+      let pos = (vec4f(hitPos, 1.0) * (*inst).invTransform).xyz;
+      var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
+      return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
     }
     case (SHAPE_TYPE_BIT | ST_PLANE): {
-      nrm = normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
+      return normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
     }
     case (SHAPE_TYPE_BIT | ST_SPHERE): {
-      let pos = r.ori + h.t * r.dir;
       let m = (*inst).transform;
-      nrm = normalize(pos - vec3f(m[0][3], m[1][3], m[2][3]));
+      return normalize(hitPos - vec3f(m[0][3], m[1][3], m[2][3]));
     }
-    default: {
-      // Mesh type
+    default: { // Mesh type
       let ofs = (*inst).data & MESH_SHAPE_MASK;
       let tri = &tris[ofs + (h.e >> 16)];
 
       // Either use the material id from the triangle or the material override from the instance
-      mtlId = select((*tri).mtl & MTL_ID_MASK, mtlId, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
+      *mtlId = select((*tri).mtl & MTL_ID_MASK, *mtlId, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
 
       // Calc normal
-      nrm = select(
+      var nrm = select(
         (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
         (*tri).n0, // Simply use face normal in n0
         (((*tri).mtl >> 16) & FLAT) > 0);    
-      nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+      return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
     }
-  }
-
-  // Get actual material data
-  let data = materials[mtlId];
-
-  if(any(data.color > vec3f(1.0))) {
-    *emission = data.color;
-    return false;
-  }
-
-  let inside = dot(r.dir, nrm) > 0;
-  nrm = select(nrm, -nrm, inside);
-
-  if(data.value > 1.0) {
-    return evalMaterialDielectric(r, nrm, inside, data.color, data.value, attenuation, scatterDir);
-  } else if(data.value > 0.0) {
-    return evalMaterialMetal(r, nrm, data.color, data.value, attenuation, scatterDir);
-  } else {
-    return evalMaterialLambert(r, nrm, data.color, attenuation, scatterDir);
   }
 }
 
@@ -567,25 +559,51 @@ fn render(initialRay: Ray) -> vec3f
   var ray = initialRay;
   var col = vec3f(1);
   var bounce = 0u;
+
   loop {
+    
     var hit: Hit;
     hit.t = MAX_DISTANCE;
     intersectTlas(ray, &hit);
+
     if(hit.t < MAX_DISTANCE) {
-      var att: vec3f;
-      var emit: vec3f;
-      var newDir: vec3f;
-      if(evalMaterial(ray, hit, &att, &emit, &newDir)) {
-        col *= att;
-        ray = createRay(ray.ori + hit.t * ray.dir, newDir);
-      } else {
-        col *= emit;
+      
+      // Finalize hit data
+      var mtlId: u32;
+      let hitPos = ray.ori + hit.t * ray.dir;
+      let nrm = completeHit(hit, hitPos, &mtlId);
+
+      // Get material
+      let mtl = materials[mtlId];
+
+      // Hit light source
+      if(any(mtl.color > vec3f(1.0))) {
+        col *= mtl.color;
         break;
       }
+
+      let newDir = rand3Hemi(nrm);
+      let pdf = 1.0 / (2.0 * PI);
+      
+      col *= mtl.color / PI * dot(newDir, nrm) / pdf;
+
+      ray = createRay(hitPos, newDir);
+
+      /*if(bounce > 3) {
+        let prob = maxComp(mtl.color);
+        if(rand() < prob) {
+          break;
+        }
+
+        col *= 1.0 / prob;
+      }*/
+
     } else {
+      // Sample background
       col *= globals.bgColor;
       break;
     }
+
     bounce += 1;
     if(bounce >= globals.maxBounces) {
       break;
