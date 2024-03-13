@@ -113,7 +113,7 @@ const ST_SPHERE         = 2u;
 const FLAT              = 1u;
 
 // Math constants
-const EPSILON           = 0.0001;
+const EPSILON           = 0.001;
 const PI                = 3.141592;
 const MAX_DISTANCE      = 3.402823466e+38;
 
@@ -517,13 +517,13 @@ fn evalMaterial(r: Ray, h: Hit, attenuation: ptr<function, vec3f>, emission: ptr
       nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
       nrm = normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
     }
+    case (SHAPE_TYPE_BIT | ST_PLANE): {
+      nrm = normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
+    }
     case (SHAPE_TYPE_BIT | ST_SPHERE): {
       let pos = r.ori + h.t * r.dir;
       let m = (*inst).transform;
       nrm = normalize(pos - vec3f(m[0][3], m[1][3], m[2][3]));
-    }
-    case (SHAPE_TYPE_BIT | ST_PLANE): {
-      nrm = normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
     }
     default: {
       // Mesh type
