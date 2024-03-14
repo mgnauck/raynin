@@ -517,41 +517,35 @@ fn evalMaterial(r: Ray, nrm: vec3f, mtl: Mtl, attenuation: ptr<function, vec3f>,
   return evalMaterialLambert(r, nrm, mtl.color, attenuation, scatterDir);
 }*/
 
-fn completeHit(h: Hit, hitPos: vec3f, mtlId: ptr<function, u32>) -> vec3f
+fn calcShapeNormal(h: Hit, inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
 {
-  let inst = &instances[h.e & INST_ID_MASK];
-  
-  *mtlId = (*inst).id >> 16; // Initialize with override material
-
-  // Calculate normal for different shapes or mesh
-  switch((*inst).data & INST_DATA_MASK) {
-    case (SHAPE_TYPE_BIT | ST_BOX): {
+  switch((*inst).data & MESH_SHAPE_MASK) {
+    case ST_BOX: {
       let pos = (vec4f(hitPos, 1.0) * (*inst).invTransform).xyz;
       var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
       return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
     }
-    case (SHAPE_TYPE_BIT | ST_PLANE): {
+    case ST_PLANE: {
       return normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
     }
-    case (SHAPE_TYPE_BIT | ST_SPHERE): {
+    case ST_SPHERE: {
       let m = (*inst).transform;
       return normalize(hitPos - vec3f(m[0][3], m[1][3], m[2][3]));
     }
-    default: { // Mesh type
-      let ofs = (*inst).data & MESH_SHAPE_MASK;
-      let tri = &tris[ofs + (h.e >> 16)];
-
-      // Either use the material id from the triangle or the material override from the instance
-      *mtlId = select((*tri).mtl & MTL_ID_MASK, *mtlId, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
-
-      // Calc normal
-      var nrm = select(
-        (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
-        (*tri).n0, // Simply use face normal in n0
-        (((*tri).mtl >> 16) & FLAT) > 0);    
-      return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+    default: {
+      // Error
+      return vec3f(0);
     }
   }
+}
+
+fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> vec3f
+{
+  var nrm = select(
+    (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
+    (*tri).n0, // Simply use face normal in n0
+    (((*tri).mtl >> 16) & FLAT) > 0);    
+  return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
 }
 
 fn render(initialRay: Ray) -> vec3f
@@ -561,43 +555,43 @@ fn render(initialRay: Ray) -> vec3f
   var bounce = 0u;
 
   loop {
-    
     var hit: Hit;
     hit.t = MAX_DISTANCE;
     intersectTlas(ray, &hit);
-
     if(hit.t < MAX_DISTANCE) {
-      
       // Finalize hit data
-      var mtlId: u32;
-      let hitPos = ray.ori + hit.t * ray.dir;
-      let nrm = completeHit(hit, hitPos, &mtlId);
+      let pos = ray.ori + hit.t * ray.dir;
+      let inst = &instances[hit.e & INST_ID_MASK]; 
+      var mtl: u32;
+      var nrm: vec3f;
+      if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
+        // Shape
+        mtl = (*inst).id >> 16;
+        nrm = calcShapeNormal(hit, inst, pos);
+      } else {
+        // Mesh
+        let ofs = (*inst).data & MESH_SHAPE_MASK;
+        let tri = &tris[ofs + (hit.e >> 16)];
+        // Either use the material id from the triangle or the material override from the instance
+        mtl = select((*tri).mtl, (*inst).id >> 16, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
+        nrm = calcTriNormal(hit, inst, tri);
+      }
 
       // Get material
-      let mtl = materials[mtlId];
+      let mtlData = materials[mtl & MTL_ID_MASK];
 
       // Hit light source
-      if(any(mtl.color > vec3f(1.0))) {
-        col *= mtl.color;
+      if(any(mtlData.color > vec3f(1.0))) {
+        col *= mtlData.color;
         break;
       }
 
       let newDir = rand3Hemi(nrm);
       let pdf = 1.0 / (2.0 * PI);
       
-      col *= mtl.color / PI * dot(newDir, nrm) / pdf;
+      col *= mtlData.color / PI * dot(newDir, nrm) / pdf;
 
-      ray = createRay(hitPos, newDir);
-
-      /*if(bounce > 3) {
-        let prob = maxComp(mtl.color);
-        if(rand() < prob) {
-          break;
-        }
-
-        col *= 1.0 / prob;
-      }*/
-
+      ray = createRay(pos, newDir);
     } else {
       // Sample background
       col *= globals.bgColor;
