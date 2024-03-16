@@ -135,7 +135,8 @@ fn rand() -> f32
 {
   rngState = rngState * 747796405u + 2891336453u;
   let word = ((rngState >> ((rngState >> 28u) + 4u)) ^ rngState) * 277803737u;
-  return f32((word >> 22u) ^ word) / f32(0xffffffffu);
+  //return f32((word >> 22u) ^ word) / f32(0xffffffffu);
+  return ldexp(f32((word >> 22u) ^ word), -32);
 }
 
 fn randRange(valueMin: f32, valueMax: f32) -> f32
@@ -317,7 +318,7 @@ fn intersectBvh(ray: Ray, instId: u32, dataOfs: u32, h: ptr<function, Hit>)
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
-  let bvhOfs = 2 * dataOfs;
+  let bvhOfs = dataOfs << 2;
 
   loop {
     let node = &bvhNodes[bvhOfs + nodeIndex];
@@ -594,7 +595,6 @@ fn render(initialRay: Ray) -> vec3f
       newDir = rand3Hemi(nrm);
       throughput *= 2.0 * mtlData.color * dot(newDir, nrm);
     }
-    /*if(bounces > 3u)*/ {
     // Russian roulette, terminate with probability inverse to throughput
     var p = maxComp(throughput);
     if(rand() > p) {
@@ -603,7 +603,6 @@ fn render(initialRay: Ray) -> vec3f
     // Account for bias introduced by path termination (pdf = p)
     // Boost surviving paths by their probability to be terminated
     throughput *= 1.0 / p;
-    }
     // Next ray to trace
     ray = createRay(pos + newDir * EPSILON, newDir);
   }
