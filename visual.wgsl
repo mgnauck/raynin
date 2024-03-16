@@ -551,57 +551,61 @@ fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> ve
 fn render(initialRay: Ray) -> vec3f
 {
   var ray = initialRay;
-  var col = vec3f(1);
-  var bounce = 0u;
+  var col = vec3f(0);
+  var throughput = vec3f(1);
 
-  loop {
+  for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
+    // Intersect ray
     var hit: Hit;
     hit.t = MAX_DISTANCE;
     intersectTlas(ray, &hit);
-    if(hit.t < MAX_DISTANCE) {
-      // Finalize hit data
-      let pos = ray.ori + hit.t * ray.dir;
-      let inst = &instances[hit.e & INST_ID_MASK]; 
-      var mtl: u32;
-      var nrm: vec3f;
-      if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
-        // Shape
-        mtl = (*inst).id >> 16;
-        nrm = calcShapeNormal(hit, inst, pos);
-      } else {
-        // Mesh
-        let ofs = (*inst).data & MESH_SHAPE_MASK;
-        let tri = &tris[ofs + (hit.e >> 16)];
-        // Either use the material id from the triangle or the material override from the instance
-        mtl = select((*tri).mtl, (*inst).id >> 16, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
-        nrm = calcTriNormal(hit, inst, tri);
-      }
-
-      // Get material
-      let mtlData = materials[mtl & MTL_ID_MASK];
-
-      // Hit light source
-      if(any(mtlData.color > vec3f(1.0))) {
-        col *= mtlData.color;
-        break;
-      }
-
-      let newDir = rand3Hemi(nrm);
-      let pdf = 1.0 / (2.0 * PI);
-      
-      col *= mtlData.color / PI * dot(newDir, nrm) / pdf;
-
-      ray = createRay(pos, newDir);
+    // No hit
+    if(hit.t >= MAX_DISTANCE) { 
+      col += throughput * globals.bgColor;
+      break;
+    }
+    // Finalize hit data
+    let pos = ray.ori + hit.t * ray.dir;
+    let inst = &instances[hit.e & INST_ID_MASK]; 
+    var mtl: u32;
+    var nrm: vec3f;
+    if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
+      // Shape
+      mtl = (*inst).id >> 16;
+      nrm = calcShapeNormal(hit, inst, pos);
     } else {
-      // Sample background
-      col *= globals.bgColor;
+      // Mesh
+      let ofs = (*inst).data & MESH_SHAPE_MASK;
+      let tri = &tris[ofs + (hit.e >> 16)];
+      // Either use the material id from the triangle or the material override from the instance
+      mtl = select((*tri).mtl, (*inst).id >> 16, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
+      nrm = calcTriNormal(hit, inst, tri);
+    }
+    // Get material
+    var newDir: vec3f;
+    let mtlData = materials[mtl & MTL_ID_MASK];
+    if(any(mtlData.color > vec3f(1.0))) {
+      // Hit light
+      col += throughput * mtlData.color;
+      break;
+    } else {
+      // Diffuse reflection
+      nrm = nrm * select(-1.0, 1.0, dot(ray.dir, nrm) < 0.0);
+      newDir = rand3Hemi(nrm);
+      throughput *= 2.0 * mtlData.color * dot(newDir, nrm);
+    }
+    /*if(bounces > 3u)*/ {
+    // Russian roulette, terminate with probability inverse to throughput
+    var p = maxComp(throughput);
+    if(rand() > p) {
       break;
     }
-
-    bounce += 1;
-    if(bounce >= globals.maxBounces) {
-      break;
+    // Account for bias introduced by path termination (pdf = p)
+    // Boost surviving paths by their probability to be terminated
+    throughput *= 1.0 / p;
     }
+    // Next ray to trace
+    ray = createRay(pos + newDir * EPSILON, newDir);
   }
 
   return col;
