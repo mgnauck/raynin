@@ -165,8 +165,16 @@ fn rand3UnitSphere() -> vec3f
 
 fn rand3Hemi(nrm: vec3f) -> vec3f
 {
+  // Uniform + rejection sampling
   let v = rand3UnitSphere();
   return select(-v, v, dot(v, nrm) > 0);
+}
+
+fn rand3HemiCosWeighted(nrm: vec3f) -> vec3f
+{
+  // Expects nrm to be unit vector
+  let dir = nrm + rand3UnitSphere();
+  return select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
 }
 
 // https://mathworld.wolfram.com/DiskPointPicking.html
@@ -459,8 +467,7 @@ fn intersectTlas(ray: Ray, h: ptr<function, Hit>)
 
 /*fn evalMaterialLambert(r: Ray, nrm: vec3f, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
-  let dir = nrm + rand3UnitSphere();
-  *scatterDir = select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
+  *scatterDir = rand3HemiCosWeighted(nrm);
   *attenuation = albedo;
   return true;
 }
@@ -582,6 +589,8 @@ fn render(initialRay: Ray) -> vec3f
       mtl = select((*tri).mtl, (*inst).id >> 16, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
       nrm = calcTriNormal(hit, inst, tri);
     }
+    let inside = dot(ray.dir, nrm) > 0;
+    nrm = select(nrm, -nrm, inside);
     // Get material
     var newDir: vec3f;
     let mtlData = materials[mtl & MTL_ID_MASK];
@@ -589,20 +598,33 @@ fn render(initialRay: Ray) -> vec3f
       // Hit light
       col += throughput * mtlData.color;
       break;
+    } else if(mtlData.value > 0.0) {
+      // Specular
+      // TODO Glossy reflection
+      newDir = reflect(ray.dir, nrm);
+      throughput *= mtlData.color; // pdf is 1
     } else {
       // Diffuse reflection
       nrm = nrm * select(-1.0, 1.0, dot(ray.dir, nrm) < 0.0);
-      newDir = rand3Hemi(nrm);
-      throughput *= 2.0 * mtlData.color * dot(newDir, nrm);
+      // Uniform sampled
+      // Energy conservation PI and ray probability of 2 * PI cancel out
+      //newDir = rand3Hemi(nrm);
+      //throughput *= 2.0 * mtlData.color * dot(newDir, nrm);
+      // Importance sampled
+      // pdf cos(theta)/PI nicely cancels out with energy conservation PI and lambertian reflection cost(theta)
+      newDir = rand3HemiCosWeighted(nrm);
+      throughput *= mtlData.color;
     }
     // Russian roulette, terminate with probability inverse to throughput
-    var p = maxComp(throughput);
-    if(rand() > p) {
-      break;
+    if(bounces > 2) {
+      let p = maxComp(throughput);
+      if(rand() > p) {
+        break;
+      }
+      // Account for bias introduced by path termination (pdf = p)
+      // Boost surviving paths by their probability to be terminated
+      throughput *= 1.0 / p;
     }
-    // Account for bias introduced by path termination (pdf = p)
-    // Boost surviving paths by their probability to be terminated
-    throughput *= 1.0 / p;
     // Next ray to trace
     ray = createRay(pos + newDir * EPSILON, newDir);
   }
