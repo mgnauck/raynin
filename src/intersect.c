@@ -16,7 +16,7 @@ float intersect_aabb(const ray *r, float curr_t, vec3 min_ext, vec3 max_ext)
   vec3 t1 = vec3_mul(vec3_sub(max_ext, r->ori), r->inv_dir);
 
   float tnear = vec3_max_comp(vec3_min(t0, t1));
-  float tfar = vec3_min_comp(vec3_max(t0, t1));
+  float tfar = vec3_min_comp(vec3_max(t1, t0));
 
   return tnear <= tfar && tnear < curr_t && tfar > EPSILON ? tnear : MAX_DISTANCE;
 }

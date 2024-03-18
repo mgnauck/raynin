@@ -212,7 +212,7 @@ fn intersectAabb(ray: Ray, currT: f32, minExt: vec3f, maxExt: vec3f) -> f32
   let t1 = (maxExt - ray.ori) * ray.invDir;
 
   let tmin = maxComp(min(t0, t1));
-  let tmax = minComp(max(t0, t1));
+  let tmax = minComp(max(t1, t0));
   
   return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < currT && tmax > EPSILON);
 }
