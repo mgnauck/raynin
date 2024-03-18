@@ -2,7 +2,7 @@ struct Global
 {
   width: u32,
   height: u32,
-  samplesPerPixel: u32,
+  spp: u32,
   maxBounces: u32,
   rngSeed: f32,
   weight: f32,
@@ -658,11 +658,11 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   rngState = index ^ u32(globals.rngSeed * 0xffffffff); 
 
   var col = vec3f(0);
-  for(var i=0u; i<globals.samplesPerPixel; i++) {
+  for(var i=0u; i<globals.spp; i++) {
     col += render(createPrimaryRay(vec2f(globalId.xy)));
   }
 
-  buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.samplesPerPixel), globals.weight), 1);
+  buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);
 }
 
 @vertex
