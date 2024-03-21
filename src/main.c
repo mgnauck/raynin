@@ -20,7 +20,7 @@
 #define RIOW_SIZE   22
 #define TRI_CNT     1024 + 2
 #define MESH_CNT    2
-#define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4)
+#define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 1)
 #define MTL_CNT     INST_CNT
 
 scene         scn;
@@ -99,25 +99,30 @@ void init_scene_riow(scene *s)
   mat4 transform, translation, scale;
 
   // Sphere mesh
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.6f, 0.2f, 0.1f }, .value = 0.0f });
+  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.6f, 1.6f, 1.6f }, .value = 0.0f });
+  mesh_id = scene_add_quad(s, (vec3){ 0.0f, 5.0f, 0.0f }, (vec3){ 0.0f, -1.0f, 0.0f }, 5.0f, 5.0f, mtl_id);
   //mesh_id = scene_add_uvsphere(s, 1.0f, 6, 6, mtl_id);
   //mesh_id = scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
   //mesh_id = scene_add_mesh(s, teapot, mtl_id);
   //mesh_id = scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1);
+ 
+  // Light instance
+  mat4_scale(scale, 1.0f);
+  scene_add_inst_mesh(s, mesh_id, mtl_id, scale);
   
   // Floor instance
   mat4_scale(scale, 1.2f);
   mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
   scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
-  
+ 
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
   scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f });
-  scene_add_inst_shape(s, ST_SPHERE, 0, translation);
+  //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f }); // transmissive
+  scene_add_inst_shape(s, ST_SPHERE, 1, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
@@ -131,9 +136,9 @@ void init_scene_riow(scene *s)
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
         if(mtl_p < 0.8f)
           mtl_id = scene_add_mtl(s, &(mtl){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f });
-        else if(mtl_p < 0.95f)
+        /*else if(mtl_p < 0.95f)
           mtl_id = scene_add_mtl(s, &(mtl){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) });
-        /*else
+        else
           mtl_id = scene_add_mtl(s, &(mtl){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f });
         //*/
 
@@ -155,7 +160,8 @@ void init(uint32_t width, uint32_t height)
   renderer_gpu_alloc(TRI_CNT, MTL_CNT, INST_CNT);
 
   rd = renderer_init(cs, width, height, 2);
-  renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
+  renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
+  //renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
   renderer_update_static(rd);
 }
 

@@ -91,7 +91,18 @@ struct Hit
   t: f32,
   u: f32,
   v: f32,
-  e: u32,           // (tri id << 16) | (inst id & 0xffff)
+  e: u32            // (tri id << 16) | (inst id & 0xffff)
+}
+
+struct IA
+{
+  pos: vec3f,
+  nrm: vec3f,
+  outDir: vec3f,
+  inDir: vec3f,
+  mtl: Mtl,
+  pdf: f32,
+  flags: u32
 }
 
 // Bit handling
@@ -112,9 +123,14 @@ const ST_SPHERE         = 2u;
 // Material flags
 const FLAT              = 1u;
 
+// Interaction flags
+const INSIDE            = 1u;
+const SPECULAR          = 2u;
+
 // Math constants
 const EPSILON           = 0.001;
 const PI                = 3.141592;
+const INV_PI            = 1.0 / PI;
 const MAX_DISTANCE      = 3.402823466e+38;
 
 @group(0) @binding(0) var<uniform> globals: Global;
@@ -525,6 +541,103 @@ fn evalMaterial(r: Ray, nrm: vec3f, mtl: Mtl, attenuation: ptr<function, vec3f>,
   return evalMaterialLambert(r, nrm, mtl.color, attenuation, scatterDir);
 }*/
 
+fn sampleLambert(ia: ptr<function, IA>) -> vec3f
+{
+  (*ia).inDir = rand3HemiCosWeighted((*ia).nrm);
+
+  var cosTheta = dot((*ia).inDir, (*ia).nrm);
+
+  (*ia).pdf = cosTheta * INV_PI;
+  (*ia).flags &= ~SPECULAR;
+
+  return (*ia).mtl.color * INV_PI * cosTheta;
+}
+
+fn sampleMetal(ia: ptr<function, IA>) -> vec3f
+{
+  (*ia).inDir = reflect(-(*ia).outDir, (*ia).nrm); 
+  (*ia).pdf = 1.0; // One direction only
+  (*ia).flags |= SPECULAR;
+
+  return (*ia).mtl.color * INV_PI;
+}
+
+fn sampleDielectric(ia: ptr<function, IA>) -> vec3f
+{
+  (*ia).pdf = 1.0;
+  (*ia).flags |= SPECULAR;
+
+  return (*ia).mtl.color * INV_PI;
+}
+
+fn sampleMaterial(ia: ptr<function, IA>) -> vec3f
+{
+  if((*ia).mtl.value > 1.0) {
+    return sampleDielectric(ia);
+  } else if((*ia).mtl.value > 0.0) {
+    return sampleMetal(ia);
+  } else {
+    return sampleLambert(ia);
+  }
+}
+
+fn sampleLight(ia: ptr<function, IA>) -> vec3f
+{
+    /*
+      // TODO If we have multiple lights, we simply exclude the hit one but
+      // sample all others, i.e. light shining on another light
+
+      // Sample light
+      let rx = rand();
+      let rz = rand();
+      let lightArea = 5.0 * 5.0;
+      let lightPos = vec3f(-2.5 + 5.0 * rx, 5.0, -2.5 + 5.0 * rz);
+      var lightDir = lightPos - pos;
+      let distToLight = length(lightDir);
+      lightDir = normalize(lightDir);
+      hit.t = distToLight;
+      let shadowRay = createRay(pos, lightDir);
+      intersectTlas(shadowRay, &hit); // TODO Optimize with early out etc.
+      if(hit.t == distToLight) {
+        col += throughput * (mtlData.color / PI) * dot(lightDir, nrm) * ((vec3f(1.6) * lightArea * dot(vec3f(0.0, -1.0, 0.0), -lightDir)) / (distToLight * distToLight));
+      }
+    */
+
+  // TODO
+  // - early outs during tlas intersection
+  // - on multiple lights, sample one random light
+  // - exclude the light if it was previously hit
+  // - skew random light selection by light importance (area*power)
+  // - add MIS
+
+  // Find random point on light surface
+  let lightNrm = vec3f(0.0, -1.0, 0.0);
+  var lightDir = vec3f(-2.5 + 5.0 * rand(), 5.0, -2.5 + 5.0 * rand()) - (*ia).pos;
+  let distSqr = dot(lightDir, lightDir);
+  let dist = sqrt(distSqr);
+
+  lightDir = normalize(lightDir);
+
+  // Probe visibility of light
+  var hit: Hit;
+  hit.t = dist; 
+  intersectTlas(createRay((*ia).pos, lightDir), &hit);
+  if(hit.t < dist) {
+    // Light is obstructed
+    (*ia).pdf = 1.0;
+    return vec3f(0.0);
+  }
+
+  (*ia).inDir = lightDir;
+
+  let res = sampleMaterial(ia);
+
+  // Calc pdf from light area projected onto the unit hemisphere (solid angle subtended by the light)
+  (*ia).pdf = distSqr / (/* light area */ 25.0 * dot(-lightDir, lightNrm));
+  //return (*ia).mtl.color * INV_PI * dot(lightDir, (*ia).nrm) * /* light color/power */ vec3f(1.6);
+  return res;
+}
+
 fn calcShapeNormal(h: Hit, inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
 {
   switch((*inst).data & MESH_SHAPE_MASK) {
@@ -542,7 +655,7 @@ fn calcShapeNormal(h: Hit, inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
     }
     default: {
       // Error
-      return vec3f(0);
+      return vec3f(100);
     }
   }
 }
@@ -558,6 +671,7 @@ fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> ve
 
 fn render(initialRay: Ray) -> vec3f
 {
+  var ia: IA;
   var ray = initialRay;
   var col = vec3f(0);
   var throughput = vec3f(1);
@@ -567,54 +681,51 @@ fn render(initialRay: Ray) -> vec3f
     var hit: Hit;
     hit.t = MAX_DISTANCE;
     intersectTlas(ray, &hit);
+    
     // No hit
     if(hit.t >= MAX_DISTANCE) { 
       col += throughput * globals.bgColor;
       break;
     }
+
     // Finalize hit data
-    let pos = ray.ori + hit.t * ray.dir;
     let inst = &instances[hit.e & INST_ID_MASK]; 
     var mtl: u32;
-    var nrm: vec3f;
+
+    ia.pos = ray.ori + hit.t * ray.dir;
+    ia.outDir = -ray.dir;
+    
     if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
       // Shape
       mtl = (*inst).id >> 16;
-      nrm = calcShapeNormal(hit, inst, pos);
+      ia.nrm = calcShapeNormal(hit, inst, ia.pos);
     } else {
       // Mesh
       let ofs = (*inst).data & MESH_SHAPE_MASK;
       let tri = &tris[ofs + (hit.e >> 16)];
       // Either use the material id from the triangle or the material override from the instance
       mtl = select((*tri).mtl, (*inst).id >> 16, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
-      nrm = calcTriNormal(hit, inst, tri);
+      ia.nrm = calcTriNormal(hit, inst, tri);
     }
-    let inside = dot(ray.dir, nrm) > 0;
-    nrm = select(nrm, -nrm, inside);
-    // Get material
-    var newDir: vec3f;
-    let mtlData = materials[mtl & MTL_ID_MASK];
-    if(any(mtlData.color > vec3f(1.0))) {
-      // Hit light
-      col += throughput * mtlData.color;
-      break;
-    } else if(mtlData.value > 0.0) {
-      // Specular
-      // TODO Glossy reflection
-      newDir = reflect(ray.dir, nrm);
-      throughput *= mtlData.color; // pdf is 1
+
+    // Flag if this is a backface, i.e. we are "inside"
+    ia.flags = select(ia.flags, ia.flags | INSIDE, dot(ia.outDir, ia.nrm) < 0);
+
+    // Get material data
+    ia.mtl = materials[mtl & MTL_ID_MASK];
+
+    // Hit a light. Only consider if a primary ray or last bounce was specular.
+    if((bounces == 0 || ((ia.flags & SPECULAR) > 0)) &&
+       (any(ia.mtl.color > vec3f(1.0)) && (ia.flags & INSIDE) == 0)) {
+      col += throughput * ia.mtl.color;
     } else {
-      // Diffuse reflection
-      nrm = nrm * select(-1.0, 1.0, dot(ray.dir, nrm) < 0.0);
-      // Uniform sampled
-      // Energy conservation PI and ray probability of 2 * PI cancel out
-      //newDir = rand3Hemi(nrm);
-      //throughput *= 2.0 * mtlData.color * dot(newDir, nrm);
-      // Importance sampled
-      // pdf cos(theta)/PI nicely cancels out with energy conservation PI and lambertian reflection cost(theta)
-      newDir = rand3HemiCosWeighted(nrm);
-      throughput *= mtlData.color;
+      // Sample light(s) directly
+      col += throughput * sampleLight(&ia) / ia.pdf;
     }
+
+    // Sample indirect light
+    throughput *= sampleMaterial(&ia) / ia.pdf;
+
     // Russian roulette, terminate with probability inverse to throughput
     if(bounces > 2) {
       let p = maxComp(throughput);
@@ -625,8 +736,9 @@ fn render(initialRay: Ray) -> vec3f
       // Boost surviving paths by their probability to be terminated
       throughput *= 1.0 / p;
     }
+
     // Next ray to trace
-    ray = createRay(pos + newDir * EPSILON, newDir);
+    ray = createRay(ia.pos + ia.inDir * EPSILON, ia.inDir);
   }
 
   return col;
