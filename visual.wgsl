@@ -101,7 +101,6 @@ struct IA
   outDir: vec3f,
   inDir: vec3f,
   mtl: Mtl,
-  pdf: f32,
   flags: u32
 }
 
@@ -128,7 +127,7 @@ const INSIDE            = 1u;
 const SPECULAR          = 2u;
 
 // Math constants
-const EPSILON           = 0.001;
+const EPSILON           = 0.0001;
 const PI                = 3.141592;
 const INV_PI            = 1.0 / PI;
 const MAX_DISTANCE      = 3.402823466e+38;
@@ -542,48 +541,69 @@ fn evalMaterial(r: Ray, nrm: vec3f, mtl: Mtl, attenuation: ptr<function, vec3f>,
   return evalMaterialLambert(r, nrm, mtl.color, attenuation, scatterDir);
 }*/
 
-fn sampleLambert(ia: ptr<function, IA>) -> vec3f
+fn sampleLambert(ia: ptr<function, IA>, pdf: ptr<function, f32>)
 {
   (*ia).inDir = rand3HemiCosWeighted((*ia).nrm);
-
-  // Terms cancel out
-  //var cosTheta = dot((*ia).inDir, (*ia).nrm);
-
-  (*ia).pdf = 1.0; //cosTheta * INV_PI;
   (*ia).flags &= ~SPECULAR;
-
-  return (*ia).mtl.color; // * INV_PI * cosTheta;
+  (*pdf) = dot((*ia).inDir, (*ia).nrm) * INV_PI;
 }
 
-fn sampleMetal(ia: ptr<function, IA>) -> vec3f
+fn evalLambert(ia: ptr<function, IA>) -> vec3f
+{ 
+  return (*ia).mtl.color * INV_PI * dot((*ia).inDir, (*ia).nrm);
+}
+
+fn sampleMetal(ia: ptr<function, IA>, pdf: ptr<function, f32>)
 {
   (*ia).inDir = reflect(-(*ia).outDir, (*ia).nrm); 
-  (*ia).pdf = 1.0; // One direction only
   (*ia).flags |= SPECULAR;
+  (*pdf) = 1.0; // One direction only
+}
 
+fn evalMetal(ia: ptr<function, IA>) -> vec3f
+{ 
   return (*ia).mtl.color * INV_PI;
 }
 
-fn sampleDielectric(ia: ptr<function, IA>) -> vec3f
+fn sampleDielectric(ia: ptr<function, IA>, pdf: ptr<function, f32>)
 {
-  (*ia).pdf = 1.0;
+  (*ia).inDir = vec3f(0); // TODO
   (*ia).flags |= SPECULAR;
+  (*pdf) = 1.0; // One direction only
+}
 
+fn evalDielectric(ia: ptr<function, IA>) -> vec3f
+{
   return (*ia).mtl.color * INV_PI;
 }
 
-fn sampleMaterial(ia: ptr<function, IA>) -> vec3f
+fn evalMaterial(ia: ptr<function, IA>) -> vec3f
 {
   if((*ia).mtl.value > 1.0) {
-    return sampleDielectric(ia);
+    return evalDielectric(ia);
   } else if((*ia).mtl.value > 0.0) {
-    return sampleMetal(ia);
+    return evalMetal(ia);
   } else {
-    return sampleLambert(ia);
+    return evalLambert(ia);
   }
 }
 
-fn sampleLight(ia: ptr<function, IA>) -> vec3f
+fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
+{
+  var pdf: f32;
+  if((*ia).mtl.value > 1.0) {
+    sampleDielectric(ia, &pdf);
+    return evalDielectric(ia) / pdf;
+  } else if((*ia).mtl.value > 0.0) {
+    sampleMetal(ia, &pdf);
+    return evalMetal(ia) / pdf;
+  } else {
+    sampleLambert(ia, &pdf);
+    return select(evalLambert(ia) / pdf, vec3f(0), pdf < EPSILON);
+  }
+}
+
+fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 {
   // TODO
   // - early outs during tlas intersection
@@ -592,23 +612,18 @@ fn sampleLight(ia: ptr<function, IA>) -> vec3f
   // - skew random light selection by light importance (area*power)
   // - add MIS
 
-  if((*ia).mtl.value > 0.0) {
-    // Current material is specular
-    return vec3f(0);
-  }
-
   // Find random point on light surface
   let lightNrm = vec3f(0.0, -1.0, 0.0);
   var lightDir = vec3f(-2.5 + 5.0 * rand(), 5.0, -2.5 + 5.0 * rand()) - (*ia).pos;
 
-  if(dot(lightDir, lightNrm) > 0) {
+  if(dot(lightDir, lightNrm) > EPSILON) {
     // Light is facing away
+    (*pdf) = 0.0;
     return vec3f(0);
   }
 
   let distSqr = dot(lightDir, lightDir);
   let dist = sqrt(distSqr);
-
   lightDir = normalize(lightDir);
 
   // Probe visibility of light
@@ -617,13 +632,31 @@ fn sampleLight(ia: ptr<function, IA>) -> vec3f
   intersectTlas(createRay((*ia).pos, lightDir), &hit);
   if(hit.t < dist) {
     // Light is obstructed
+    (*pdf) = 0.0;
     return vec3f(0);
   }
 
-  // Pdf is 1 / solidAngle, which accounts for rays only going towards the light
-  // Light area projected onto the unit hemisphere (= solid angle subtended by the light)
-  let solidAngle = /* light area */ 25.0 * dot(-lightDir, lightNrm) / distSqr;
-  return ((*ia).mtl.color / PI) * dot(lightDir, (*ia).nrm) * /* light color/power */ vec3f(1.6) * solidAngle;
+  // Light dir is input dir to sampling material
+  (*ia).inDir = lightDir;
+
+  // Account for single ray in direction of light
+  // pdf is 1 / solid angle subtended by the light (light area projected on unit hemisphere)
+  *pdf = distSqr / (/* light area */ 25.0 * dot(-lightDir, lightNrm));
+
+  // Light emission
+  return vec3f(1.6);
+}
+
+fn sampleAndEvalLight(ia: ptr<function, IA>) -> vec3f
+{
+  // Current material is specular
+  if((*ia).mtl.value > 0.0) {
+    return vec3f(0);
+  }
+
+  var pdf: f32;
+  let emission = sampleLight(ia, &pdf);
+  return select(vec3f(0), evalMaterial(ia) * emission / pdf, any(emission > vec3f(0)));
 }
 
 fn calcShapeNormal(h: Hit, inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
@@ -697,7 +730,7 @@ fn render(initialRay: Ray) -> vec3f
     }
 
     // Flag if this is a backface, i.e. we are "inside"
-    ia.flags = select(ia.flags, ia.flags | INSIDE, dot(ia.outDir, ia.nrm) < 0);
+    ia.flags = select(ia.flags, ia.flags | INSIDE, dot(ia.outDir, ia.nrm) <= 0);
 
     // Get material data
     ia.mtl = materials[mtl & MTL_ID_MASK];
@@ -708,11 +741,11 @@ fn render(initialRay: Ray) -> vec3f
       col += throughput * ia.mtl.color;
     } else {
       // Sample light(s) directly
-      col += throughput * sampleLight(&ia);
+      col += throughput * sampleAndEvalLight(&ia);
     }
 
     // Sample indirect light
-    throughput *= sampleMaterial(&ia) / ia.pdf;
+    throughput *= sampleAndEvalMaterial(&ia);
 
     // Russian roulette, terminate with probability inverse to throughput
     if(bounces > 2) {
