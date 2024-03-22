@@ -186,6 +186,7 @@ fn rand3Hemi(nrm: vec3f) -> vec3f
   return select(-v, v, dot(v, nrm) > 0);
 }
 
+// http://psgraphics.blogspot.com/2019/02/picking-points-on-hemisphere-with.html
 fn rand3HemiCosWeighted(nrm: vec3f) -> vec3f
 {
   // Expects nrm to be unit vector
@@ -545,12 +546,13 @@ fn sampleLambert(ia: ptr<function, IA>) -> vec3f
 {
   (*ia).inDir = rand3HemiCosWeighted((*ia).nrm);
 
-  var cosTheta = dot((*ia).inDir, (*ia).nrm);
+  // Terms cancel out
+  //var cosTheta = dot((*ia).inDir, (*ia).nrm);
 
-  (*ia).pdf = cosTheta * INV_PI;
+  (*ia).pdf = 1.0; //cosTheta * INV_PI;
   (*ia).flags &= ~SPECULAR;
 
-  return (*ia).mtl.color * INV_PI * cosTheta;
+  return (*ia).mtl.color; // * INV_PI * cosTheta;
 }
 
 fn sampleMetal(ia: ptr<function, IA>) -> vec3f
@@ -583,26 +585,6 @@ fn sampleMaterial(ia: ptr<function, IA>) -> vec3f
 
 fn sampleLight(ia: ptr<function, IA>) -> vec3f
 {
-    /*
-      // TODO If we have multiple lights, we simply exclude the hit one but
-      // sample all others, i.e. light shining on another light
-
-      // Sample light
-      let rx = rand();
-      let rz = rand();
-      let lightArea = 5.0 * 5.0;
-      let lightPos = vec3f(-2.5 + 5.0 * rx, 5.0, -2.5 + 5.0 * rz);
-      var lightDir = lightPos - pos;
-      let distToLight = length(lightDir);
-      lightDir = normalize(lightDir);
-      hit.t = distToLight;
-      let shadowRay = createRay(pos, lightDir);
-      intersectTlas(shadowRay, &hit); // TODO Optimize with early out etc.
-      if(hit.t == distToLight) {
-        col += throughput * (mtlData.color / PI) * dot(lightDir, nrm) * ((vec3f(1.6) * lightArea * dot(vec3f(0.0, -1.0, 0.0), -lightDir)) / (distToLight * distToLight));
-      }
-    */
-
   // TODO
   // - early outs during tlas intersection
   // - on multiple lights, sample one random light
@@ -610,9 +592,20 @@ fn sampleLight(ia: ptr<function, IA>) -> vec3f
   // - skew random light selection by light importance (area*power)
   // - add MIS
 
+  if((*ia).mtl.value > 0.0) {
+    // Current material is specular
+    return vec3f(0);
+  }
+
   // Find random point on light surface
   let lightNrm = vec3f(0.0, -1.0, 0.0);
   var lightDir = vec3f(-2.5 + 5.0 * rand(), 5.0, -2.5 + 5.0 * rand()) - (*ia).pos;
+
+  if(dot(lightDir, lightNrm) > 0) {
+    // Light is facing away
+    return vec3f(0);
+  }
+
   let distSqr = dot(lightDir, lightDir);
   let dist = sqrt(distSqr);
 
@@ -624,18 +617,13 @@ fn sampleLight(ia: ptr<function, IA>) -> vec3f
   intersectTlas(createRay((*ia).pos, lightDir), &hit);
   if(hit.t < dist) {
     // Light is obstructed
-    (*ia).pdf = 1.0;
-    return vec3f(0.0);
+    return vec3f(0);
   }
 
-  (*ia).inDir = lightDir;
-
-  let res = sampleMaterial(ia);
-
-  // Calc pdf from light area projected onto the unit hemisphere (solid angle subtended by the light)
-  (*ia).pdf = distSqr / (/* light area */ 25.0 * dot(-lightDir, lightNrm));
-  //return (*ia).mtl.color * INV_PI * dot(lightDir, (*ia).nrm) * /* light color/power */ vec3f(1.6);
-  return res;
+  // Pdf is 1 / solidAngle, which accounts for rays only going towards the light
+  // Light area projected onto the unit hemisphere (= solid angle subtended by the light)
+  let solidAngle = /* light area */ 25.0 * dot(-lightDir, lightNrm) / distSqr;
+  return ((*ia).mtl.color / PI) * dot(lightDir, (*ia).nrm) * /* light color/power */ vec3f(1.6) * solidAngle;
 }
 
 fn calcShapeNormal(h: Hit, inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
@@ -720,7 +708,7 @@ fn render(initialRay: Ray) -> vec3f
       col += throughput * ia.mtl.color;
     } else {
       // Sample light(s) directly
-      col += throughput * sampleLight(&ia) / ia.pdf;
+      col += throughput * sampleLight(&ia);
     }
 
     // Sample indirect light
