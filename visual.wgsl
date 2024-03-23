@@ -27,11 +27,8 @@ struct Global
 struct Ray
 {
   ori: vec3f,
-  tnear: f32,
   dir: vec3f,
-  tfar: f32,
-  invDir: vec3f,
-  flags: u32
+  invDir: vec3f
 }
 
 struct Tri
@@ -121,10 +118,6 @@ const INST_DATA_MASK    = 0x7fffffffu;
 const ST_PLANE          = 0u;
 const ST_BOX            = 1u;
 const ST_SPHERE         = 2u;
-
-// Traversal flags
-const HIT_CLOSEST       = 0u;
-const HIT_ANY           = 1u;
 
 // Material flags
 const MF_FLAT           = 1u;
@@ -218,9 +211,9 @@ fn maxComp(v: vec3f) -> f32
   return max(v.x, max(v.y, v.z));
 }
 
-fn createRay(ori: vec3f, dir: vec3f, tfar: f32, flags: u32) -> Ray
+fn createRay(ori: vec3f, dir: vec3f) -> Ray
 {
-  return Ray(ori, /* tnear */ EPSILON, dir, tfar, 1 / dir, flags);
+  return Ray(ori, dir, 1 / dir);
 }
 
 // GPU efficient slabs test [Laine et al. 2013; Afra et al. 2016]
@@ -233,7 +226,18 @@ fn intersectAabb(ray: Ray, currT: f32, minExt: vec3f, maxExt: vec3f) -> f32
   let tmin = maxComp(min(t0, t1));
   let tmax = minComp(max(t1, t0));
   
-  return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < currT && tmax > ray.tnear);
+  return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < currT && tmax > EPSILON);
+}
+
+fn intersectAabbAnyHit(ray: Ray, currT: f32, minExt: vec3f, maxExt: vec3f) -> bool
+{
+  let t0 = (minExt - ray.ori) * ray.invDir;
+  let t1 = (maxExt - ray.ori) * ray.invDir;
+
+  let tmin = maxComp(min(t0, t1));
+  let tmax = minComp(max(t1, t0));
+  
+  return select(false, true, tmin <= tmax && tmin < currT && tmax > EPSILON);
 }
 
 fn intersectPlane(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
@@ -241,7 +245,7 @@ fn intersectPlane(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
   let d = ray.dir.y;
   if(abs(d) > EPSILON) {
     let t = -ray.ori.y / d;
-    if(t < (*h).t && t > ray.tnear) {
+    if(t < (*h).t && t > EPSILON) {
       (*h).t = t;
       (*h).e = (ST_PLANE << 16) | (instId & INST_ID_MASK);
       return true;
@@ -259,12 +263,12 @@ fn intersectUnitBox(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
   let tmax = minComp(max(t0, t1));
  
   if(tmin <= tmax) {
-    if(tmin < (*h).t && tmin > ray.tnear) {
+    if(tmin < (*h).t && tmin > EPSILON) {
       (*h).t = tmin;
       (*h).e = (ST_BOX << 16) | (instId & INST_ID_MASK);
       return true;
     }
-    if(tmax < (*h).t && tmax > ray.tnear) {
+    if(tmax < (*h).t && tmax > EPSILON) {
       (*h).t = tmax;
       (*h).e = (ST_BOX << 16) | (instId & INST_ID_MASK);
       return true;
@@ -286,9 +290,9 @@ fn intersectUnitSphere(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
 
   d = sqrt(d);
   var t = (-b - d) / a;
-  if(t <= ray.tnear || (*h).t <= t) {
+  if(t <= EPSILON || (*h).t <= t) {
     t = (-b + d) / a;
-    if(t <= ray.tnear || (*h).t <= t) {
+    if(t <= EPSILON || (*h).t <= t) {
       return false;
     }
   }
@@ -337,7 +341,7 @@ fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hi
 
   // Calc distance
   let dist = dot(edge2, qvec) * invDet;
-  if(dist > ray.tnear && dist < (*h).t) {
+  if(dist > EPSILON && dist < (*h).t) {
     (*h).t = dist;
     (*h).u = u;
     (*h).v = v;
@@ -348,7 +352,7 @@ fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hi
   return false;
 }
 
-fn intersectBvh(ray: Ray, instId: u32, dataOfs: u32, hit: ptr<function, Hit>) -> bool
+fn intersectBvh(ray: Ray, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
@@ -364,7 +368,73 @@ fn intersectBvh(ray: Ray, instId: u32, dataOfs: u32, hit: ptr<function, Hit>) ->
       // Leaf node, check all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
         let triId = indices[dataOfs + nodeStartIndex + i];
-        if(intersectTri(ray, tris[dataOfs + triId], instId, triId, hit) && (ray.flags & HIT_ANY) > 0) {
+        intersectTri(ray, tris[dataOfs + triId], instId, triId, hit);
+      }
+      if(nodeStackIndex > 0) {
+        nodeStackIndex--;
+        nodeIndex = bvhNodeStack[nodeStackIndex];
+      } else {
+        break;
+      }
+    } else {
+      // Interior node, check aabbs of children
+      var leftChildIndex = nodeStartIndex;
+      var rightChildIndex = nodeStartIndex + 1;
+
+      let leftChildNode = &bvhNodes[bvhOfs + nodeStartIndex];
+      let rightChildNode = &bvhNodes[bvhOfs + nodeStartIndex + 1];
+
+      var leftDist = intersectAabb(ray, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
+      var rightDist = intersectAabb(ray, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+ 
+      // Swap for nearer child
+      if(leftDist > rightDist) {
+        let td = rightDist;
+        rightDist = leftDist;
+        leftDist = td;
+
+        leftChildIndex += 1;
+        rightChildIndex -= 1;
+      }
+
+      if(leftDist < MAX_DISTANCE) {
+        // Continue with nearer child node
+        nodeIndex = leftChildIndex;
+        if(rightDist < MAX_DISTANCE) {
+          // Push farther child on stack if also a hit
+          bvhNodeStack[nodeStackIndex] = rightChildIndex;
+          nodeStackIndex++;
+        }
+      } else {
+        // Did miss both children, so check stack
+        if(nodeStackIndex > 0) {
+          nodeStackIndex--;
+          nodeIndex = bvhNodeStack[nodeStackIndex];
+        } else {
+          break;
+        }
+      }
+    }
+  }
+}
+
+fn intersectBvhAnyHit(ray: Ray, instId: u32, dataOfs: u32, hit: ptr<function, Hit>) -> bool
+{
+  var nodeIndex = 0u;
+  var nodeStackIndex = 0u;
+
+  let bvhOfs = dataOfs << 2;
+
+  loop {
+    let node = &bvhNodes[bvhOfs + nodeIndex];
+    let nodeStartIndex = (*node).startIndex;
+    let nodeObjCount = (*node).objCount;
+   
+    if(nodeObjCount > 0) {
+      // Leaf node, check all contained triangles
+      for(var i=0u; i<nodeObjCount; i++) {
+        let triId = indices[dataOfs + nodeStartIndex + i];
+        if(intersectTri(ray, tris[dataOfs + triId], instId, triId, hit)) {
           return true;
         }
       }
@@ -376,25 +446,31 @@ fn intersectBvh(ray: Ray, instId: u32, dataOfs: u32, hit: ptr<function, Hit>) ->
       }
     } else {
       // Interior node, check aabbs of children
+      var leftChildIndex = nodeStartIndex;
+      var rightChildIndex = nodeStartIndex + 1;
+
       let leftChildNode = &bvhNodes[bvhOfs + nodeStartIndex];
       let rightChildNode = &bvhNodes[bvhOfs + nodeStartIndex + 1];
 
-      let leftDist = intersectAabb(ray, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      let rightDist = intersectAabb(ray, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+      var leftDist = intersectAabb(ray, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
+      var rightDist = intersectAabb(ray, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
  
       // Swap for nearer child
-      let switchNodes = leftDist > rightDist;
-      let nearNodeDist = select(leftDist, rightDist, switchNodes);
-      let farNodeDist = select(rightDist, leftDist, switchNodes);
-      let nearNodeIndex = select(nodeStartIndex, nodeStartIndex + 1, switchNodes);
-      let farNodeIndex = select(nodeStartIndex + 1, nodeStartIndex, switchNodes);
+      if(leftDist > rightDist) {
+        let td = rightDist;
+        rightDist = leftDist;
+        leftDist = td;
 
-      if(nearNodeDist < MAX_DISTANCE) {
+        leftChildIndex += 1;
+        rightChildIndex -= 1;
+      }
+
+      if(leftDist < MAX_DISTANCE) {
         // Continue with nearer child node
-        nodeIndex = nearNodeIndex;
-        if(farNodeDist < MAX_DISTANCE) {
+        nodeIndex = leftChildIndex;
+        if(rightDist < MAX_DISTANCE) {
           // Push farther child on stack if also a hit
-          bvhNodeStack[nodeStackIndex] = farNodeIndex;
+          bvhNodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
         }
       } else {
@@ -409,10 +485,35 @@ fn intersectBvh(ray: Ray, instId: u32, dataOfs: u32, hit: ptr<function, Hit>) ->
     }
   }
 
-  return (*hit).t < ray.tfar;
+  return false;
 }
 
-fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, hit: ptr<function, Hit>) -> bool
+fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, hit: ptr<function, Hit>)
+{
+  // Transform ray into object space of the instance
+  var rayObjSpace = ray;
+  rayObjSpace.ori = (vec4f(ray.ori, 1.0) * inst.invTransform).xyz;
+  rayObjSpace.dir = (vec4f(ray.dir, 0.0) * inst.invTransform).xyz;
+  rayObjSpace.invDir = 1.0 / rayObjSpace.dir;
+
+  switch((*inst).data & INST_DATA_MASK) {
+    case (SHAPE_TYPE_BIT | ST_PLANE): {
+      intersectPlane(rayObjSpace, (*inst).id, hit);
+    }
+    case (SHAPE_TYPE_BIT | ST_BOX): {
+      intersectUnitBox(rayObjSpace, (*inst).id, hit);
+    }
+    case (SHAPE_TYPE_BIT | ST_SPHERE): {
+      intersectUnitSphere(rayObjSpace, (*inst).id, hit);
+    }
+    default: {
+      // Mesh type
+      intersectBvh(rayObjSpace, (*inst).id, (*inst).data & MESH_SHAPE_MASK, hit);
+    }
+  }
+}
+
+fn intersectInstAnyHit(ray: Ray, inst: ptr<storage, Inst>, hit: ptr<function, Hit>) -> bool
 {
   // Transform ray into object space of the instance
   var rayObjSpace = ray;
@@ -432,18 +533,17 @@ fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, hit: ptr<function, Hit>) ->
     }
     default: {
       // Mesh type
-      return intersectBvh(rayObjSpace, (*inst).id, (*inst).data & MESH_SHAPE_MASK, hit);
+      return intersectBvhAnyHit(rayObjSpace, (*inst).id, (*inst).data & MESH_SHAPE_MASK, hit);
     }
   }
 }
 
-fn intersectTlas(ray: Ray) -> Hit
+fn intersectTlas(ray: Ray, tfar: f32) -> Hit
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
   var hit: Hit;
-
-  hit.t = ray.tfar;
+  hit.t = tfar;
 
   loop {
     let node = &tlasNodes[nodeIndex];
@@ -451,7 +551,72 @@ fn intersectTlas(ray: Ray) -> Hit
    
     if(nodeChildren == 0) {
       // Leaf node with a single instance assigned 
-      if(intersectInst(ray, &instances[(*node).inst], &hit) && (ray.flags & HIT_ANY) > 0) {
+      intersectInst(ray, &instances[(*node).inst], &hit);
+      if(nodeStackIndex > 0) {
+        nodeStackIndex--;
+        nodeIndex = tlasNodeStack[nodeStackIndex];
+      } else {
+        break;
+      }
+    } else {
+      // Interior node, check aabbs of children
+      var leftChildIndex = nodeChildren & TLAS_NODE_MASK;
+      var rightChildIndex = nodeChildren >> 16;
+
+      let leftChildNode = &tlasNodes[leftChildIndex];
+      let rightChildNode = &tlasNodes[rightChildIndex];
+
+      var leftDist = intersectAabb(ray, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
+      var rightDist = intersectAabb(ray, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+
+      // Swap for nearer child
+      if(leftDist > rightDist) {
+        let td = rightDist;
+        rightDist = leftDist;
+        leftDist = td;
+
+        let ti = rightChildIndex;
+        rightChildIndex = leftChildIndex;
+        leftChildIndex = ti;
+      }
+
+      if(leftDist < MAX_DISTANCE) {
+        // Continue with nearer child node
+        nodeIndex = leftChildIndex;
+        if(rightDist < MAX_DISTANCE) {
+          // Push farther child on stack if also a hit
+          tlasNodeStack[nodeStackIndex] = rightChildIndex;
+          nodeStackIndex++;
+        }
+      } else {
+        // Did miss both children, so check stack
+        if(nodeStackIndex > 0) {
+          nodeStackIndex--;
+          nodeIndex = tlasNodeStack[nodeStackIndex];
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  return hit;
+}
+
+fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> Hit
+{
+  var nodeIndex = 0u;
+  var nodeStackIndex = 0u;
+  var hit: Hit;
+  hit.t = tfar;
+
+  loop {
+    let node = &tlasNodes[nodeIndex];
+    let nodeChildren = (*node).children;
+   
+    if(nodeChildren == 0) {
+      // Leaf node with a single instance assigned 
+      if(intersectInstAnyHit(ray, &instances[(*node).inst], &hit)) {
         return hit;
       }
       if(nodeStackIndex > 0) {
@@ -462,28 +627,32 @@ fn intersectTlas(ray: Ray) -> Hit
       }
     } else {
       // Interior node, check aabbs of children
-      let leftChildIndex = nodeChildren & TLAS_NODE_MASK;
-      let rightChildIndex = nodeChildren >> 16;
+      var leftChildIndex = nodeChildren & TLAS_NODE_MASK;
+      var rightChildIndex = nodeChildren >> 16;
 
       let leftChildNode = &tlasNodes[leftChildIndex];
       let rightChildNode = &tlasNodes[rightChildIndex];
 
-      let leftDist = intersectAabb(ray, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      let rightDist = intersectAabb(ray, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+      var leftDist = intersectAabb(ray, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
+      var rightDist = intersectAabb(ray, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
  
       // Swap for nearer child
-      let switchNodes = leftDist > rightDist;
-      let nearNodeDist = select(leftDist, rightDist, switchNodes);
-      let farNodeDist = select(rightDist, leftDist, switchNodes);
-      let nearNodeIndex = select(leftChildIndex, rightChildIndex, switchNodes);
-      let farNodeIndex = select(rightChildIndex, leftChildIndex, switchNodes);
+      if(leftDist > rightDist) {
+        let td = rightDist;
+        rightDist = leftDist;
+        leftDist = td;
 
-      if(nearNodeDist < MAX_DISTANCE) {
+        let ti = rightChildIndex;
+        rightChildIndex = leftChildIndex;
+        leftChildIndex = ti;
+      }
+
+      if(leftDist < MAX_DISTANCE) {
         // Continue with nearer child node
-        nodeIndex = nearNodeIndex;
-        if(farNodeDist < MAX_DISTANCE) {
+        nodeIndex = leftChildIndex;
+        if(rightDist < MAX_DISTANCE) {
           // Push farther child on stack if also a hit
-          tlasNodeStack[nodeStackIndex] = farNodeIndex;
+          tlasNodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
         }
       } else {
@@ -632,7 +801,9 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
 fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 {
   // TODO
-  // - separate intersection traversal with default early out and no near/far sorting
+  // - shadow ray bvh traversal with early out and no near/far sorting
+  // - store a boolean only (not an intersection distance/u/v)
+  // - store hit as vec4f to have a single mem op on r/w
   // - on multiple lights, sample one random light
   // - exclude the light if it was previously hit
   // - skew random light selection by light importance (area*power)
@@ -653,7 +824,7 @@ fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
   lightDir = normalize(lightDir);
 
   // Probe visibility of light
-  let hit = intersectTlas(createRay((*ia).pos, lightDir, dist, HIT_ANY));
+  let hit = intersectTlasAnyHit(createRay((*ia).pos, lightDir), dist);
   if(hit.t < dist) {
     // Light is obstructed
     (*pdf) = 0.0;
@@ -723,10 +894,10 @@ fn render(initialRay: Ray) -> vec3f
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
     // Intersect with scene
-    let hit = intersectTlas(ray);
+    let hit = intersectTlas(ray, MAX_DISTANCE);
     
     // No hit
-    if(hit.t >= MAX_DISTANCE) { 
+    if(hit.t == MAX_DISTANCE) { 
       col += throughput * globals.bgColor;
       break;
     }
@@ -781,7 +952,7 @@ fn render(initialRay: Ray) -> vec3f
     }
 
     // Next ray to trace
-    ray = createRay(ia.pos + ia.inDir * EPSILON, ia.inDir, MAX_DISTANCE, HIT_CLOSEST);
+    ray = createRay(ia.pos + ia.inDir * EPSILON, ia.inDir);
   }
 
   return col;
@@ -799,7 +970,7 @@ fn createPrimaryRay(pixelPos: vec2f) -> Ray
     eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
   }
 
-  return createRay(eyeSample, normalize(pixelSample - eyeSample), MAX_DISTANCE, HIT_CLOSEST);
+  return createRay(eyeSample, normalize(pixelSample - eyeSample));
 }
 
 @compute @workgroup_size(8,8)
