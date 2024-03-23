@@ -117,7 +117,7 @@ void init_scene_riow(scene *s)
  
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
+  //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
   scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });

@@ -543,6 +543,12 @@ fn evalMaterial(r: Ray, nrm: vec3f, mtl: Mtl, attenuation: ptr<function, vec3f>,
 
 fn sampleLambert(ia: ptr<function, IA>, pdf: ptr<function, f32>)
 {
+  // Uniform
+  //(*ia).inDir = rand3Hemi((*ia).nrm);
+  //(*ia).flags &= ~SPECULAR;
+  //(*pdf) = 1.0 / (2.0 * PI);
+
+  // Importance sampled cos
   (*ia).inDir = rand3HemiCosWeighted((*ia).nrm);
   (*ia).flags &= ~SPECULAR;
   (*pdf) = dot((*ia).inDir, (*ia).nrm) * INV_PI;
