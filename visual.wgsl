@@ -423,34 +423,29 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-
   let bvhOfs = dataOfs << 2;
 
+  // Sorted DF traversal (near child first + skip far child if not within current dist)
   loop {
     let node = &bvhNodes[bvhOfs + nodeIndex];
     let nodeStartIndex = (*node).startIndex;
     let nodeObjCount = (*node).objCount;
    
     if(nodeObjCount != 0) {
-      // Leaf node, check all contained triangles
+      // Leaf node, intersect all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
         let triId = indices[dataOfs + nodeStartIndex + i];
         intersectTri(ray, tris[dataOfs + triId], instId, triId, hit);
       }
-      if(nodeStackIndex > 0) {
-        nodeStackIndex--;
-        nodeIndex = bvhNodeStack[nodeStackIndex];
-      } else {
-        return;
-      }
     } else {
-      // Interior node, check aabbs of children
+      // Interior node
       var leftChildIndex = nodeStartIndex;
       var rightChildIndex = nodeStartIndex + 1;
 
-      let leftChildNode = &bvhNodes[bvhOfs + nodeStartIndex];
-      let rightChildNode = &bvhNodes[bvhOfs + nodeStartIndex + 1];
+      let leftChildNode = &bvhNodes[bvhOfs + leftChildIndex];
+      let rightChildNode = &bvhNodes[bvhOfs + rightChildIndex];
 
+      // Intersect both child node aabbs
       var leftDist = intersectAabb(ray.ori, invDir, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
       var rightDist = intersectAabb(ray.ori, invDir, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
  
@@ -472,15 +467,16 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
           bvhNodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
         }
-      } else {
-        // Did miss both children, so check stack
-        if(nodeStackIndex > 0) {
-          nodeStackIndex--;
-          nodeIndex = bvhNodeStack[nodeStackIndex];
-        } else {
-          return;
-        }
+        continue;
       }
+      // Missed both child nodes
+    }
+    // Check the stack and continue traversal if something left
+    if(nodeStackIndex > 0) {
+      nodeStackIndex--;
+      nodeIndex = bvhNodeStack[nodeStackIndex];
+    } else {
+      return;
     }
   }
 }
@@ -489,61 +485,37 @@ fn intersectBvhAnyHit(ray: Ray, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-
   let bvhOfs = dataOfs << 2;
 
+  // Early exit, unordered DF traversal
   loop {
     let node = &bvhNodes[bvhOfs + nodeIndex];
-    let nodeStartIndex = (*node).startIndex;
-    let nodeObjCount = (*node).objCount;
-   
-    if(nodeObjCount != 0) {
-      // Leaf node, check all contained triangles
-      for(var i=0u; i<nodeObjCount; i++) {
-        let triId = indices[dataOfs + nodeStartIndex + i];
-        if(intersectTriAnyHit(ray, tfar, tris[dataOfs + triId])) {
-          return true;
-        }
-      }
-      if(nodeStackIndex > 0) {
-        nodeStackIndex--;
-        nodeIndex = bvhNodeStack[nodeStackIndex];
-      } else {
-        return false;
-      }
-    } else {
-      // Interior node, check aabbs of children
-      var leftChildIndex = nodeStartIndex;
-      var rightChildIndex = nodeStartIndex + 1;
-
-      let leftChildNode = &bvhNodes[bvhOfs + nodeStartIndex];
-      let rightChildNode = &bvhNodes[bvhOfs + nodeStartIndex + 1];
-
-      let leftHit = intersectAabbAnyHit(ray.ori, invDir, tfar, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      let rightHit = intersectAabbAnyHit(ray.ori, invDir, tfar, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
- 
-      if(leftHit) {
-        // Continue with left child
-        nodeIndex = leftChildIndex;
-        if(rightHit) {
-           // Push right child on stack if also a hit
-          tlasNodeStack[nodeStackIndex] = rightChildIndex;
-          nodeStackIndex++;
-        }
-      } else {
-        if(rightHit) {
-          // Continue with right child
-          nodeIndex = rightChildIndex;
-        } else {
-          // Did miss both children, so check stack
-          if(nodeStackIndex > 0) {
-            nodeStackIndex--;
-            nodeIndex = tlasNodeStack[nodeStackIndex];
-          } else {
-            return false;
+    if(intersectAabbAnyHit(ray.ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
+      let nodeStartIndex = (*node).startIndex;
+      let nodeObjCount = (*node).objCount; 
+      if(nodeObjCount != 0) {
+        // Leaf node, intersect all contained triangles
+        for(var i=0u; i<nodeObjCount; i++) {
+          let triId = indices[dataOfs + nodeStartIndex + i];
+          if(intersectTriAnyHit(ray, tfar, tris[dataOfs + triId])) {
+            return true;
           }
         }
+      } else {
+        // Interior node, continue with left child
+        nodeIndex = nodeStartIndex;
+        // Push right child node on stack
+        bvhNodeStack[nodeStackIndex] = nodeStartIndex + 1;
+        nodeStackIndex++;
+        continue;
       }
+    }
+    // Check the stack and continue traversal if something left
+    if(nodeStackIndex > 0) {
+      nodeStackIndex--;
+      nodeIndex = bvhNodeStack[nodeStackIndex];
+    } else {
+      return false;
     }
   }
 }
@@ -610,31 +582,23 @@ fn intersectTlas(ray: Ray, tfar: f32) -> Hit
   var hit: Hit;
   hit.t = tfar;
 
+  // Ordered DF traversal (near child first + skip far child if not within current dist)
   loop {
     let node = &tlasNodes[nodeIndex];
     let nodeChildren = (*node).children;
-   
+
     if(nodeChildren == 0) {
-      // Leaf node with a single instance assigned 
-      let instId = (*node).inst;
-      let inst = &instances[instId];
-      if(intersectAabbAnyHit(ray.ori, invDir, hit.t, (*inst).aabbMin, (*inst).aabbMax)) {
-        intersectInst(ray, &instances[(*node).inst], &hit);
-      }
-      if(nodeStackIndex > 0) {
-        nodeStackIndex--;
-        nodeIndex = tlasNodeStack[nodeStackIndex];
-      } else {
-        return hit;
-      }
+      // Leaf node, intersect the single assigned instance 
+      intersectInst(ray, &instances[(*node).inst], &hit);
     } else {
-      // Interior node, check aabbs of children
+      // Interior node
       var leftChildIndex = nodeChildren & TLAS_NODE_MASK;
       var rightChildIndex = nodeChildren >> 16;
 
       let leftChildNode = &tlasNodes[leftChildIndex];
       let rightChildNode = &tlasNodes[rightChildIndex];
 
+      // Intersect both child node aabbs
       var leftDist = intersectAabb(ray.ori, invDir, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
       var rightDist = intersectAabb(ray.ori, invDir, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
 
@@ -657,15 +621,16 @@ fn intersectTlas(ray: Ray, tfar: f32) -> Hit
           tlasNodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
         }
-      } else {
-        // Did miss both children, so check stack
-        if(nodeStackIndex > 0) {
-          nodeStackIndex--;
-          nodeIndex = tlasNodeStack[nodeStackIndex];
-        } else {
-          return hit;
-        }
+        continue;
       }
+      // Missed both child nodes
+    }
+    // Check the stack and continue traversal if something left
+    if(nodeStackIndex > 0) {
+      nodeStackIndex--;
+      nodeIndex = tlasNodeStack[nodeStackIndex];
+    } else {
+      return hit;
     }
   }
 }
@@ -674,63 +639,37 @@ fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> bool
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-
   let invDir = 1 / ray.dir;
 
+  // Early exit, unordered DF traversal
   loop {
     let node = &tlasNodes[nodeIndex];
-    let nodeChildren = (*node).children;
-   
-    if(nodeChildren == 0) {
-      // Leaf node with a single instance assigned
-      let instId = (*node).inst;
-      let inst = &instances[instId];
-      if(intersectAabbAnyHit(ray.ori, invDir, tfar, (*inst).aabbMin, (*inst).aabbMax) &&
-        intersectInstAnyHit(ray, tfar, inst)) {
+    if(intersectAabbAnyHit(ray.ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
+      let nodeChildren = (*node).children;
+      if(nodeChildren == 0) {
+        // Leaf node, intersect the single assigned instance
+        if(intersectInstAnyHit(ray, tfar, &instances[(*node).inst])) {
           return true;
-      }
-      if(nodeStackIndex > 0) {
-        nodeStackIndex--;
-        nodeIndex = tlasNodeStack[nodeStackIndex];
+        }
       } else {
-        return false;
+        // Interior node, continue traversal with left child node
+        nodeIndex = nodeChildren & TLAS_NODE_MASK;
+        // Push right child node on stack
+        tlasNodeStack[nodeStackIndex] = nodeChildren >> 16;
+        nodeStackIndex++;
+        continue;
       }
+    }
+    // Check the stack and continue traversal if something left
+    if(nodeStackIndex > 0) {
+      nodeStackIndex--;
+      nodeIndex = tlasNodeStack[nodeStackIndex];
     } else {
-      // Interior node, check aabbs of children
-      let leftChildIndex = nodeChildren & TLAS_NODE_MASK;
-      let rightChildIndex = nodeChildren >> 16;
-
-      let leftChildNode = &tlasNodes[leftChildIndex];
-      let rightChildNode = &tlasNodes[rightChildIndex];
-
-      let leftHit = intersectAabbAnyHit(ray.ori, invDir, tfar, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      let rightHit = intersectAabbAnyHit(ray.ori, invDir, tfar, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
-
-      if(leftHit) {
-        // Continue with left child
-        nodeIndex = leftChildIndex;
-        if(rightHit) {
-           // Push right child on stack if also a hit
-          tlasNodeStack[nodeStackIndex] = rightChildIndex;
-          nodeStackIndex++;
-        }
-      } else {
-        if(rightHit) {
-          // Continue with right child
-          nodeIndex = rightChildIndex;
-        } else {
-          // Did miss both children, so check stack
-          if(nodeStackIndex > 0) {
-            nodeStackIndex--;
-            nodeIndex = tlasNodeStack[nodeStackIndex];
-          } else {
-            return false;
-          }
-        }
-      }
+      return false;
     }
   }
 }
+
 
 /*fn evalMaterialLambert(r: Ray, nrm: vec3f, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
