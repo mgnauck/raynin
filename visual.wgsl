@@ -616,7 +616,11 @@ fn intersectTlas(ray: Ray, tfar: f32) -> Hit
    
     if(nodeChildren == 0) {
       // Leaf node with a single instance assigned 
-      intersectInst(ray, &instances[(*node).inst], &hit);
+      let instId = (*node).inst;
+      let inst = &instances[instId];
+      if(intersectAabbAnyHit(ray.ori, invDir, hit.t, (*inst).aabbMin, (*inst).aabbMax)) {
+        intersectInst(ray, &instances[(*node).inst], &hit);
+      }
       if(nodeStackIndex > 0) {
         nodeStackIndex--;
         nodeIndex = tlasNodeStack[nodeStackIndex];
@@ -678,9 +682,12 @@ fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> bool
     let nodeChildren = (*node).children;
    
     if(nodeChildren == 0) {
-      // Leaf node with a single instance assigned 
-      if(intersectInstAnyHit(ray, tfar, &instances[(*node).inst])) {
-        return true;
+      // Leaf node with a single instance assigned
+      let instId = (*node).inst;
+      let inst = &instances[instId];
+      if(intersectAabbAnyHit(ray.ori, invDir, tfar, (*inst).aabbMin, (*inst).aabbMax) &&
+        intersectInstAnyHit(ray, tfar, inst)) {
+          return true;
       }
       if(nodeStackIndex > 0) {
         nodeStackIndex--;
