@@ -100,36 +100,46 @@ struct Inst
 struct Mtl
 {
   color: vec3f,
-  value: f32
+  value: f32,
+  emission: vec3f,
+  flags: u32
 }
 
 // Scene data bit handling
-const INST_ID_MASK      = 0xffffu;
-const MTL_ID_MASK       = 0xffffu;
-const TLAS_NODE_MASK    = 0xffffu;
+const INST_ID_MASK        = 0xffffu;
+const MTL_ID_MASK         = 0xffffu;
+const TLAS_NODE_MASK      = 0xffffu;
 
-const SHAPE_TYPE_BIT    = 0x40000000u;
-const MESH_SHAPE_MASK   = 0x3fffffffu;
-const MTL_OVERRIDE_BIT  = 0x80000000u;
-const INST_DATA_MASK    = 0x7fffffffu;
+const SHAPE_TYPE_BIT      = 0x40000000u;
+const MESH_SHAPE_MASK     = 0x3fffffffu;
+const MTL_OVERRIDE_BIT    = 0x80000000u;
+const INST_DATA_MASK      = 0x7fffffffu;
+
+const MTL_TYPE_MASK       = 0xfu;
 
 // Shape types
-const ST_PLANE          = 0u;
-const ST_BOX            = 1u;
-const ST_SPHERE         = 2u;
+const ST_PLANE            = 0u;
+const ST_BOX              = 1u;
+const ST_SPHERE           = 2u;
 
 // Material flags
-const MF_FLAT           = 1u;
+const MF_FLAT             = 1u;
+
+// Material types
+const MT_LAMBERT          = 0u;
+const MT_METAL            = 1u;
+const MT_DIELECTRIC       = 2u;
+const MT_EMISSIVE         = 3u;
 
 // Interaction flags
-const IA_INSIDE         = 1u;
-const IA_SPECULAR       = 2u;
+const IA_INSIDE           = 1u;
+const IA_SPECULAR         = 2u;
 
 // Math constants
-const EPSILON           = 0.0001;
-const PI                = 3.141592;
-const INV_PI            = 1.0 / PI;
-const MAX_DISTANCE      = 3.402823466e+38;
+const EPSILON             = 0.0001;
+const PI                  = 3.141592;
+const INV_PI              = 1.0 / PI;
+const MAX_DISTANCE        = 3.402823466e+38;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -775,35 +785,52 @@ fn evalDielectric(ia: ptr<function, IA>) -> vec3f
 
 fn evalMaterial(ia: ptr<function, IA>) -> vec3f
 {
-  if((*ia).mtl.value > 1.0) {
-    return evalDielectric(ia);
-  } else if((*ia).mtl.value > 0.0) {
-    return evalMetal(ia);
-  } else {
-    return evalLambert(ia);
+  switch(ia.mtl.flags & MTL_TYPE_MASK)
+  {
+    case MT_LAMBERT {
+      return evalLambert(ia);
+    }
+    case MT_METAL: {
+      return evalMetal(ia);
+    }
+    case MT_DIELECTRIC: {
+      return evalDielectric(ia);
+    }
+    default: {
+      // Error
+      return vec3f(10.0, 0.0, 0.0);
+    }
   }
 }
 
 fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
 {
   var pdf: f32;
-  if((*ia).mtl.value > 1.0) {
-    sampleDielectric(ia, &pdf);
-    return evalDielectric(ia) / pdf;
-  } else if((*ia).mtl.value > 0.0) {
-    sampleMetal(ia, &pdf);
-    return evalMetal(ia) / pdf;
-  } else {
-    sampleLambert(ia, &pdf);
-    return select(evalLambert(ia) / pdf, vec3f(0), pdf < EPSILON);
+  switch(ia.mtl.flags & MTL_TYPE_MASK)
+  {
+    case MT_LAMBERT: {
+      sampleLambert(ia, &pdf);
+      return select(evalLambert(ia) / pdf, vec3f(0), pdf < EPSILON);
+    }
+    case MT_METAL: {
+      sampleMetal(ia, &pdf);
+      return evalMetal(ia) / pdf;
+    }
+    case MT_DIELECTRIC: {
+      sampleDielectric(ia, &pdf);
+      return evalDielectric(ia) / pdf;
+    }
+    default: {
+      // Error
+      return vec3f(10.0, 0.0, 0.0);
+    }
   }
 }
 
 fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 {
   // TODO
-  // - store hit as vec4f to have a single mem op on r/w
-  // - mtl to 2x vec4f with mtl type encoded in flags
+  // - test meshes
   // - add light tris
   // - on multiple lights, sample one random light
   // - exclude the light if it was previously hit
@@ -845,7 +872,7 @@ fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 fn sampleAndEvalLight(ia: ptr<function, IA>) -> vec3f
 {
   // Current material is specular
-  if((*ia).mtl.value > 0.0) {
+  if(((*ia).mtl.flags & MTL_TYPE_MASK) != MT_LAMBERT) {
     return vec3f(0);
   }
 
@@ -929,13 +956,13 @@ fn render(initialRay: Ray) -> vec3f
     ia.mtl = materials[mtl & MTL_ID_MASK];
 
     // Hit a light. Only consider if a primary ray or last bounce was specular.
-    if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
-       (any(ia.mtl.color > vec3f(1.0)) && (ia.flags & IA_INSIDE) == 0)) {
-      col += throughput * ia.mtl.color;
-    } else {
+    if(//(bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
+       (((ia.mtl.flags & MTL_TYPE_MASK) == MT_EMISSIVE) && (ia.flags & IA_INSIDE) == 0)) {
+      col += throughput * ia.mtl.emission;
+    } /*else {
       // Sample light(s) directly
       col += throughput * sampleAndEvalLight(&ia);
-    }
+    }*/
 
     // Sample indirect light
     throughput *= sampleAndEvalMaterial(&ia);

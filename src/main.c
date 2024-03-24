@@ -99,10 +99,11 @@ void init_scene_riow(scene *s)
   mat4 transform, translation, scale;
 
   // Sphere mesh
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.6f, 1.6f, 1.6f }, .value = 0.0f });
+  mtl m = mtl_create_emissive();
+  mtl_id = scene_add_mtl(s, &m);
   mesh_id = scene_add_quad(s, (vec3){ 0.0f, 5.0f, 0.0f }, (vec3){ 0.0f, -1.0f, 0.0f }, 5.0f, 5.0f, mtl_id);
   //mesh_id = scene_add_uvsphere(s, 1.0f, 6, 6, mtl_id);
-  //mesh_id = scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
+  /*//mesh_id =*/ scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
   //mesh_id = scene_add_mesh(s, teapot, mtl_id);
   //mesh_id = scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1);
  
@@ -112,13 +113,17 @@ void init_scene_riow(scene *s)
   
   // Floor instance
   mat4_scale(scale, 1.2f);
-  mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.5f, 0.5f, 0.5f }, .value = 0.0f });
+  m = mtl_create_lambert();
+  m.color = (vec3){ 0.5f, 0.5f, 0.5f };
+  mtl_id = scene_add_mtl(s, &m);
   scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
  
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 0.7f, 0.6f, 0.5f }, .value = 0.001f });
-  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
+  //m = mtl_create_metal();
+  //mtl_id = scene_add_mtl(s, &m);
+  //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
+  scene_add_inst_mesh(s, 1, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f }); // transmissive
@@ -134,13 +139,16 @@ void init_scene_riow(scene *s)
       float mtl_p = pcg_randf();
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
-        if(mtl_p < 0.8f)
-          mtl_id = scene_add_mtl(s, &(mtl){ .color = vec3_mul(vec3_rand(), vec3_rand()), .value = 0.0f });
-        /*else if(mtl_p < 0.95f)
-          mtl_id = scene_add_mtl(s, &(mtl){ .color = vec3_rand_rng(0.5f, 1.0f), .value = pcg_randf_rng(0.001f, 0.5f) });
-        else
-          mtl_id = scene_add_mtl(s, &(mtl){ .color = (vec3){ 1.0f, 1.0f, 1.0f }, .value = 1.5f });
-        //*/
+        if(mtl_p < 0.8f) {
+          m = mtl_create_lambert();
+          mtl_id = scene_add_mtl(s, &m);
+        /*} else if(mtl_p < 0.95f) {
+          m = mtl_create_metal();
+          mtl_id = scene_add_mtl(s, &m);
+        } else {
+          m = mtl_create_dielectric();
+          mtl_id = scene_add_mtl(s, &m);*/
+        }
 
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
