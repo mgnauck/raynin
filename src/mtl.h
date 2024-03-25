@@ -10,7 +10,7 @@ typedef enum mtl_type {
   MT_METAL,
   MT_DIELECTRIC,
   MT_EMISSIVE
-} tml_type;
+} mtl_type;
 
 typedef enum mtl_flags {
   MF_FLAT = 1,          // Face normals

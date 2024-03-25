@@ -291,8 +291,6 @@ fn intersectUnitBox(ori: vec3f, invDir: vec3f, instId: u32, h: ptr<function, Hit
   return false;
 }
 
-// intersectUnitBoxAnyHit == intersectAabbAnyHit
-
 fn intersectUnitSphere(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
 {
   let a = dot(ray.dir, ray.dir);
@@ -341,7 +339,7 @@ fn intersectUnitSphereAnyHit(ray: Ray, tfar: f32) -> bool
 
 // Moeller/Trumbore ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hit>) -> bool
+fn intersectTri(ray: Ray, tri: Tri, instTriId: u32, h: ptr<function, Hit>) -> bool
 {
   // Vectors of two edges sharing vertex 0
   let edge1 = tri.v1 - tri.v0;
@@ -382,7 +380,7 @@ fn intersectTri(ray: Ray, tri: Tri, instId: u32, triId: u32, h: ptr<function, Hi
     (*h).t = dist;
     (*h).u = u;
     (*h).v = v;
-    (*h).e = (triId << 16) | (instId & INST_ID_MASK);
+    (*h).e = instTriId;
     return true;
   }
 
@@ -433,7 +431,7 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-  let bvhOfs = dataOfs << 2;
+  let bvhOfs = dataOfs << 1;
 
   // Sorted DF traversal (near child first + skip far child if not within current dist)
   loop {
@@ -445,7 +443,7 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
       // Leaf node, intersect all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
         let triId = indices[dataOfs + nodeStartIndex + i];
-        intersectTri(ray, tris[dataOfs + triId], instId, triId, hit);
+        intersectTri(ray, tris[dataOfs + triId], (triId << 16) | (instId & INST_ID_MASK), hit);
       }
     } else {
       // Interior node
@@ -495,7 +493,7 @@ fn intersectBvhAnyHit(ray: Ray, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-  let bvhOfs = dataOfs << 2;
+  let bvhOfs = dataOfs << 1;
 
   // Early exit, unordered DF traversal
   loop {
@@ -680,7 +678,6 @@ fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> bool
   }
 }
 
-
 /*fn evalMaterialLambert(r: Ray, nrm: vec3f, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
 {
   *scatterDir = rand3HemiCosWeighted(nrm);
@@ -830,7 +827,6 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
 fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 {
   // TODO
-  // - test meshes
   // - add light tris
   // - on multiple lights, sample one random light
   // - exclude the light if it was previously hit
@@ -956,19 +952,19 @@ fn render(initialRay: Ray) -> vec3f
     ia.mtl = materials[mtl & MTL_ID_MASK];
 
     // Hit a light. Only consider if a primary ray or last bounce was specular.
-    if(//(bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
+    if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
        (((ia.mtl.flags & MTL_TYPE_MASK) == MT_EMISSIVE) && (ia.flags & IA_INSIDE) == 0)) {
       col += throughput * ia.mtl.emission;
-    } /*else {
+    } else {
       // Sample light(s) directly
       col += throughput * sampleAndEvalLight(&ia);
-    }*/
+    }
 
     // Sample indirect light
     throughput *= sampleAndEvalMaterial(&ia);
 
     // Russian roulette, terminate with probability inverse to throughput
-    if(bounces > 2) {
+    //if(bounces > 2) {
       let p = maxComp(throughput);
       if(rand() > p) {
         break;
@@ -976,7 +972,7 @@ fn render(initialRay: Ray) -> vec3f
       // Account for bias introduced by path termination (pdf = p)
       // Boost surviving paths by their probability to be terminated
       throughput *= 1.0 / p;
-    }
+    //}
 
     // Next ray to trace
     ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);

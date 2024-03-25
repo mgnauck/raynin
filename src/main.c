@@ -18,8 +18,8 @@
 #endif
 
 #define RIOW_SIZE   22
-#define TRI_CNT     1024 + 2
-#define MESH_CNT    2
+#define TRI_CNT     1024 + 4
+#define MESH_CNT    3
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 1)
 #define MTL_CNT     INST_CNT
 
@@ -101,22 +101,24 @@ void init_scene_riow(scene *s)
   // Sphere mesh
   mtl m = mtl_create_emissive();
   mtl_id = scene_add_mtl(s, &m);
-  mesh_id = scene_add_quad(s, (vec3){ 0.0f, 5.0f, 0.0f }, (vec3){ 0.0f, -1.0f, 0.0f }, 5.0f, 5.0f, mtl_id);
-  //mesh_id = scene_add_uvsphere(s, 1.0f, 6, 6, mtl_id);
-  /*//mesh_id =*/ scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
+  mesh_id = scene_add_quad(s, (vec3){ 0.0f, 5.0f, 0.0f }, (vec3){ 0.0f, -1.0f, 0.0f }, 5.0f, 5.0f, mtl_id); // light
+  /*mesh_id =*/ scene_add_uvsphere(s, 1.0f, 16, 16, mtl_id);
+  //mesh_id = scene_add_icosphere(s, 0, MF_FLAT << 16 | mtl_id);
   //mesh_id = scene_add_mesh(s, teapot, mtl_id);
   //mesh_id = scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1);
+  scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 20.0f, 20.0f, mtl_id); // floor
  
   // Light instance
   mat4_scale(scale, 1.0f);
   scene_add_inst_mesh(s, mesh_id, mtl_id, scale);
   
   // Floor instance
-  mat4_scale(scale, 1.2f);
+  mat4_scale(scale, 1.2f); // 1.2
   m = mtl_create_lambert();
   m.color = (vec3){ 0.5f, 0.5f, 0.5f };
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
+  //scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
+  scene_add_inst_mesh(s, 2, mtl_id, scale);
  
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
@@ -127,10 +129,12 @@ void init_scene_riow(scene *s)
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   //mtl_id = scene_add_mtl(s, &(mtl){ .color = { 1.0f, 1.0f, 1.0f }, .value = 1.5f }); // transmissive
-  scene_add_inst_shape(s, ST_SPHERE, 1, translation);
+  //scene_add_inst_shape(s, ST_SPHERE, 1, translation);
+  scene_add_inst_mesh(s, 1, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
-  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
+  scene_add_inst_mesh(s, 1, mtl_id, translation);
 
   mat4_scale(scale, 0.2f);
   
@@ -152,7 +156,8 @@ void init_scene_riow(scene *s)
 
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_inst_shape(s, ST_SPHERE, mtl_id, transform);
+        //scene_add_inst_shape(s, ST_SPHERE, mtl_id, transform);
+        scene_add_inst_mesh(s, 1, mtl_id, transform);
       }
     }
   }
