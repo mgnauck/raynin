@@ -200,11 +200,52 @@ void update_data_ofs(scene *s, mesh *m)
   s->curr_ofs += m->tri_cnt;
 }
 
-uint32_t scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h, uint32_t mtl)
+uint32_t scene_add_quad(scene *s, uint32_t subx, uint32_t suby, uint32_t mtl)
 {
   mesh *m = &s->meshes[s->mesh_cnt];
-  mesh_init(m, 2);
+  mesh_init(m, 2 * subx * suby);
+
+  float P = PLANE_DEFAULT_SIZE;
+  float dx = 2.0f * P / (float)subx;
+  float dz = 2.0f * P / (float)suby;
+
+  float z = -P;
+  for(uint32_t j=0; j<suby; j++) {
+    float x = -P;
+    for(uint32_t i=0; i<subx; i++) {
+      uint32_t ofs = 2 * (subx * j + i);
+      tri *tri = &m->tris[ofs];
+      tri->v0 = (vec3){ x, 0.0, z };
+      tri->v1 = (vec3){ x, 0.0, z + dz };
+      tri->v2 = (vec3){ x + dx, 0.0, z + dz };
+      tri->n0 = tri->n1 = tri->n2 = (vec3){ 0.0f, 1.0f, 0.0f };
+#ifdef TEXTURE_SUPPORT // Untested
+      tri->uv0[0] = (x + P) / (2.0f * P); tri->uv0[1] = (z + P) / (2.0f * P);
+      tri->uv1[0] = (x + P) / (2.0f * P); tri->uv1[1] = (z + dz + P) / (2.0f * P);
+      tri->uv2[0] = (x + dx + P) / (2.0f * P); tri->uv2[1] = (z + dz + P) / (2.0f * P);
+#endif
+      tri->mtl = mtl;
+      m->centers[ofs] = tri_calc_center(tri);
+
+      tri = &m->tris[ofs + 1];
+      tri->v0 = (vec3){ x, 0.0, z };
+      tri->v1 = (vec3){ x + dx, 0.0, z + dz };
+      tri->v2 = (vec3){ x + dx, 0.0, z };
+      tri->n0 = tri->n1 = tri->n2 = (vec3){ 0.0f, 1.0f, 0.0f };
+#ifdef TEXTURE_SUPPORT // Untested
+      tri->uv0[0] = (x + P) / (2.0f * P); tri->uv0[1] = (z + P) / (2.0f * P);
+      tri->uv1[0] = (x + dx + P) / (2.0f * P); tri->uv1[1] = (z + dz + P) / (2.0f * P);
+      tri->uv2[0] = (x + dx + P) / (2.0f * P); tri->uv2[1] = (z + P) / (2.0f * P);
+#endif
+      tri->mtl = mtl;
+      m->centers[ofs + 1] = tri_calc_center(tri);
+
+      x += dx;
+    }
+    z += dz;
+  }
   
+  /*
   nrm = vec3_unit(nrm);
   
   vec3 r = (fabsf(nrm.x) > 0.9) ? (vec3){ 0.0, 1.0, 0.0 } : (vec3){ 0.0, 0.0, 1.0 };
@@ -239,6 +280,7 @@ uint32_t scene_add_quad(scene *s, vec3 pos, vec3 nrm, float w, float h, uint32_t
 #endif
   tri->mtl = mtl;
   m->centers[1] = tri_calc_center(tri);
+*/
 
   update_data_ofs(s, m);
   scene_set_dirty(s, RT_MESH);

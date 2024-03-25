@@ -18,7 +18,7 @@
 #endif
 
 #define RIOW_SIZE   22
-#define TRI_CNT     1280 + 4
+#define TRI_CNT     1280 + 400
 #define MESH_CNT    3
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 1)
 #define MTL_CNT     INST_CNT
@@ -96,12 +96,12 @@ void init_scene_riow(scene *s)
 
   uint16_t mtl_id;
   uint16_t mesh_id;
-  mat4 transform, translation, scale;
+  mat4 transform, translation, rotation, scale;
 
   // Light mesh
   mtl m = mtl_create_emissive();
   mtl_id = scene_add_mtl(s, &m);
-  uint16_t lid = scene_add_quad(s, (vec3){ 0.0f, 5.0f, 0.0f }, (vec3){ 0.0f, -1.0f, 0.0f }, 5.0f, 5.0f, mtl_id);
+  uint16_t lid = scene_add_quad(s, 10, 10, mtl_id);
 
   // Sphere mesh
   uint16_t sid = scene_add_uvsphere(s, 1.0f, 20, 20, mtl_id, false);
@@ -113,14 +113,18 @@ void init_scene_riow(scene *s)
   m = mtl_create_lambert();
   m.color = (vec3){ 0.5f, 0.5f, 0.5f };
   mtl_id = scene_add_mtl(s, &m);
-  uint16_t fid = scene_add_quad(s, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 1.0f, 0.0f }, 20.0f, 20.0f, mtl_id);
+  uint16_t fid = scene_add_quad(s, 10, 10, mtl_id);
  
   // Light instance
-  mat4_scale(scale, 1.0f);
-  scene_add_inst_mesh(s, lid, -1, scale);
+  mat4_scale(scale, 0.25f);
+  mat4_rot_x(rotation, PI);
+  mat4_mul(transform, rotation, scale);
+  mat4_trans(translation, (vec3){ 0.0f, 5.0f, 0.0f });
+  mat4_mul(transform, translation, transform);
+  scene_add_inst_mesh(s, lid, -1, transform);
   
   // Floor instance
-  mat4_scale(scale, 1.2f); // 1.2
+  mat4_scale(scale, 1.2f);
   //scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
   scene_add_inst_mesh(s, fid, -1, scale);
  
@@ -183,8 +187,8 @@ void init(uint32_t width, uint32_t height)
   renderer_gpu_alloc(TRI_CNT, MTL_CNT, INST_CNT);
 
   rd = renderer_init(cs, width, height, 2);
-  //renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
-  renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
+  renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
+  //renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
   //renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
   renderer_update_static(rd);
 }
