@@ -12,10 +12,6 @@ typedef enum mtl_type {
   MT_EMISSIVE
 } mtl_type;
 
-typedef enum mtl_flags {
-  MF_FLAT = 1,          // Face normals
-} mtl_flags;
-
 typedef struct mtl {
   vec3      color;      // Albedo/diffuse
   float     value;      // Glossiness or index of refraction

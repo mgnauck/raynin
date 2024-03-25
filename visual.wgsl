@@ -122,9 +122,6 @@ const ST_PLANE            = 0u;
 const ST_BOX              = 1u;
 const ST_SPHERE           = 2u;
 
-// Material flags
-const MF_FLAT             = 1u;
-
 // Material types
 const MT_LAMBERT          = 0u;
 const MT_METAL            = 1u;
@@ -136,7 +133,7 @@ const IA_INSIDE           = 1u;
 const IA_SPECULAR         = 2u;
 
 // Math constants
-const EPSILON             = 0.0001;
+const EPSILON             = 0.00001;
 const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
 const MAX_DISTANCE        = 3.402823466e+38;
@@ -678,65 +675,33 @@ fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> bool
   }
 }
 
-/*fn evalMaterialLambert(r: Ray, nrm: vec3f, albedo: vec3f, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn calcShapeNormal(inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
 {
-  *scatterDir = rand3HemiCosWeighted(nrm);
-  *attenuation = albedo;
-  return true;
-}
-
-fn evalMaterialMetal(r: Ray, nrm: vec3f, albedo: vec3f, fuzzRadius: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
-{
-  let dir = reflect(r.dir, nrm);
-  *scatterDir = normalize(dir + fuzzRadius * rand3UnitSphere());
-  *attenuation = albedo;
-  return dot(*scatterDir, nrm) > 0;
-}
-
-fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
-{
-  var r0 = (1 - refractionIndexRatio) / (1 + refractionIndexRatio);
-  r0 = r0 * r0;
-  return r0 + (1 - r0) * pow(1 - cosTheta, 5);
-}
-
-fn evalMaterialDielectric(r: Ray, nrm: vec3f, inside: bool, albedo: vec3f, refractionIndex: f32, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
-{
-  let refracIndexRatio = select(1 / refractionIndex, refractionIndex, inside);
-  
-  let cosTheta = min(dot(-r.dir, nrm), 1);
-  //let sinTheta = sqrt(1 - cosTheta * cosTheta);
-  //
-  //var dir: vec3f;
-  //if(refracIndexRatio * sinTheta > 1 || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
-  //  dir = reflect(r.dir, nrm);
-  //} else {
-  //  dir = refract(r.dir, nrm, refracIndexRatio);
-  //}
-
-  var dir = refract(r.dir, nrm, refracIndexRatio);
-  if(all(dir == vec3f(0)) || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
-    dir = reflect(r.dir, nrm);
+  switch((*inst).data & MESH_SHAPE_MASK) {
+    case ST_BOX: {
+      let pos = (vec4f(hitPos, 1.0) * (*inst).invTransform).xyz;
+      var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
+      return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+    }
+    case ST_PLANE: {
+      return normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
+    }
+    case ST_SPHERE: {
+      let m = (*inst).transform;
+      return normalize(hitPos - vec3f(m[0][3], m[1][3], m[2][3]));
+    }
+    default: {
+      // Error
+      return vec3f(100);
+    }
   }
-
-  *scatterDir = dir;
-  *attenuation = albedo;
-  return true;
 }
 
-fn evalMaterial(r: Ray, nrm: vec3f, mtl: Mtl, attenuation: ptr<function, vec3f>, scatterDir: ptr<function, vec3f>) -> bool
+fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> vec3f
 {
-  let inside = dot(r.dir, nrm) > 0;
-  nrm = select(nrm, -nrm, inside);
-
-  if(mtl.value > 1.0) {
-    return evalMaterialDielectric(r, nrm, inside, mtl.color, mtl.value, attenuation, scatterDir);
-  } else if(mtl.value > 0.0) {
-    return evalMaterialMetal(r, nrm, mtl.color, mtl.value, attenuation, scatterDir);
-  }
-
-  return evalMaterialLambert(r, nrm, mtl.color, attenuation, scatterDir);
-}*/
+  let nrm = (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v);
+  return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+}
 
 fn sampleLambert(ia: ptr<function, IA>, pdf: ptr<function, f32>)
 {
@@ -758,26 +723,59 @@ fn evalLambert(ia: ptr<function, IA>) -> vec3f
 
 fn sampleMetal(ia: ptr<function, IA>, pdf: ptr<function, f32>)
 {
-  (*ia).inDir = reflect(-(*ia).outDir, (*ia).nrm); 
+  // Fuzzy reflection calc/distribution is NOT really correct
+  let dir = reflect(-(*ia).outDir, (*ia).nrm); 
+  (*ia).inDir = normalize(dir + (*ia).mtl.value * rand3Hemi(dir)); 
   (*ia).flags |= IA_SPECULAR;
   (*pdf) = 1.0; // One direction only
 }
 
 fn evalMetal(ia: ptr<function, IA>) -> vec3f
 { 
-  return (*ia).mtl.color * INV_PI;
+  return (*ia).mtl.color;
+}
+
+fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
+{
+  var r0 = (1 - refractionIndexRatio) / (1 + refractionIndexRatio);
+  r0 = r0 * r0;
+  return r0 + (1 - r0) * pow(1 - cosTheta, 5);
 }
 
 fn sampleDielectric(ia: ptr<function, IA>, pdf: ptr<function, f32>)
 {
-  (*ia).inDir = vec3f(0); // TODO
+  var refracIndexRatio: f32;
+  var nrm: vec3f;
+  if(((*ia).flags & IA_INSIDE) > 0) {
+    refracIndexRatio = (*ia).mtl.value;
+    nrm = -(*ia).nrm;
+  } else {
+    // The other medium is air (ior = 1)
+    refracIndexRatio = 1 / (*ia).mtl.value;
+    nrm = (*ia).nrm;
+  }
+  
+  let cosTheta = min(dot((*ia).outDir, nrm), 1);
+  //let sinTheta = sqrt(1 - cosTheta * cosTheta);
+  //
+  //if(refracIndexRatio * sinTheta > 1 || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
+  //  (*ia).inDir = reflect(-(*ia).outDir, nrm);
+  //} else {
+  //  (*ia).inDir = refract(-(*ia).outDir, nrm, refracIndexRatio);
+  //}
+
+  (*ia).inDir = refract(-(*ia).outDir, nrm, refracIndexRatio);
+  if(all((*ia).inDir == vec3f(0)) || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
+    (*ia).inDir = reflect(-(*ia).outDir, nrm);
+  }
+
   (*ia).flags |= IA_SPECULAR;
   (*pdf) = 1.0; // One direction only
 }
 
 fn evalDielectric(ia: ptr<function, IA>) -> vec3f
 {
-  return (*ia).mtl.color * INV_PI;
+  return (*ia).mtl.color;
 }
 
 fn evalMaterial(ia: ptr<function, IA>) -> vec3f
@@ -792,6 +790,10 @@ fn evalMaterial(ia: ptr<function, IA>) -> vec3f
     }
     case MT_DIELECTRIC: {
       return evalDielectric(ia);
+    }
+    case MT_EMISSIVE: {
+      // Backside of a light
+      return vec3f(0.0, 10.0, 0.0);
     }
     default: {
       // Error
@@ -816,6 +818,10 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
     case MT_DIELECTRIC: {
       sampleDielectric(ia, &pdf);
       return evalDielectric(ia) / pdf;
+    }
+    case MT_EMISSIVE: {
+      // Backside of a light
+      return vec3f(0.0, 10.0, 0.0);
     }
     default: {
       // Error
@@ -877,37 +883,6 @@ fn sampleAndEvalLight(ia: ptr<function, IA>) -> vec3f
   return select(vec3f(0), evalMaterial(ia) * emission / pdf, any(emission > vec3f(0)));
 }
 
-fn calcShapeNormal(inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
-{
-  switch((*inst).data & MESH_SHAPE_MASK) {
-    case ST_BOX: {
-      let pos = (vec4f(hitPos, 1.0) * (*inst).invTransform).xyz;
-      var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
-      return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
-    }
-    case ST_PLANE: {
-      return normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
-    }
-    case ST_SPHERE: {
-      let m = (*inst).transform;
-      return normalize(hitPos - vec3f(m[0][3], m[1][3], m[2][3]));
-    }
-    default: {
-      // Error
-      return vec3f(100);
-    }
-  }
-}
-
-fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> vec3f
-{
-  var nrm = select(
-    (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v), 
-    (*tri).n0, // Simply use face normal in n0
-    (((*tri).mtl >> 16) & MF_FLAT) > 0);    
-  return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
-}
-
 fn render(initialRay: Ray) -> vec3f
 {
   var ia: IA;
@@ -945,20 +920,25 @@ fn render(initialRay: Ray) -> vec3f
       ia.nrm = calcTriNormal(hit, inst, tri);
     }
 
-    // Flag if this is a backface, i.e. we are "inside"
-    ia.flags = select(ia.flags, ia.flags | IA_INSIDE, dot(ia.outDir, ia.nrm) <= 0);
+    // Handle backface, i.e. we are "inside"
+    ia.flags = select(ia.flags & ~IA_INSIDE, ia.flags | IA_INSIDE, dot(ia.outDir, ia.nrm) <= 0);
+    // TODO Flip normal here if inside?
 
     // Get material data
     ia.mtl = materials[mtl & MTL_ID_MASK];
 
-    // Hit a light. Only consider if a primary ray or last bounce was specular.
-    if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
-       (((ia.mtl.flags & MTL_TYPE_MASK) == MT_EMISSIVE) && (ia.flags & IA_INSIDE) == 0)) {
-      col += throughput * ia.mtl.emission;
-    } else {
-      // Sample light(s) directly
-      col += throughput * sampleAndEvalLight(&ia);
+    // Hit a light
+    if((ia.mtl.flags & MTL_TYPE_MASK) == MT_EMISSIVE) {
+      // Only consider if a primary ray or last bounce was specular
+      if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
+        ((ia.flags & IA_INSIDE) == 0)) {
+        col += throughput * ia.mtl.emission;
+      }
+      break;
     }
+
+    // Sample light(s) directly
+    col += throughput * sampleAndEvalLight(&ia);
 
     // Sample indirect light
     throughput *= sampleAndEvalMaterial(&ia);
