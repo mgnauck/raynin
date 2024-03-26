@@ -133,7 +133,7 @@ const IA_INSIDE           = 1u;
 const IA_SPECULAR         = 2u;
 
 // Math constants
-const EPSILON             = 0.00001;
+const EPSILON             = 0.0001;
 const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
 const MAX_DISTANCE        = 3.402823466e+38;
@@ -854,7 +854,7 @@ fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
   lightDir = normalize(lightDir);
 
   // Probe visibility of light
-  if(intersectTlasAnyHit(Ray((*ia).pos, lightDir), dist)) {
+  if(intersectTlasAnyHit(Ray((*ia).pos, lightDir), dist - EPSILON)) {
     // Light is obstructed
     (*pdf) = 0.0;
     return vec3f(0);

@@ -18,7 +18,7 @@
 #endif
 
 #define RIOW_SIZE   22
-#define TRI_CNT     1280 + 400
+#define TRI_CNT     1280 + 600
 #define MESH_CNT    3
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 1)
 #define MTL_CNT     INST_CNT
@@ -116,15 +116,15 @@ void init_scene_riow(scene *s)
   uint16_t fid = scene_add_quad(s, 10, 10, mtl_id);
  
   // Light instance
-  mat4_scale(scale, 0.25f);
+  mat4_scale(scale, 0.5f);
   mat4_rot_x(rotation, PI);
-  mat4_mul(transform, rotation, scale);
+  mat4_mul(transform, scale, rotation);
   mat4_trans(translation, (vec3){ 0.0f, 5.0f, 0.0f });
   mat4_mul(transform, translation, transform);
   scene_add_inst_mesh(s, lid, -1, transform);
   
   // Floor instance
-  mat4_scale(scale, 1.2f);
+  mat4_scale(scale, 2.4f);
   //scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
   scene_add_inst_mesh(s, fid, -1, scale);
  

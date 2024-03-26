@@ -92,15 +92,17 @@ void scene_prepare_render(scene *s)
           ma = (vec3){  1.0f,  1.0f,  1.0f };
         } else {
           // Plane is in XZ and has a default size
-          mi = (vec3){ -PLANE_DEFAULT_SIZE, -EPSILON, -PLANE_DEFAULT_SIZE }; 
-          ma = (vec3){  PLANE_DEFAULT_SIZE,  EPSILON,  PLANE_DEFAULT_SIZE };
+          float P = 0.5f * PLANE_DEFAULT_SIZE;
+          mi = (vec3){ -P, -EPSILON, -P };
+          ma = (vec3){  P,  EPSILON,  P };
         }
       } else {
-        // Mesh type: Store root node bounds transformed into world space
+        // Mesh type, use (object space) BVH root nodes
         mi = s->bvhs[state->mesh_shape].nodes[0].min;
         ma = s->bvhs[state->mesh_shape].nodes[0].max;
       }
 
+      // Transform instance aabb to world space
       aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, mi.y, mi.z }));
       aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, mi.y, mi.z }));
       aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, ma.y, mi.z }));
@@ -202,40 +204,42 @@ void update_data_ofs(scene *s, mesh *m)
 
 uint32_t scene_add_quad(scene *s, uint32_t subx, uint32_t suby, uint32_t mtl)
 {
+  // Generate plane in XZ at origin with normal pointing up in Y
   mesh *m = &s->meshes[s->mesh_cnt];
   mesh_init(m, 2 * subx * suby);
 
   float P = PLANE_DEFAULT_SIZE;
-  float dx = 2.0f * P / (float)subx;
-  float dz = 2.0f * P / (float)suby;
+  float P2 = 0.5f * P;
+  float dx = P / (float)subx;
+  float dz = P / (float)suby;
 
-  float z = -P;
+  float z = 0.0f;
   for(uint32_t j=0; j<suby; j++) {
-    float x = -P;
+    float x = 0.0f;
     for(uint32_t i=0; i<subx; i++) {
       uint32_t ofs = 2 * (subx * j + i);
       tri *tri = &m->tris[ofs];
-      tri->v0 = (vec3){ x, 0.0, z };
-      tri->v1 = (vec3){ x, 0.0, z + dz };
-      tri->v2 = (vec3){ x + dx, 0.0, z + dz };
+      tri->v0 = (vec3){ -P2 + x, 0.0, -P2 + z };
+      tri->v1 = (vec3){ -P2 + x, 0.0, -P2 + z + dz };
+      tri->v2 = (vec3){ -P2 + x + dx, 0.0, -P2 + z + dz };
       tri->n0 = tri->n1 = tri->n2 = (vec3){ 0.0f, 1.0f, 0.0f };
 #ifdef TEXTURE_SUPPORT // Untested
-      tri->uv0[0] = (x + P) / (2.0f * P); tri->uv0[1] = (z + P) / (2.0f * P);
-      tri->uv1[0] = (x + P) / (2.0f * P); tri->uv1[1] = (z + dz + P) / (2.0f * P);
-      tri->uv2[0] = (x + dx + P) / (2.0f * P); tri->uv2[1] = (z + dz + P) / (2.0f * P);
+      tri->uv0[0] = x / P; tri->uv0[1] = z / P;
+      tri->uv1[0] = x / P; tri->uv1[1] = (z + dz) / P;
+      tri->uv2[0] = (x + dx) / P; tri->uv2[1] = (z + dz) / P;
 #endif
       tri->mtl = mtl;
       m->centers[ofs] = tri_calc_center(tri);
 
       tri = &m->tris[ofs + 1];
-      tri->v0 = (vec3){ x, 0.0, z };
-      tri->v1 = (vec3){ x + dx, 0.0, z + dz };
-      tri->v2 = (vec3){ x + dx, 0.0, z };
+      tri->v0 = (vec3){ -P2 + x, 0.0, -P2 + z };
+      tri->v1 = (vec3){ -P2 + x + dx, 0.0, -P2 + z + dz };
+      tri->v2 = (vec3){ -P2 + x + dx, 0.0, -P2 + z };
       tri->n0 = tri->n1 = tri->n2 = (vec3){ 0.0f, 1.0f, 0.0f };
 #ifdef TEXTURE_SUPPORT // Untested
-      tri->uv0[0] = (x + P) / (2.0f * P); tri->uv0[1] = (z + P) / (2.0f * P);
-      tri->uv1[0] = (x + dx + P) / (2.0f * P); tri->uv1[1] = (z + dz + P) / (2.0f * P);
-      tri->uv2[0] = (x + dx + P) / (2.0f * P); tri->uv2[1] = (z + P) / (2.0f * P);
+      tri->uv0[0] = x / P; tri->uv0[1] = z / P;
+      tri->uv1[0] = (x + dx) / P; tri->uv1[1] = (z + dz) / P;
+      tri->uv2[0] = (x + dx) / P; tri->uv2[1] = z / P;
 #endif
       tri->mtl = mtl;
       m->centers[ofs + 1] = tri_calc_center(tri);
@@ -244,43 +248,6 @@ uint32_t scene_add_quad(scene *s, uint32_t subx, uint32_t suby, uint32_t mtl)
     }
     z += dz;
   }
-  
-  /*
-  nrm = vec3_unit(nrm);
-  
-  vec3 r = (fabsf(nrm.x) > 0.9) ? (vec3){ 0.0, 1.0, 0.0 } : (vec3){ 0.0, 0.0, 1.0 };
-  vec3 t = vec3_cross(nrm, r);
-  vec3 b = vec3_cross(t, nrm);
-
-  t = vec3_scale(t, 0.5f * w);
-  b = vec3_scale(b, 0.5f * h);
-
-  tri *tri = &m->tris[0];
-  tri->v0 = vec3_sub(vec3_sub(pos, t), b);
-  tri->v1 = vec3_add(vec3_sub(pos, t), b);
-  tri->v2 = vec3_add(vec3_add(pos, t), b);
-  tri->n0 = tri->n1 = tri->n2 = nrm;
-#ifdef TEXTURE_SUPPORT // Untested
-  tri->uv0[0] = 0.0f; tri->uv0[1] = 0.0f;
-  tri->uv1[0] = 0.0f; tri->uv1[1] = 1.0f;
-  tri->uv2[0] = 1.0f; tri->uv2[1] = 1.0f;
-#endif
-  tri->mtl = mtl;
-  m->centers[0] = tri_calc_center(tri);
-
-  tri = &m->tris[1];
-  tri->v0 = vec3_sub(vec3_sub(pos, t), b);
-  tri->v1 = vec3_add(vec3_add(pos, t), b);
-  tri->v2 = vec3_sub(vec3_add(pos, t), b);
-  tri->n0 = tri->n1 = tri->n2 = nrm;
-#ifdef TEXTURE_SUPPORT // Untested
-  tri->uv0[0] = 0.0f; tri->uv0[1] = 0.0f;
-  tri->uv1[0] = 1.0f; tri->uv1[1] = 1.0f;
-  tri->uv2[0] = 1.0f; tri->uv2[1] = 0.0f;
-#endif
-  tri->mtl = mtl;
-  m->centers[1] = tri_calc_center(tri);
-*/
 
   update_data_ofs(s, m);
   scene_set_dirty(s, RT_MESH);
