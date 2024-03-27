@@ -124,7 +124,7 @@ function createGpuResources(globSz, triSz, indexSz, bvhNodeSz, tlasNodeSz, instS
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  // No mesh in scene, kep min size buffers, for proper maping to our layout/shader
+  // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
   triSz = triSz == 0 ? 96 : triSz;
   indexSz = indexSz == 0 ? 32 : indexSz;
   bvhNodeSz = bvhNodeSz == 0 ? 32 : bvhNodeSz;

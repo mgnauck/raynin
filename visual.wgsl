@@ -67,7 +67,7 @@ struct IA
 struct Tri
 {
   v0:   vec3f,
-  mtl:  u32,              // (mtl flags << 16) | (mtl id & 0xffff)
+  mtl:  u32,              // (mtl id & 0xffff)
   v1:   vec3f,
   pad1: f32,
   v2:   vec3f,
@@ -137,6 +137,7 @@ const EPSILON             = 0.0001;
 const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
 const MAX_DISTANCE        = 3.402823466e+38;
+const MAX_INTENSITY       = 2.0;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -150,6 +151,16 @@ const MAX_DISTANCE        = 3.402823466e+38;
 var<private> bvhNodeStack: array<u32, 32>;
 var<private> tlasNodeStack: array<u32, 32>;
 var<private> rngState: u32;
+
+fn minComp(v: vec3f) -> f32
+{
+  return min(v.x, min(v.y, v.z));
+}
+
+fn maxComp(v: vec3f) -> f32
+{
+  return max(v.x, max(v.y, v.z));
+}
 
 // PCG from https://jcgt.org/published/0009/03/02/
 fn rand() -> f32
@@ -207,14 +218,20 @@ fn rand2Disk() -> vec2f
   return vec2f(r * cos(theta), r * sin(theta));
 }
 
-fn minComp(v: vec3f) -> f32
+fn clampIntensity(contribution: vec3f) -> vec3f
 {
-  return min(v.x, min(v.y, v.z));
+  let val = maxComp(contribution);
+  return select(contribution, contribution * (MAX_INTENSITY / val), val > MAX_INTENSITY);
 }
 
-fn maxComp(v: vec3f) -> f32
+fn isNan(v: f32) -> bool
 {
-  return max(v.x, max(v.y, v.z));
+  return select(true, false, v < 0.0 || 0.0 < v || v == 0.0);
+}
+
+fn fixNan3(v: vec3f) -> vec3f
+{
+  return select(v, vec3f(0), isNan(v.x + v.y + v.z));
 }
 
 // GPU efficient slabs test [Laine et al. 2013; Afra et al. 2016]
@@ -895,7 +912,8 @@ fn render(initialRay: Ray) -> vec3f
     let hit = intersectTlas(ray, MAX_DISTANCE);
     
     // No hit
-    if(hit.t == MAX_DISTANCE) { 
+    if(hit.t == MAX_DISTANCE) {
+      //col += fixNan3(clampIntensity(throughput * globals.bgColor));
       col += throughput * globals.bgColor;
       break;
     }
@@ -932,27 +950,29 @@ fn render(initialRay: Ray) -> vec3f
       // Only consider if a primary ray or last bounce was specular
       if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
         ((ia.flags & IA_INSIDE) == 0)) {
+        //col += fixNan3(clampIntensity(throughput * ia.mtl.emission));
         col += throughput * ia.mtl.emission;
       }
       break;
     }
 
     // Sample light(s) directly
+    //col += fixNan3(clampIntensity(throughput * sampleAndEvalLight(&ia)));
     col += throughput * sampleAndEvalLight(&ia);
 
     // Sample indirect light
     throughput *= sampleAndEvalMaterial(&ia);
 
-    // Russian roulette, terminate with probability inverse to throughput
-    //if(bounces > 2) {
-      let p = maxComp(throughput);
-      if(rand() > p) {
-        break;
-      }
-      // Account for bias introduced by path termination (pdf = p)
-      // Boost surviving paths by their probability to be terminated
-      throughput *= 1.0 / p;
-    //}
+    // Russian roulette
+    // Terminate with prob inverse to throughput, except for primary ray or specular interaction
+    //let p = select(maxComp(throughput), 1.0, bounces == 0 || (ia.flags & IA_SPECULAR) > 0);
+    let p = maxComp(throughput);
+    if(rand() > p) {
+      break;
+    }
+    // Account for bias introduced by path termination (pdf = p)
+    // Boost surviving paths by their probability to be terminated
+    throughput *= 1.0 / p;
 
     // Next ray to trace
     ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
