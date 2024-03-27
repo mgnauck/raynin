@@ -1,6 +1,7 @@
 #include "mat4.h"
 #include <stdint.h>
 #include "mutil.h"
+#include "sutil.h"
 #include "log.h"
 
 void mat4_identity(mat4 d)
@@ -202,6 +203,12 @@ bool mat4_inv(mat4 d, const mat4 m)
 vec3 mat4_get_trans(const mat4 m)
 {
   return (vec3){ m[3], m[7], m[11] };
+}
+
+void mat4_from_row3x4(mat4 dst, const float* src)
+{
+  memcpy(dst, src, 12 * sizeof(*src));
+  memcpy(dst + 12, &(float[4]){ 0.0f, 0.0f, 0.0f, 1.0f }, 4 * sizeof(float));
 }
 
 void mat4_logc(mat4 m)

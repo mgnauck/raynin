@@ -175,7 +175,9 @@ void intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices,
 void intersect_inst(const ray *r, const inst *inst, const bvh *bvhs, hit *h)
 {
   ray r_obj;
-  ray_transform(&r_obj, inst->inv_transform, r);
+  mat4 inv_transform;
+  mat4_from_row3x4(inv_transform, inst->inv_transform);
+  ray_transform(&r_obj, inv_transform, r);
 
   if(inst->data & SHAPE_TYPE_BIT) {
     // Intersect shape type

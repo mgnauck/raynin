@@ -54,6 +54,14 @@ struct BvhNode
   objCount:   u32
 }
 
+struct Mtl
+{
+  color: vec3f,
+  value: f32,
+  emission: vec3f,
+  flags: u32
+}
+
 struct IA
 {
   pos:    vec3f,
@@ -89,20 +97,12 @@ struct Tri
 
 struct Inst
 {
-  transform:    mat4x4f,
-  invTransform: mat4x4f,
+  transform:    mat3x4f,
   aabbMin:      vec3f,
   id:           u32,      // (mtl override id << 16) | (inst id & 0xffff)
+  invTransform: mat3x4f,
   aabbMax:      vec3f,
   data:         u32       // See comment on data in inst.h
-}
-
-struct Mtl
-{
-  color: vec3f,
-  value: f32,
-  emission: vec3f,
-  flags: u32
 }
 
 // Scene data bit handling
@@ -137,7 +137,7 @@ const EPSILON             = 0.0001;
 const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
 const MAX_DISTANCE        = 3.402823466e+38;
-const MAX_INTENSITY       = 2.0;
+const MAX_INTENSITY       = 3.0;  // Value for intensity clamping, will need trial and error
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -160,6 +160,16 @@ fn minComp(v: vec3f) -> f32
 fn maxComp(v: vec3f) -> f32
 {
   return max(v.x, max(v.y, v.z));
+}
+
+fn toMat3x3(m: ptr<storage, mat3x4f>) -> mat3x3f
+{
+  return mat3x3((*m)[0].xyz, (*m)[1].xyz, (*m)[2].xyz);
+}
+
+fn toMat4x4(m: ptr<storage, mat3x4f>) -> mat4x4f
+{
+  return mat4x4((*m)[0], (*m)[1], (*m)[2], vec4f(0, 0, 0, 1));
 }
 
 // PCG from https://jcgt.org/published/0009/03/02/
@@ -226,12 +236,18 @@ fn clampIntensity(contribution: vec3f) -> vec3f
 
 fn isNan(v: f32) -> bool
 {
-  return select(true, false, v < 0.0 || 0.0 < v || v == 0.0);
+  return v == v;
+  //return select(true, false, v < 0.0 || 0.0 < v || v == 0.0);
 }
 
 fn fixNan3(v: vec3f) -> vec3f
 {
   return select(v, vec3f(0), isNan(v.x + v.y + v.z));
+}
+
+fn transformRay(ray: Ray, m: mat4x4f) -> Ray
+{
+  return Ray((vec4f(ray.ori, 1.0) * m).xyz, ray.dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz));
 }
 
 // GPU efficient slabs test [Laine et al. 2013; Afra et al. 2016]
@@ -545,9 +561,7 @@ fn intersectBvhAnyHit(ray: Ray, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
 fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, hit: ptr<function, Hit>)
 {
   // Transform ray into object space of the instance
-  let rayObjSpace = Ray(
-    (vec4f(ray.ori, 1.0) * inst.invTransform).xyz,
-    (vec4f(ray.dir, 0.0) * inst.invTransform).xyz);
+  let rayObjSpace = transformRay(ray, toMat4x4(&inst.invTransform));
   let invDir = 1 / rayObjSpace.dir;
 
   switch((*inst).data & INST_DATA_MASK) {
@@ -571,9 +585,7 @@ fn intersectInst(ray: Ray, inst: ptr<storage, Inst>, hit: ptr<function, Hit>)
 fn intersectInstAnyHit(ray: Ray, tfar: f32, inst: ptr<storage, Inst>) -> bool
 {
   // Transform ray into object space of the instance
-  let rayObjSpace = Ray(
-    (vec4f(ray.ori, 1.0) * inst.invTransform).xyz, 
-    (vec4f(ray.dir, 0.0) * inst.invTransform).xyz);
+  let rayObjSpace = transformRay(ray, toMat4x4(&inst.invTransform));
   let invDir = 1 / rayObjSpace.dir;
 
   switch((*inst).data & INST_DATA_MASK) {
@@ -582,7 +594,7 @@ fn intersectInstAnyHit(ray: Ray, tfar: f32, inst: ptr<storage, Inst>) -> bool
       return intersectPlaneAnyHit(rayObjSpace, tfar);
     }
     case (SHAPE_TYPE_BIT | ST_BOX): {
-      return intersectAabbAnyHit(rayObjSpace.ori, invDir, tfar, vec3f(-1), vec3f(1.0)); 
+      return intersectAabbAnyHit(rayObjSpace.ori, invDir, tfar, vec3f(-1), vec3f(1)); 
     }
     case (SHAPE_TYPE_BIT | ST_SPHERE): {
       return intersectUnitSphereAnyHit(rayObjSpace, tfar);
@@ -696,12 +708,12 @@ fn calcShapeNormal(inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
 {
   switch((*inst).data & MESH_SHAPE_MASK) {
     case ST_BOX: {
-      let pos = (vec4f(hitPos, 1.0) * (*inst).invTransform).xyz;
+      let pos = (vec4f(hitPos, 1.0) * toMat4x4(&inst.invTransform)).xyz;
       var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
-      return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+      return normalize(nrm * toMat3x3(&(*inst).transform));
     }
     case ST_PLANE: {
-      return normalize((vec4f(0.0, 1.0, 0.0, 0.0) * (*inst).transform).xyz);
+      return normalize(vec3f(0.0, 1.0, 0.0) * toMat3x3(&(*inst).transform));
     }
     case ST_SPHERE: {
       let m = (*inst).transform;
@@ -717,7 +729,7 @@ fn calcShapeNormal(inst: ptr<storage, Inst>, hitPos: vec3f) -> vec3f
 fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> vec3f
 {
   let nrm = (*tri).n1 * h.u + (*tri).n2 * h.v + (*tri).n0 * (1.0 - h.u - h.v);
-  return normalize((vec4f(nrm, 0.0) * (*inst).transform).xyz);
+  return normalize(nrm * toMat3x3(&(*inst).transform));
 }
 
 fn sampleLambert(ia: ptr<function, IA>, pdf: ptr<function, f32>)
@@ -821,6 +833,8 @@ fn evalMaterial(ia: ptr<function, IA>) -> vec3f
 
 fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
 {
+  // TODO Unify different terms/types to one "lambert material"
+
   var pdf: f32;
   switch(ia.mtl.flags & MTL_TYPE_MASK)
   {
@@ -866,9 +880,8 @@ fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
     return vec3f(0);
   }
 
-  let distSqr = dot(lightDir, lightDir);
-  let dist = sqrt(distSqr);
-  lightDir = normalize(lightDir);
+  let dist = length(lightDir);
+  lightDir = lightDir * (1.0 / dist);
 
   // Probe visibility of light
   if(intersectTlasAnyHit(Ray((*ia).pos, lightDir), dist - EPSILON)) {
@@ -882,7 +895,7 @@ fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 
   // Account for single ray in direction of light
   // pdf is 1 / solid angle subtended by the light (light area projected on unit hemisphere)
-  *pdf = distSqr / (/* light area */ 25.0 * dot(-lightDir, lightNrm));
+  *pdf = (dist * dist) / (/* light area */ 25.0 * dot(-lightDir, lightNrm));
 
   // Light emission
   return vec3f(1.6);
@@ -897,7 +910,7 @@ fn sampleAndEvalLight(ia: ptr<function, IA>) -> vec3f
 
   var pdf: f32;
   let emission = sampleLight(ia, &pdf);
-  return select(vec3f(0), evalMaterial(ia) * emission / pdf, any(emission > vec3f(0)));
+  return select(vec3f(0), evalMaterial(ia) * emission / pdf, pdf > EPSILON && any(emission > vec3f(EPSILON)));
 }
 
 fn render(initialRay: Ray) -> vec3f

@@ -79,7 +79,10 @@ void scene_prepare_render(scene *s)
       inst *inst = &s->instances[i];
       
       // Calc inverse transform
-      mat4_inv(inst->inv_transform, inst->transform);
+      mat4 transform, inv_transform;
+      mat4_from_row3x4(transform, inst->transform);
+      mat4_inv(inv_transform, transform);
+      memcpy(inst->inv_transform, inv_transform, 12 * sizeof(float));
   
       aabb a = aabb_init();
       vec3 mi, ma;
@@ -103,14 +106,14 @@ void scene_prepare_render(scene *s)
       }
 
       // Transform instance aabb to world space
-      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, mi.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, mi.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, ma.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, ma.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, mi.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, mi.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ mi.x, ma.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(inst->transform, (vec3){ ma.x, ma.y, ma.z }));
+      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, mi.y, mi.z }));
+      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, mi.y, mi.z }));
+      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, ma.y, mi.z }));
+      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, ma.y, mi.z }));
+      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, mi.y, ma.z }));
+      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, mi.y, ma.z }));
+      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, ma.y, ma.z }));
+      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, ma.y, ma.z }));
 
       inst->min = a.min;
       inst->max = a.max;
@@ -192,7 +195,7 @@ void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
     // Only for mesh types: Clear material override bit
     inst->data = inst->data & INST_DATA_MASK;
 
-  memcpy(s->instances[inst_id].transform, transform, sizeof(mat4));
+  memcpy(s->instances[inst_id].transform, transform, 12 * sizeof(float));
   s->inst_states[inst_id].dirty = true;
 }
 

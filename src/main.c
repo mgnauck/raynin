@@ -95,7 +95,6 @@ void init_scene_riow(scene *s)
   cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   uint16_t mtl_id;
-  uint16_t mesh_id;
   mat4 transform, translation, rotation, scale;
 
   // Light mesh

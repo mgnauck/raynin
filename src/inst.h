@@ -22,10 +22,10 @@
 // i.e. unitsphere, unitcylinder, unitbox
 
 typedef struct inst {
-  mat4        transform;
-  mat4        inv_transform;
+  float       transform[12];
   vec3        min;
   uint32_t    id;     // (mtl override id << 16) | (inst id & 0xffff)
+  float       inv_transform[12];
   vec3        max;
   uint32_t    data;   // See notes above
 } inst;

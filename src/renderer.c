@@ -197,37 +197,40 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
           vec3 c = rd->bg_col;
           if(h.t < MAX_DISTANCE) {
             inst *inst = &rd->scene->instances[h.e & INST_ID_MASK];
+            mat4 transform;
+            mat4_from_row3x4(transform, inst->transform);
             vec3 nrm;
             uint16_t mtl_id;
             if(!(inst->data & SHAPE_TYPE_BIT)) {
               // Mesh
               uint32_t tri_idx = h.e >> 16;
               tri* tri = &rd->scene->meshes[inst->data & MESH_SHAPE_MASK].tris[tri_idx];
-              nrm = (tri->mtl >> 16) & MF_FLAT ?
-                tri->n1 : vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
-              nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
+              nrm = vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
+              nrm = vec3_unit(mat4_mul_dir(transform, nrm));
               mtl_id = (inst->data & MTL_OVERRIDE_BIT) ? (inst->id >> 16) : (tri->mtl & MTL_ID_MASK);
             } else {
               // Shape
               switch((shape_type)(h.e >> 16)) {
                 case ST_PLANE: 
-                  nrm = vec3_unit(mat4_mul_dir(inst->transform, (vec3){ 0.0f, 1.0f, 0.0f }));
+                  nrm = vec3_unit(mat4_mul_dir(transform, (vec3){ 0.0f, 1.0f, 0.0f }));
                   break;
                 case ST_BOX:
                   {
-                    vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t)); 
-                    hit_pos = mat4_mul_pos(inst->inv_transform, hit_pos);
+                    vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
+                    mat4 inv_transform;
+                    mat4_from_row3x4(inv_transform, inst->inv_transform);
+                    hit_pos = mat4_mul_pos(inv_transform, hit_pos);
                     nrm = (vec3){ 
                       (float)((int32_t)(hit_pos.x * 1.0001f)),
                       (float)((int32_t)(hit_pos.y * 1.0001f)),
                       (float)((int32_t)(hit_pos.z * 1.0001f)) };
-                    nrm = vec3_unit(mat4_mul_dir(inst->transform, nrm));
+                    nrm = vec3_unit(mat4_mul_dir(transform, nrm));
                   }
                   break;
                 case ST_SPHERE:
                   {
                     vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
-                    nrm = vec3_unit(vec3_sub(hit_pos, mat4_get_trans(inst->transform)));
+                    nrm = vec3_unit(vec3_sub(hit_pos, mat4_get_trans(transform)));
                   }
                   break;
               }
