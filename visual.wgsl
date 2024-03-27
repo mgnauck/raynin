@@ -129,7 +129,7 @@ const MT_DIELECTRIC       = 2u;
 const MT_EMISSIVE         = 3u;
 
 // Interaction flags
-const IA_INSIDE           = 1u;
+const IA_BACKFACE           = 1u;
 const IA_SPECULAR         = 2u;
 
 // Math constants
@@ -775,7 +775,7 @@ fn sampleDielectric(ia: ptr<function, IA>, pdf: ptr<function, f32>)
 {
   var refracIndexRatio: f32;
   var nrm: vec3f;
-  if(((*ia).flags & IA_INSIDE) > 0) {
+  if(((*ia).flags & IA_BACKFACE) > 0) {
     refracIndexRatio = (*ia).mtl.value;
     nrm = -(*ia).nrm;
   } else {
@@ -951,9 +951,8 @@ fn render(initialRay: Ray) -> vec3f
       ia.nrm = calcTriNormal(hit, inst, tri);
     }
 
-    // Handle backface, i.e. we are "inside"
-    ia.flags = select(ia.flags & ~IA_INSIDE, ia.flags | IA_INSIDE, dot(ia.outDir, ia.nrm) <= 0);
-    // TODO Flip normal here if inside?
+    // Detect backface
+    ia.flags = select(ia.flags & ~IA_BACKFACE, ia.flags | IA_BACKFACE, dot(ia.outDir, ia.nrm) <= 0);
 
     // Get material data
     ia.mtl = materials[mtl & MTL_ID_MASK];
@@ -962,7 +961,7 @@ fn render(initialRay: Ray) -> vec3f
     if((ia.mtl.flags & MTL_TYPE_MASK) == MT_EMISSIVE) {
       // Only consider if a primary ray or last bounce was specular
       if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
-        ((ia.flags & IA_INSIDE) == 0)) {
+        ((ia.flags & IA_BACKFACE) == 0)) {
         //col += fixNan3(clampIntensity(throughput * ia.mtl.emission));
         col += throughput * ia.mtl.emission;
       }
