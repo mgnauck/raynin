@@ -3,8 +3,7 @@
 #include "aabb.h"
 #include "inst.h"
 
-uint32_t find_best_node(tlas_node *nodes, uint32_t idx, uint32_t *node_indices,
-    uint32_t node_indices_cnt)
+uint32_t find_best_node(tlas_node *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
 {
   float best_area = FLT_MAX;
   uint32_t best_idx;
@@ -31,26 +30,28 @@ uint32_t find_best_node(tlas_node *nodes, uint32_t idx, uint32_t *node_indices,
 }
 
 // Walter et al: Fast Agglomerative Clustering for Rendering
-void tlas_build(tlas_node *nodes, const inst *instances, uint32_t inst_cnt)
+void tlas_build(tlas_node *nodes, const inst *instances, const inst_info *inst_info, uint32_t inst_cnt)
 {
-  uint32_t node_indices_cnt = inst_cnt;
-  uint32_t node_indices[inst_cnt];
-
-  // Reserve space for root node
-  uint32_t ofs = 1;
+  uint32_t node_indices[inst_cnt]; 
+  uint32_t node_indices_cnt = 0;
+  uint32_t ofs = 1; // Reserve space for root node
 
   // Construct leaf node for each instance
   for(uint32_t i=0; i<inst_cnt; i++) {
-    tlas_node *n = &nodes[ofs + i];
-    n->min = instances[i].min;
-    n->max = instances[i].max;
-    n->children = 0;
-    n->inst = i;
-    node_indices[i] = ofs + i;
+    if(!(inst_info[i].state & IS_DISABLED))
+    {
+      tlas_node *n = &nodes[ofs + node_indices_cnt];
+      n->min = instances[i].min;
+      n->max = instances[i].max;
+      n->children = 0;
+      n->inst = i;
+      node_indices[node_indices_cnt] = ofs + node_indices_cnt;
+      node_indices_cnt++;
+    }
   }
 
   // Account for nodes so far
-  uint32_t node_cnt = ofs + inst_cnt;
+  uint32_t node_cnt = ofs + node_indices_cnt;
 
   // Bottom up combining of tlas nodes
   uint32_t a = 0;
@@ -71,7 +72,7 @@ void tlas_build(tlas_node *nodes, const inst *instances, uint32_t inst_cnt)
       // Each child node index gets 16 bits
       new_node->children = (idx_b << 16) | idx_a;
 
-      // Replace node A with newly created combined node
+      // ReplaceJonas Debbeler node A with newly created combined node
       node_indices[a] = node_cnt++;
 
       // Remove node B by replacing its slot with last node

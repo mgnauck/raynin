@@ -3,6 +3,7 @@
 #include "mutil.h"
 #include "vec3.h"
 #include "mtl.h"
+#include "inst.h"
 #include "scene.h"
 #include "renderer.h"
 #include "settings.h"
@@ -194,6 +195,8 @@ void init(uint32_t width, uint32_t height)
 
 void update_scene(scene *s, float time)
 {
+  static float last = 0;
+
   // Update camera
   if(orbit_cam) {
     float v = 0.5f;
@@ -205,14 +208,23 @@ void update_scene(scene *s, float time)
   }
 
   if(!paused) {
-    // Update instances
+    // Randomly enable/disable instances
+    if(time - last > 0.05f) {
+      uint32_t idx = 2 + (uint32_t)(pcg_randf() * (s->inst_cnt - 2));
+      if(scene_get_inst_state(s, idx) & IS_DISABLED)
+        scene_clr_inst_state(s, idx, IS_DISABLED);
+      else
+        scene_set_inst_state(s, idx, IS_DISABLED);
+      last = time;
+    }
+    // Move some instances
     mat4 translation;
     mat4_trans(translation, (vec3){ 4.0f, 2.0f + sinf(time * 0.6f), 0.0f });
-    scene_upd_inst(s, 1, -1, translation);
+    scene_upd_inst(s, 2, 2, translation);
     mat4_trans(translation, (vec3){ 0.0f, 2.0f + sinf(time * 0.6f + 0.6f), 0.0f });
-    scene_upd_inst(s, 2, -1, translation);
+    scene_upd_inst(s, 3, 3, translation);
     mat4_trans(translation, (vec3){ -4.0f, 2.0f + sinf(time * 0.6f + 1.2f), 0.0f });
-    scene_upd_inst(s, 3, -1, translation);
+    scene_upd_inst(s, 4, 4, translation);
   }
 }
 

@@ -90,7 +90,7 @@ void renderer_release(render_data *rd)
 
 void reset_samples(render_data *rd)
 {
-  rd->gathered_spp = 0; // TEMPORAL_WEIGHT * rd->spp;
+  rd->gathered_spp = TEMPORAL_WEIGHT * rd->gathered_spp;
 }
 
 void renderer_set_bg_col(render_data *rd, vec3 bg_col)
@@ -103,7 +103,7 @@ void push_mtls(render_data *rd)
 {
   scene *s = rd->scene;
   gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
-  scene_unset_dirty(s, RT_MTL);
+  scene_clr_dirty(s, RT_MTL);
 }
 
 void renderer_update_static(render_data *rd)
@@ -134,7 +134,7 @@ void renderer_update_static(render_data *rd)
     }
 #endif
   
-    scene_unset_dirty(s, RT_MESH);
+    scene_clr_dirty(s, RT_MESH);
   } 
  
   if(s->dirty & RT_MTL)
@@ -157,7 +157,7 @@ void renderer_update(render_data *rd, float time)
     view_calc(&s->view, rd->width, rd->height, &s->cam);
     gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, &s->cam, CAM_BUF_SIZE);
     gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_VIEW, &s->view, sizeof(s->view));
-    scene_unset_dirty(s, RT_CAM_VIEW);
+    scene_clr_dirty(s, RT_CAM_VIEW);
   }
 
   // Push materials
@@ -168,7 +168,7 @@ void renderer_update(render_data *rd, float time)
   if(rd->scene->dirty & RT_INST) {
     gpu_write_buf(BT_TLAS_NODE, 0, s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
     gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
-    scene_unset_dirty(s, RT_INST);
+    scene_clr_dirty(s, RT_INST);
   }
 
 #ifndef NATIVE_BUILD

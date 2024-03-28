@@ -10,18 +10,13 @@
 #include "settings.h"
 #include "tlas.h"
 
-typedef struct inst_state {
-  uint32_t  mesh_shape;
-  bool      dirty;
-} inst_state;
-
 void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt)
 {
   s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
   s->meshes       = malloc(mesh_cnt * sizeof(*s->meshes));
   s->bvhs         = malloc(mesh_cnt * sizeof(bvh));
   s->instances    = malloc(inst_cnt * sizeof(*s->instances));
-  s->inst_states  = malloc(inst_cnt * sizeof(*s->inst_states));
+  s->inst_info    = malloc(inst_cnt * sizeof(*s->inst_info));
   s->tlas_nodes   = malloc(2 * inst_cnt * sizeof(*s->tlas_nodes));
 
   s->mtl_cnt  = 0;
@@ -39,7 +34,7 @@ void scene_release(scene *s)
     mesh_release(&s->meshes[i]);
 
   free(s->tlas_nodes);
-  free(s->inst_states);
+  free(s->inst_info);
   free(s->instances);
   free(s->bvhs);
   free(s->meshes);
@@ -51,7 +46,7 @@ void scene_set_dirty(scene *s, res_type r)
   s->dirty |= r;
 }
 
-void scene_unset_dirty(scene *s, res_type r)
+void scene_clr_dirty(scene *s, res_type r)
 {
   s->dirty &= ~r;
 }
@@ -74,57 +69,58 @@ void scene_prepare_render(scene *s)
   // Update instances
   bool rebuild_tlas = false;
   for(uint32_t i=0; i<s->inst_cnt; i++) {
-    inst_state *state = &s->inst_states[i]; 
-    if(state->dirty) {
-      inst *inst = &s->instances[i];
-      
-      // Calc inverse transform
-      mat4 transform, inv_transform;
-      mat4_from_row3x4(transform, inst->transform);
-      mat4_inv(inv_transform, transform);
-      memcpy(inst->inv_transform, inv_transform, 12 * sizeof(float));
-  
-      aabb a = aabb_init();
-      vec3 mi, ma;
+    inst_info *info = &s->inst_info[i];
+    if(info->state & IS_DIRTY) {
+      if(!(info->state & IS_DISABLED)) {
+        inst *inst = &s->instances[i];
+        
+        // Calc inverse transform
+        mat4 transform, inv_transform;
+        mat4_from_row3x4(transform, inst->transform);
+        mat4_inv(inv_transform, transform);
+        memcpy(inst->inv_transform, inv_transform, 12 * sizeof(float));
+    
+        aabb a = aabb_init();
+        vec3 mi, ma;
 
-      if(inst->data & SHAPE_TYPE_BIT) {
-        // Shape type
-        if((inst->data & MESH_SHAPE_MASK) != ST_PLANE) {
-          // Box and sphere are of unit size
-          mi = (vec3){ -1.0f, -1.0f, -1.0f };
-          ma = (vec3){  1.0f,  1.0f,  1.0f };
+        if(inst->data & SHAPE_TYPE_BIT) {
+          // Shape type
+          if((inst->data & MESH_SHAPE_MASK) != ST_PLANE) {
+            // Box and sphere are of unit size
+            mi = (vec3){ -1.0f, -1.0f, -1.0f };
+            ma = (vec3){  1.0f,  1.0f,  1.0f };
+          } else {
+            // Plane is in XZ and has a default size
+            float P = 0.5f * PLANE_DEFAULT_SIZE;
+            mi = (vec3){ -P, -EPSILON, -P };
+            ma = (vec3){  P,  EPSILON,  P };
+          }
         } else {
-          // Plane is in XZ and has a default size
-          float P = 0.5f * PLANE_DEFAULT_SIZE;
-          mi = (vec3){ -P, -EPSILON, -P };
-          ma = (vec3){  P,  EPSILON,  P };
+          // Mesh type, use (object space) BVH root nodes
+          mi = s->bvhs[info->mesh_shape].nodes[0].min;
+          ma = s->bvhs[info->mesh_shape].nodes[0].max;
         }
-      } else {
-        // Mesh type, use (object space) BVH root nodes
-        mi = s->bvhs[state->mesh_shape].nodes[0].min;
-        ma = s->bvhs[state->mesh_shape].nodes[0].max;
+
+        // Transform instance aabb to world space
+        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, mi.y, mi.z }));
+        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, mi.y, mi.z }));
+        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, ma.y, mi.z }));
+        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, ma.y, mi.z }));
+        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, mi.y, ma.z }));
+        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, mi.y, ma.z }));
+        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, ma.y, ma.z }));
+        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, ma.y, ma.z }));
+
+        inst->min = a.min;
+        inst->max = a.max;
       }
-
-      // Transform instance aabb to world space
-      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, mi.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, mi.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, ma.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, ma.y, mi.z }));
-      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, mi.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, mi.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, ma.y, ma.z }));
-      aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, ma.y, ma.z }));
-
-      inst->min = a.min;
-      inst->max = a.max;
-
-      state->dirty = false;
+      info->state &= ~IS_DIRTY;
       rebuild_tlas = true;
     }
   }
 
   if(rebuild_tlas) {
-    tlas_build(s->tlas_nodes, s->instances, s->inst_cnt);
+    tlas_build(s->tlas_nodes, s->instances, s->inst_info, s->inst_cnt);
     scene_set_dirty(s, RT_INST);
   }
 }
@@ -143,13 +139,13 @@ void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
 
 uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
 {
-  inst_state *inst_state = &s->inst_states[s->inst_cnt];
-  inst_state->mesh_shape = mesh_shape;
-  inst_state->dirty = true;
+  inst_info *info = &s->inst_info[s->inst_cnt];
+  info->mesh_shape = mesh_shape;
+  info->state = IS_DIRTY;
 
   inst *inst = &s->instances[s->inst_cnt];
   // Lowest 16 bits are instance id, i.e. max 65536 instances
-  inst->id = (s->inst_cnt & INST_ID_MASK);
+  inst->id = s->inst_cnt & INST_ID_MASK;
 
 #ifndef NATIVE_BUILD
   // Lowest 30 bits are shape type (if bit 31 is set) or
@@ -196,7 +192,22 @@ void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
     inst->data = inst->data & INST_DATA_MASK;
 
   memcpy(s->instances[inst_id].transform, transform, 12 * sizeof(float));
-  s->inst_states[inst_id].dirty = true;
+  s->inst_info[inst_id].state |= IS_DIRTY;
+}
+
+void scene_set_inst_state(scene *s, uint32_t inst_id, uint32_t state)
+{
+  s->inst_info[inst_id].state |= state | IS_DIRTY;
+}
+
+void scene_clr_inst_state(scene *s, uint32_t inst_id, uint32_t state)
+{
+  s->inst_info[inst_id].state = (s->inst_info[inst_id].state & ~state) | IS_DIRTY;
+}
+
+uint32_t scene_get_inst_state(scene *s, uint32_t inst_id)
+{
+  return s->inst_info[inst_id].state;
 }
 
 void update_data_ofs(scene *s, mesh *m)

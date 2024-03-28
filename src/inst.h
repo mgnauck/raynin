@@ -10,6 +10,16 @@
 #define MTL_OVERRIDE_BIT  0x80000000
 #define INST_DATA_MASK    0x7fffffff
 
+typedef enum inst_state {
+  IS_DISABLED = 1,
+  IS_DIRTY    = 2
+} inst_state;
+
+typedef struct inst_info {
+  uint32_t  mesh_shape;
+  uint32_t  state;
+} inst_info;
+
 // inst.data:
 // If bit 31 is set, then the instance is a shape (SHAPE_TYPE_BIT).
 // If bit 31 is not set, then it is a mesh.
