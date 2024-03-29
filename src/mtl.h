@@ -2,6 +2,7 @@
 #define MTL_H
 
 #include "vec3.h"
+#include <stdbool.h>
 
 #define MTL_TYPE_MASK   0xf
 
@@ -19,10 +20,12 @@ typedef struct mtl {
   uint32_t  flags;      // Lowest 4 bits are mtl_type 
 } mtl;
 
-// Random materials
-mtl mtl_create_lambert();
-mtl mtl_create_metal();
-mtl mtl_create_dielectric();
-mtl mtl_create_emissive();
+bool  mtl_is_emissive(const mtl *mtl);
+
+// Generate random materials
+mtl   mtl_create_lambert();
+mtl   mtl_create_metal();
+mtl   mtl_create_dielectric();
+mtl   mtl_create_emissive();
 
 #endif

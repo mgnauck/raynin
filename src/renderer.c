@@ -237,8 +237,9 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
               mtl_id = inst->id >> 16;
             }
             nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
-            c = vec3_mul(nrm, rd->scene->mtls[mtl_id].color);
-            //c = rd->scene->mtls[mtl_id].color;
+            mtl *m = &rd->scene->mtls[mtl_id];
+            c = mtl_is_emissive(m) ? m->emission : m->color;
+            //c = vec3_mul(nrm, c); 
             //c = nrm;
           }
           uint32_t index = rd->width * (j + y) + (i + x);

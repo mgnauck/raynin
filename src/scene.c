@@ -9,8 +9,9 @@
 #include "inst.h"
 #include "settings.h"
 #include "tlas.h"
+#include "log.h"
 
-void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt)
+void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt, uint32_t ltri_cnt)
 {
   s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
   s->meshes       = malloc(mesh_cnt * sizeof(*s->meshes));
@@ -18,11 +19,13 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt
   s->instances    = malloc(inst_cnt * sizeof(*s->instances));
   s->inst_info    = malloc(inst_cnt * sizeof(*s->inst_info));
   s->tlas_nodes   = malloc(2 * inst_cnt * sizeof(*s->tlas_nodes));
+  s->ltris        = malloc(ltri_cnt * sizeof(*s->ltris));
 
   s->mtl_cnt  = 0;
   s->mesh_cnt = 0;
   s->bvh_cnt  = 0;
   s->inst_cnt = 0;
+  s->ltri_cnt = 0;
   s->curr_ofs = 0;
 
   scene_set_dirty(s, RT_CAM_VIEW);
@@ -34,6 +37,7 @@ void scene_release(scene *s)
     mesh_release(&s->meshes[i]);
 
   free(s->tlas_nodes);
+  free(s->ltris);
   free(s->inst_info);
   free(s->instances);
   free(s->bvhs);
@@ -64,13 +68,42 @@ void scene_build_bvhs(scene *s)
   }
 }
 
+void build_ltris(inst *inst, inst_info *info)
+{
+  // Build ltris per instance
+}
+
+void update_ltris(inst *inst, inst_info *info)
+{
+  // Update ltris of an instance if transform changed
+}
+
+#include <SDL.h>
+
 void scene_prepare_render(scene *s)
 {
+  uint64_t start = SDL_GetTicks64();
+
   // Update instances
   bool rebuild_tlas = false;
+  bool rebuild_ltris = false;
   for(uint32_t i=0; i<s->inst_cnt; i++) {
     inst_info *info = &s->inst_info[i];
-    if(info->state & IS_DIRTY) {
+    // Check for emissive instances which have a dirty material, i.e. require a ltri rebuild
+    if(!rebuild_ltris && (info->state & IS_MTL_DIRTY) &&
+        ((info->state & IS_EMISSIVE) || (info->state & IS_WAS_EMISSIVE))) {
+      // Reset ltri cnt to current instance ltri offset (ltris of previous instances are still valid)
+      s->ltri_cnt = info->ltri_ofs;
+      // Start rebuilding ltris for this and all subsequent emissive instances
+      rebuild_ltris = true;
+      ///logc("Inst %d and all subsequent need ltri rebuild if not disabled", i);
+    }
+    // Check if an ltri rebuild was triggered by this or some earlier instance
+    if(rebuild_ltris && (info->state & IS_EMISSIVE) && !(info->state & IS_DISABLED)) {
+      build_ltris(&s->instances[i], info);
+      ///logc("Built ltris for inst %d", i);
+    }
+    if(info->state & IS_TRANS_DIRTY) {
       if(!(info->state & IS_DISABLED)) {
         inst *inst = &s->instances[i];
         
@@ -113,16 +146,31 @@ void scene_prepare_render(scene *s)
 
         inst->min = a.min;
         inst->max = a.max;
+
+        // Update transformation of existing ltris for this instance
+        if(!rebuild_ltris && (info->state & IS_EMISSIVE)) {
+          update_ltris(inst, info);
+          ///logc("Updated ltris transformation for inst %d", i);
+        }
       }
-      info->state &= ~IS_DIRTY;
+      info->state &= ~IS_TRANS_DIRTY;
       rebuild_tlas = true;
     }
+    info->state &= ~(IS_MTL_DIRTY | IS_WAS_EMISSIVE);
   }
+
+  uint64_t inst_upd_end = SDL_GetTicks64();
 
   if(rebuild_tlas) {
     tlas_build(s->tlas_nodes, s->instances, s->inst_info, s->inst_cnt);
     scene_set_dirty(s, RT_INST);
   }
+
+  uint64_t tlas_upd_end = SDL_GetTicks64();
+
+  ///logc("Inst update took: %ld", inst_upd_end - start);
+  ///logc("Tlas update took: %ld", tlas_upd_end - inst_upd_end);
+  ///logc("Full update took: %ld", tlas_upd_end - start);
 }
 
 uint32_t scene_add_mtl(scene *s, mtl *mtl)
@@ -131,6 +179,7 @@ uint32_t scene_add_mtl(scene *s, mtl *mtl)
   return s->mtl_cnt++;
 }
 
+// TODO Material updates can trigger light tri changes :(
 void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
 {
   memcpy(&s->mtls[mtl_id], mtl, sizeof(*s->mtls));
@@ -141,7 +190,8 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
 {
   inst_info *info = &s->inst_info[s->inst_cnt];
   info->mesh_shape = mesh_shape;
-  info->state = IS_DIRTY;
+  info->state = IS_TRANS_DIRTY | IS_MTL_DIRTY;
+  info->ltri_ofs = 0;
 
   inst *inst = &s->instances[s->inst_cnt];
   // Lowest 16 bits are instance id, i.e. max 65536 instances
@@ -158,7 +208,8 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
 #endif
 
   // Set transform and mtl override id to instance
-  scene_upd_inst(s, s->inst_cnt, mtl_id, transform);
+  scene_upd_inst_trans(s, s->inst_cnt, transform);
+  scene_upd_inst_mtl(s, s->inst_cnt, mtl_id);
 
   return s->inst_cnt++;
 }
@@ -176,33 +227,65 @@ uint32_t scene_add_inst_shape(scene *s, shape_type shape, uint16_t mtl_id, mat4 
   return add_inst(s, SHAPE_TYPE_BIT | (shape & MESH_SHAPE_MASK), mtl_id, transform);
 }
 
-void scene_upd_inst(scene *s, uint32_t inst_id, int32_t mtl_id, mat4 transform)
+void scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform)
+{
+  memcpy(s->instances[inst_id].transform, transform, 12 * sizeof(float));
+  s->inst_info[inst_id].state |= IS_TRANS_DIRTY;
+}
+
+void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
 {
   inst *inst = &s->instances[inst_id];
+  inst_info *info = &s->inst_info[inst_id];
 
-  // No material override if mtl id < 0
+  if(info->state & IS_EMISSIVE)
+    info->state |= IS_WAS_EMISSIVE;
+
+  // Mtl override if mtl_id >= 0
   if(mtl_id >= 0) {
     // Highest 16 bits are mtl override id, i.e. max 65536 materials
     inst->id = (mtl_id << 16) | (inst->id & INST_ID_MASK);
+    
     // Set highest bit to enable the material override
     inst->data |= MTL_OVERRIDE_BIT;
-  }
-  else if(!(inst->data & SHAPE_TYPE_BIT))
-    // Only for mesh types: Clear material override bit
-    inst->data = inst->data & INST_DATA_MASK;
 
-  memcpy(s->instances[inst_id].transform, transform, 12 * sizeof(float));
-  s->inst_info[inst_id].state |= IS_DIRTY;
+    // Flag mesh instance if override material is emissive
+    if(!(inst->data & SHAPE_TYPE_BIT)) {
+      if(mtl_is_emissive(&s->mtls[mtl_id]))
+        info->state |= IS_EMISSIVE;
+      else
+        info->state &= ~IS_EMISSIVE;
+    }
+  }
+  // Reset mtl override (for mesh types only)
+  else if(!(inst->data & SHAPE_TYPE_BIT)) {
+    inst->data = inst->data & INST_DATA_MASK;
+    
+    // Flag instance if mesh is emissive
+    if(s->meshes[info->mesh_shape].is_emissive)
+      info->state |= IS_EMISSIVE;
+    else
+      info->state &= ~IS_EMISSIVE;
+  }
+
+  s->inst_info[inst_id].state |= IS_MTL_DIRTY;
 }
 
 void scene_set_inst_state(scene *s, uint32_t inst_id, uint32_t state)
 {
-  s->inst_info[inst_id].state |= state | IS_DIRTY;
+  // Set new state and trigger transformation and material updates
+  s->inst_info[inst_id].state |= state | IS_TRANS_DIRTY | IS_MTL_DIRTY;
+
+  ///logc("Set inst state for %d", inst_id);
 }
 
 void scene_clr_inst_state(scene *s, uint32_t inst_id, uint32_t state)
 {
-  s->inst_info[inst_id].state = (s->inst_info[inst_id].state & ~state) | IS_DIRTY;
+  // Set new state and trigger transformation and material updates
+  s->inst_info[inst_id].state =
+    (s->inst_info[inst_id].state & ~state) | IS_TRANS_DIRTY | IS_MTL_DIRTY;
+
+  ///logc("Cleared inst state for %d", inst_id);
 }
 
 uint32_t scene_get_inst_state(scene *s, uint32_t inst_id)
@@ -210,10 +293,17 @@ uint32_t scene_get_inst_state(scene *s, uint32_t inst_id)
   return s->inst_info[inst_id].state;
 }
 
-void update_data_ofs(scene *s, mesh *m)
+void finalize_mesh(scene *s, mesh *m, uint32_t mtl_id)
 {
+  // Set and update offset into tri buffer
   m->ofs = s->curr_ofs;
   s->curr_ofs += m->tri_cnt;
+
+  // Set flag for emissive material
+  m->is_emissive = mtl_is_emissive(&s->mtls[mtl_id]);
+
+  // Flag to trigger bvh calculation
+  scene_set_dirty(s, RT_MESH);
 }
 
 uint32_t scene_add_quad(scene *s, uint32_t subx, uint32_t suby, uint32_t mtl)
@@ -263,8 +353,7 @@ uint32_t scene_add_quad(scene *s, uint32_t subx, uint32_t suby, uint32_t mtl)
     z += dz;
   }
 
-  update_data_ofs(s, m);
-  scene_set_dirty(s, RT_MESH);
+  finalize_mesh(s, m, mtl);
   return s->mesh_cnt++;
 }
 
@@ -354,8 +443,7 @@ uint32_t scene_add_icosphere(scene *s, uint8_t steps, uint32_t mtl, bool faceNor
 #endif
   }
 
-  update_data_ofs(s, m);
-  scene_set_dirty(s, RT_MESH);
+  finalize_mesh(s, m, mtl);
   return s->mesh_cnt++;
 }
 
@@ -429,8 +517,7 @@ uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby
     theta += dtheta;
   }
 
-  update_data_ofs(s, m);
-  scene_set_dirty(s, RT_MESH);
+  finalize_mesh(s, m, mtl);
   return s->mesh_cnt++;
 }
 
@@ -511,8 +598,7 @@ uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t sub
     h += dh;
   }
 
-  update_data_ofs(s, m);
-  scene_set_dirty(s, RT_MESH);
+  finalize_mesh(s, m, mtl);
   return s->mesh_cnt++;
 }
 
@@ -573,7 +659,6 @@ uint32_t scene_add_mesh(scene *s, const uint8_t *data, uint32_t mtl, bool faceNo
     m->centers[i] = tri_calc_center(t);
   }
 
-  update_data_ofs(s, m);
-  scene_set_dirty(s, RT_MESH);
+  finalize_mesh(s, m, mtl);
   return s->mesh_cnt++;
 }

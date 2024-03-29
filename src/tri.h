@@ -28,6 +28,20 @@ typedef struct tri {
 #endif
 } tri;
 
+// Light tri
+typedef struct ltri {
+  vec3      v0;
+  uint32_t  inst_id;
+  vec3      v1;
+  float     area;
+  vec3      v2;
+  float     pad0;
+  vec3      nrm;
+  float     pad1;
+  vec3      emission;
+  float     pad2;
+} ltri;
+
 vec3 tri_calc_center(tri *t);
 
 #endif

@@ -11,12 +11,17 @@
 #define INST_DATA_MASK    0x7fffffff
 
 typedef enum inst_state {
-  IS_DISABLED = 1,
-  IS_DIRTY    = 2
+  IS_DISABLED     = 1,
+  IS_DIRTY        = 2,
+  IS_TRANS_DIRTY  = 4,
+  IS_MTL_DIRTY    = 8,
+  IS_EMISSIVE     = 16,
+  IS_WAS_EMISSIVE = 32
 } inst_state;
 
 typedef struct inst_info {
   uint32_t  mesh_shape;
+  uint32_t  ltri_ofs;
   uint32_t  state;
 } inst_info;
 

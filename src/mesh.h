@@ -11,6 +11,7 @@ typedef struct mesh {
   uint32_t  tri_cnt;
   tri       *tris;
   vec3      *centers;
+  bool      is_emissive;
   uint32_t  ofs;
 } mesh;
 

@@ -1,6 +1,12 @@
 #include "mtl.h"
 #include "mutil.h"
 
+bool mtl_is_emissive(const mtl *mtl)
+{
+  return (mtl->flags & 0xf) == MT_EMISSIVE;
+  //return mtl->emission.x > 0.0f || mtl->emission.y > 0.0f || mtl->emission.z > 0.0f;
+}
+
 mtl mtl_create_lambert()
 {
   return (mtl){
