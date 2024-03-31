@@ -33,15 +33,18 @@ typedef struct ltri {
   vec3      v0;
   uint32_t  inst_id;
   vec3      v1;
-  float     area;
+  uint32_t  tri_id;
   vec3      v2;
-  float     pad0;
+  float     area;
   vec3      nrm;
   float     pad1;
   vec3      emission;
   float     pad2;
 } ltri;
 
-vec3 tri_calc_center(tri *t);
+vec3  tri_calc_center(tri *t);
+float tri_calc_area(vec3 v0, vec3 v1, vec3 v2);
+
+void  tri_build_ltri(ltri *lt, const tri *t, uint32_t inst_id, uint32_t tri_id, float transform[12], vec3 emission);
 
 #endif

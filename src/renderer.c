@@ -28,6 +28,7 @@
 typedef enum buf_type {
   BT_GLOB = 0,
   BT_TRI,
+  BT_LTRI,
   BT_INDEX,
   BT_BVH_NODE,
   BT_TLAS_NODE,
@@ -47,7 +48,7 @@ typedef struct render_data {
 
 #ifndef NATIVE_BUILD
 
-extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz,
+extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz, uint32_t ltri_sz,
     uint32_t index_sz, uint32_t bvh_node_sz, uint32_t tlas_node_sz, uint32_t inst_sz,
     uint32_t mtl_sz);
 
@@ -61,11 +62,13 @@ extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
 
 #endif
 
-void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
+void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
+    uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
-  gpu_create_res(GLOB_BUF_SZ, total_tri_cnt * sizeof(tri), total_tri_cnt * sizeof(uint32_t),
-      2 * total_tri_cnt * sizeof(bvh_node), 2 * total_inst_cnt * sizeof(tlas_node),
-      total_inst_cnt * sizeof(inst), total_mtl_cnt * sizeof(mtl));
+  gpu_create_res(GLOB_BUF_SZ, total_tri_cnt * sizeof(tri), total_ltri_cnt * sizeof(ltri),
+      total_tri_cnt * sizeof(uint32_t), 2 * total_tri_cnt * sizeof(bvh_node),
+      2 * total_inst_cnt * sizeof(tlas_node), total_inst_cnt * sizeof(inst),
+      total_mtl_cnt * sizeof(mtl));
 }
 
 render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t spp)
@@ -106,6 +109,13 @@ void push_mtls(render_data *rd)
   scene_clr_dirty(s, RT_MTL);
 }
 
+void push_ltris(render_data *rd)
+{
+  scene *s = rd->scene;
+  gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
+  scene_clr_dirty(s, RT_LTRI);
+}
+
 void renderer_update_static(render_data *rd)
 {
   scene *s = rd->scene;
@@ -139,6 +149,9 @@ void renderer_update_static(render_data *rd)
  
   if(s->dirty & RT_MTL)
     push_mtls(rd);
+
+  if(rd->scene->dirty & RT_LTRI)
+    push_ltris(rd);
 }
 
 void renderer_update(render_data *rd, float time)
@@ -163,6 +176,10 @@ void renderer_update(render_data *rd, float time)
   // Push materials
   if(rd->scene->dirty & RT_MTL)
     push_mtls(rd);
+
+  // Push ltris
+  if(rd->scene->dirty & RT_LTRI)
+    push_ltris(rd);
 
   // Push TLAS and instances
   if(rd->scene->dirty & RT_INST) {

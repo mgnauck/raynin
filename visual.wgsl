@@ -95,6 +95,20 @@ struct Tri
 //#endif
 }
 
+struct LTri
+{
+  v0:       vec3f,
+  instId:   u32,
+  v1:       vec3f,
+  triId:    u32,          // Original tri id of the mesh (w/o inst data ofs)
+  v2:       vec3f,
+  area:     f32,
+  nrm:      vec3f,
+  pad0:     f32,
+  emission: vec3f,
+  pad1:     f32
+}
+
 struct Inst
 {
   transform:    mat3x4f,
@@ -129,7 +143,7 @@ const MT_DIELECTRIC       = 2u;
 const MT_EMISSIVE         = 3u;
 
 // Interaction flags
-const IA_BACKFACE           = 1u;
+const IA_BACKFACE         = 1u;
 const IA_SPECULAR         = 2u;
 
 // Math constants
@@ -141,12 +155,13 @@ const MAX_INTENSITY       = 3.0;  // Value for intensity clamping, will need tri
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
-@group(0) @binding(2) var<storage, read> indices: array<u32>;
-@group(0) @binding(3) var<storage, read> bvhNodes: array<BvhNode>;
-@group(0) @binding(4) var<storage, read> tlasNodes: array<TlasNode>;
-@group(0) @binding(5) var<storage, read> instances: array<Inst>;
-@group(0) @binding(6) var<storage, read> materials: array<Mtl>;
-@group(0) @binding(7) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(2) var<storage, read> ltris: array<LTri>;
+@group(0) @binding(3) var<storage, read> indices: array<u32>;
+@group(0) @binding(4) var<storage, read> bvhNodes: array<BvhNode>;
+@group(0) @binding(5) var<storage, read> tlasNodes: array<TlasNode>;
+@group(0) @binding(6) var<storage, read> instances: array<Inst>;
+@group(0) @binding(7) var<storage, read> materials: array<Mtl>;
+@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
 var<private> bvhNodeStack: array<u32, 32>;
 var<private> tlasNodeStack: array<u32, 32>;

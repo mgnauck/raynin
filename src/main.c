@@ -20,7 +20,7 @@
 
 #define RIOW_SIZE   22
 #define TRI_CNT     1280 + 600
-#define LTRI_CNT    20
+#define LTRI_CNT    2
 #define MESH_CNT    3
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 3)
 #define MTL_CNT     INST_CNT
@@ -102,7 +102,7 @@ void init_scene_riow(scene *s)
   // Light mesh
   mtl m = mtl_create_emissive();
   mtl_id = scene_add_mtl(s, &m);
-  uint16_t lid = scene_add_quad(s, 10, 10, mtl_id);
+  uint16_t lid = scene_add_quad(s, 1, 1, mtl_id);
 
   // Sphere mesh
   uint16_t sid = scene_add_uvsphere(s, 1.0f, 20, 20, mtl_id, false);
@@ -144,15 +144,6 @@ void init_scene_riow(scene *s)
   //scene_add_inst_shape(s, ST_SPHERE, 1, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
 
-  // tm1
-  mat4_scale(scale, 0.5f);
-  mat4_rot_x(rotation, PI);
-  mat4_mul(transform, scale, rotation);
-  mat4_trans(translation, (vec3){ -10.0f, 5.0f, 0.0f });
-  mat4_mul(transform, translation, transform);
-  scene_add_inst_mesh(s, lid, -1, transform);
-  // tm1
-
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   m = mtl_create_lambert();
   m.color = (vec3){ 0.1f, 0.2f, 0.4f };
@@ -185,14 +176,6 @@ void init_scene_riow(scene *s)
       }
     }
   }
-
-  // tm2
-  mat4_scale(scale, 0.5f);
-  mat4_rot_x(rotation, PI);
-  mat4_mul(transform, scale, rotation);
-  mat4_trans(translation, (vec3){ 10.0f, 5.0f, 0.0f });
-  mat4_mul(transform, translation, transform);
-  scene_add_inst_mesh(s, lid, -1, transform);
 }
 
 __attribute__((visibility("default")))
@@ -202,7 +185,7 @@ void init(uint32_t width, uint32_t height)
 
   init_scene_riow(cs);
 
-  renderer_gpu_alloc(TRI_CNT, MTL_CNT, INST_CNT);
+  renderer_gpu_alloc(TRI_CNT, LTRI_CNT, MTL_CNT, INST_CNT);
 
   rd = renderer_init(cs, width, height, 2);
   renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
@@ -210,11 +193,10 @@ void init(uint32_t width, uint32_t height)
   //renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
   renderer_update_static(rd);
 }
-#include "log.h"
+
 void update_scene(scene *s, float time)
 {
   static float last = 0;
-  static bool tog = false;
 
   // Update camera
   if(orbit_cam) {
@@ -227,7 +209,6 @@ void update_scene(scene *s, float time)
   }
 
   if(!paused) {
-    /*
     // Randomly enable/disable instances
     if(time - last > 0.05f) {
       uint32_t idx = 2 + (uint32_t)(pcg_randf() * (s->inst_cnt - 2));
@@ -245,18 +226,6 @@ void update_scene(scene *s, float time)
     scene_upd_inst_trans(s, 3, translation);
     mat4_trans(translation, (vec3){ -4.0f, 2.0f + sinf(time * 0.6f + 1.2f), 0.0f });
     scene_upd_inst_trans(s, 4, translation);
-    */
-
-    if(time - last > 1.0f) {
-      if(!tog)
-        scene_set_inst_state(s, 4, IS_DISABLED);
-      else
-        scene_clr_inst_state(s, 4, IS_DISABLED);
-      mat4 translation;
-      mat4_identity(translation);
-      scene_upd_inst_trans(s, 0, translation);
-      tog = !tog;
-    }
   }
 }
 

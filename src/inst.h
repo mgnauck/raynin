@@ -12,16 +12,16 @@
 
 typedef enum inst_state {
   IS_DISABLED     = 1,
-  IS_DIRTY        = 2,
-  IS_TRANS_DIRTY  = 4,
-  IS_MTL_DIRTY    = 8,
-  IS_EMISSIVE     = 16,
-  IS_WAS_EMISSIVE = 32
+  IS_TRANS_DIRTY  = 2,
+  IS_MTL_DIRTY    = 4,
+  IS_EMISSIVE     = 8,
+  IS_WAS_EMISSIVE = 16
 } inst_state;
 
 typedef struct inst_info {
   uint32_t  mesh_shape;
   uint32_t  ltri_ofs;
+  uint32_t  ltri_cnt;
   uint32_t  state;
 } inst_info;
 

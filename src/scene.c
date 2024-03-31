@@ -68,45 +68,98 @@ void scene_build_bvhs(scene *s)
   }
 }
 
-void build_ltris(inst *inst, inst_info *info)
+void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
 {
-  // Build ltris per instance
+  mesh *m = &s->meshes[info->mesh_shape];
+  uint32_t tri_cnt = m->tri_cnt;
+  tri *tris = m->tris;
+  uint32_t ltri_cnt = 0;
+
+  if(inst->data & MTL_OVERRIDE_BIT) {
+    // Material override applys for all tris, create ltri for each of them
+    for(uint32_t i=0; i<tri_cnt; i++) {
+      tri *t = &tris[i];
+      tri_build_ltri(&s->ltris[ltri_ofs + ltri_cnt++], &tris[i],
+          inst->id & 0xffff, i, inst->transform,
+          s->mtls[t->mtl & 0xffff].emission);
+    }
+  } else {
+    // Create ltris for emissive tris of the mesh
+    for(uint32_t i=0; i<tri_cnt; i++) {
+      tri *t = &tris[i];
+      mtl *mtl = &s->mtls[t->mtl & 0xffff];
+      if(mtl_is_emissive(mtl))
+        tri_build_ltri(&s->ltris[ltri_ofs + ltri_cnt++], t,
+            inst->id & 0xffff, i, inst->transform, mtl->emission);
+    }
+  }
+
+  // Remember for future updates
+  info->ltri_ofs = ltri_ofs;
+  info->ltri_cnt = ltri_cnt;
+
+  scene_set_dirty(s, RT_LTRI);
 }
 
-void update_ltris(inst *inst, inst_info *info)
+void update_ltris(scene *s, inst *inst, inst_info *info)
 {
-  // Update ltris of an instance if transform changed
-}
+  tri *tris = s->meshes[info->mesh_shape].tris;
+  for(uint32_t i=0; i<info->ltri_cnt; i++) {
+    mat4 trans;
+    mat4_from_row3x4(trans, inst->transform);
 
-#include <SDL.h>
+    // TODO Check if product from current transform and previous inverse is
+    // faster than fetching the original triangle data
+    ltri *lt = &s->ltris[info->ltri_ofs + i];
+    tri *t = &tris[lt->tri_id];
+    
+    lt->v0 = mat4_mul_pos(trans, t->v0);
+    lt->v1 = mat4_mul_pos(trans, t->v1);
+    lt->v2 = mat4_mul_pos(trans, t->v2);
+  
+    lt->nrm = mat4_mul_dir(trans, t->n0);
+    
+    lt->area = tri_calc_area(lt->v0, lt->v1, lt->v2);
+  }
+
+  scene_set_dirty(s, RT_LTRI);
+}
 
 void scene_prepare_render(scene *s)
 {
-  uint64_t start = SDL_GetTicks64();
+  ///uint64_t start = SDL_GetTicks64();
 
   // Update instances
   bool rebuild_tlas = false;
   bool rebuild_ltris = false;
+  uint32_t ltri_cnt = 0;
   for(uint32_t i=0; i<s->inst_cnt; i++) {
     inst_info *info = &s->inst_info[i];
-    // Check for emissive instances which have a dirty material, i.e. require a ltri rebuild
+    bool disabled = info->state & IS_DISABLED;
+    bool emissive = info->state & IS_EMISSIVE; 
+    
+    // Reset ltri ofs/cnt for disabled instances
+    if(disabled)
+      info->ltri_ofs = info->ltri_cnt = 0;
+    
+    // Start rebuilding all ltris once we hit the first dirty emissive or
+    // previously emissive instance
     if(!rebuild_ltris && (info->state & IS_MTL_DIRTY) &&
-        ((info->state & IS_EMISSIVE) || (info->state & IS_WAS_EMISSIVE))) {
-      // Reset ltri cnt to current instance ltri offset (ltris of previous instances are still valid)
-      s->ltri_cnt = info->ltri_ofs;
-      // Start rebuilding ltris for this and all subsequent emissive instances
+        (emissive || (info->state & IS_WAS_EMISSIVE)))
       rebuild_ltris = true;
-      ///logc("Inst %d and all subsequent need ltri rebuild if not disabled", i);
-    }
-    // Check if an ltri rebuild was triggered by this or some earlier instance
-    if(rebuild_ltris && (info->state & IS_EMISSIVE) && !(info->state & IS_DISABLED)) {
-      build_ltris(&s->instances[i], info);
-      ///logc("Built ltris for inst %d", i);
-    }
+
+    // Check if we are rebuilding ltris 
+    if(rebuild_ltris && emissive && !disabled)
+      build_ltris(s, &s->instances[i], info, ltri_cnt);
+
     if(info->state & IS_TRANS_DIRTY) {
-      if(!(info->state & IS_DISABLED)) {
+      if(!disabled) {
         inst *inst = &s->instances[i];
-        
+ 
+        // Update transformation of existing ltris for this instance
+        if(!rebuild_ltris && (info->state & IS_EMISSIVE))
+          update_ltris(s, inst, info);
+
         // Calc inverse transform
         mat4 transform, inv_transform;
         mat4_from_row3x4(transform, inst->transform);
@@ -146,27 +199,26 @@ void scene_prepare_render(scene *s)
 
         inst->min = a.min;
         inst->max = a.max;
-
-        // Update transformation of existing ltris for this instance
-        if(!rebuild_ltris && (info->state & IS_EMISSIVE)) {
-          update_ltris(inst, info);
-          ///logc("Updated ltris transformation for inst %d", i);
-        }
       }
+
       info->state &= ~IS_TRANS_DIRTY;
       rebuild_tlas = true;
     }
+
     info->state &= ~(IS_MTL_DIRTY | IS_WAS_EMISSIVE);
+    ltri_cnt += info->ltri_cnt;
   }
 
-  uint64_t inst_upd_end = SDL_GetTicks64();
+  s->ltri_cnt = ltri_cnt;
+
+  ///uint64_t inst_upd_end = SDL_GetTicks64();
 
   if(rebuild_tlas) {
     tlas_build(s->tlas_nodes, s->instances, s->inst_info, s->inst_cnt);
     scene_set_dirty(s, RT_INST);
   }
 
-  uint64_t tlas_upd_end = SDL_GetTicks64();
+  ///uint64_t tlas_upd_end = SDL_GetTicks64();
 
   ///logc("Inst update took: %ld", inst_upd_end - start);
   ///logc("Tlas update took: %ld", tlas_upd_end - inst_upd_end);
@@ -192,6 +244,7 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
   info->mesh_shape = mesh_shape;
   info->state = IS_TRANS_DIRTY | IS_MTL_DIRTY;
   info->ltri_ofs = 0;
+  info->ltri_cnt = 0;
 
   inst *inst = &s->instances[s->inst_cnt];
   // Lowest 16 bits are instance id, i.e. max 65536 instances
