@@ -876,20 +876,25 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
   }
 }
 
-fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
+// https://mathworld.wolfram.com/TrianglePointPicking.html
+fn rand3Barycentric(a: vec3f, b: vec3f, c: vec3f) -> vec3f
 {
-  // TODO
-  // - add light tris
-  // - on multiple lights, sample one random light
-  // - exclude the light if it was previously hit
-  // - skew random light selection by light importance (area*power)
-  // - add MIS
+  var r = rand();
+  var s = rand();
+  // TODO Do w/o condition
+  if(r + s >= 1.0) {
+    r = 1.0 - r;
+    s = 1.0 - s;
+  }
+  return a + r * (b - a) + s * (c - a);
+}
 
-  // Find random point on light surface
-  let lightNrm = vec3f(0.0, -1.0, 0.0);
-  var lightDir = vec3f(-2.5 + 5.0 * rand(), 5.0, -2.5 + 5.0 * rand()) - (*ia).pos;
+fn sampleLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, pdf: ptr<function, f32>) -> vec3f
+{
+  // Find random point on light surface and calc light dir
+  var lightDir = rand3Barycentric((*ltri).v0, (*ltri).v1, (*ltri).v2) - (*ia).pos;
 
-  if(dot(lightDir, lightNrm) > EPSILON) {
+  if(dot(lightDir, (*ltri).nrm) > EPSILON) {
     // Light is facing away
     (*pdf) = 0.0;
     return vec3f(0);
@@ -910,22 +915,28 @@ fn sampleLight(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 
   // Account for single ray in direction of light
   // pdf is 1 / solid angle subtended by the light (light area projected on unit hemisphere)
-  *pdf = (dist * dist) / (/* light area */ 25.0 * dot(-lightDir, lightNrm));
+  *pdf = (dist * dist) / ((*ltri).area * dot(-lightDir, (*ltri).nrm));
 
   // Light emission
-  return vec3f(1.6);
+  return (*ltri).emission;
 }
 
 fn sampleAndEvalLight(ia: ptr<function, IA>) -> vec3f
 {
+  // TODO
+  // - skew random light selection by light importance (area*power)
+  // - add MIS
+ 
   // Current material is specular
   if(((*ia).mtl.flags & MTL_TYPE_MASK) != MT_LAMBERT) {
     return vec3f(0);
   }
 
+  // Randomly sample one light tri (currently with uniform distribution)
   var pdf: f32;
-  let emission = sampleLight(ia, &pdf);
-  return select(vec3f(0), evalMaterial(ia) * emission / pdf, pdf > EPSILON && any(emission > vec3f(EPSILON)));
+  let ltriCnt = arrayLength(&ltris);
+  let emission = sampleLightTri(ia, &ltris[u32(rand() * f32(ltriCnt))], &pdf);
+  return select(vec3f(0), f32(ltriCnt) * evalMaterial(ia) * emission / pdf, pdf > EPSILON);
 }
 
 fn render(initialRay: Ray) -> vec3f
@@ -1031,7 +1042,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let index = globals.width * globalId.y + globalId.x;
-  rngState = index ^ u32(globals.rngSeed * 0xffffffff); 
+  rngState = index ^ u32(globals.rngSeed * 0xffffffff);
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {

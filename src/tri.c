@@ -26,7 +26,7 @@ void tri_build_ltri(ltri *lt, const tri *t, uint32_t inst_id, uint32_t tri_id, f
   lt->v2 = mat4_mul_pos(trans, t->v2);
   
   // Assumes that emissive triangles have face normals, i.e. n0=n1=n2
-  lt->nrm = mat4_mul_dir(trans, t->n0);
+  lt->nrm = vec3_unit(mat4_mul_dir(trans, t->n0));
   
   lt->inst_id = inst_id;
   lt->tri_id = tri_id;

@@ -209,6 +209,7 @@ void update_scene(scene *s, float time)
   }
 
   if(!paused) {
+    /*
     // Randomly enable/disable instances
     if(time - last > 0.05f) {
       uint32_t idx = 2 + (uint32_t)(pcg_randf() * (s->inst_cnt - 2));
@@ -226,6 +227,14 @@ void update_scene(scene *s, float time)
     scene_upd_inst_trans(s, 3, translation);
     mat4_trans(translation, (vec3){ -4.0f, 2.0f + sinf(time * 0.6f + 1.2f), 0.0f });
     scene_upd_inst_trans(s, 4, translation);
+    */
+    mat4 scale, rotation, translation, transform;
+    mat4_scale(scale, 0.5f);
+    mat4_rot_x(rotation, PI);
+    mat4_mul(transform, scale, rotation);
+    mat4_trans(translation, (vec3){ 0.0f, 5.0f + sinf(time * 0.6f) * 2.0f, 0.0f });
+    mat4_mul(transform, translation, transform);
+    scene_upd_inst_trans(s, 0, transform);
   }
 }
 

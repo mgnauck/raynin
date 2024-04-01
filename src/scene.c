@@ -117,7 +117,7 @@ void update_ltris(scene *s, inst *inst, inst_info *info)
     lt->v1 = mat4_mul_pos(trans, t->v1);
     lt->v2 = mat4_mul_pos(trans, t->v2);
   
-    lt->nrm = mat4_mul_dir(trans, t->n0);
+    lt->nrm = vec3_unit(mat4_mul_dir(trans, t->n0));
     
     lt->area = tri_calc_area(lt->v0, lt->v1, lt->v2);
   }

@@ -42,6 +42,6 @@ void ray_create_primary(ray *ray, float x, float y, const view *v, const cam *c)
 void ray_transform(ray *dest, const mat4 m, const ray *r)
 {
   dest->ori = mat4_mul_pos(m, r->ori);
-  dest->dir = mat4_mul_dir(m, r->dir);
+  dest->dir = mat4_mul_dir(m, r->dir); // Intentionally do NOT normalize
   dest->inv_dir = (vec3){ 1.0f / dest->dir.x, 1.0f / dest->dir.y, 1.0f / dest->dir.z };
 }
