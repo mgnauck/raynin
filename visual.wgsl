@@ -747,7 +747,7 @@ fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> ve
   return normalize(nrm * toMat3x3(&(*inst).transform));
 }
 
-fn sampleLambert(ia: ptr<function, IA>, pdf: ptr<function, f32>)
+fn sampleLambert(ia: ptr<function, IA>)
 {
   // Uniform
   //(*ia).inDir = rand3Hemi((*ia).nrm);
@@ -757,7 +757,11 @@ fn sampleLambert(ia: ptr<function, IA>, pdf: ptr<function, f32>)
   // Importance sampled cos
   (*ia).inDir = rand3HemiCosWeighted((*ia).nrm);
   (*ia).flags &= ~IA_SPECULAR;
-  (*pdf) = dot((*ia).inDir, (*ia).nrm) * INV_PI;
+}
+
+fn pdfLambert(ia: ptr<function, IA>) -> f32
+{
+  return dot((*ia).inDir, (*ia).nrm) * INV_PI;
 }
 
 fn evalLambert(ia: ptr<function, IA>) -> vec3f
@@ -765,13 +769,18 @@ fn evalLambert(ia: ptr<function, IA>) -> vec3f
   return (*ia).mtl.color * INV_PI * dot((*ia).inDir, (*ia).nrm);
 }
 
-fn sampleMetal(ia: ptr<function, IA>, pdf: ptr<function, f32>)
+fn sampleMetal(ia: ptr<function, IA>)
 {
   // Fuzzy reflection calc/distribution is NOT really correct
   let dir = reflect(-(*ia).outDir, (*ia).nrm); 
   (*ia).inDir = normalize(dir + (*ia).mtl.value * rand3Hemi(dir)); 
   (*ia).flags |= IA_SPECULAR;
-  (*pdf) = 1.0; // One direction only
+}
+
+fn pdfMetal(ia: ptr<function, IA>) -> f32
+{
+  // One direction only
+  return 1.0;
 }
 
 fn evalMetal(ia: ptr<function, IA>) -> vec3f
@@ -786,7 +795,7 @@ fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
   return r0 + (1 - r0) * pow(1 - cosTheta, 5);
 }
 
-fn sampleDielectric(ia: ptr<function, IA>, pdf: ptr<function, f32>)
+fn sampleDielectric(ia: ptr<function, IA>)
 {
   var refracIndexRatio: f32;
   var nrm: vec3f;
@@ -814,7 +823,12 @@ fn sampleDielectric(ia: ptr<function, IA>, pdf: ptr<function, f32>)
   }
 
   (*ia).flags |= IA_SPECULAR;
-  (*pdf) = 1.0; // One direction only
+}
+
+fn pdfDielectric(ia: ptr<function, IA>) -> f32
+{
+  // One direction only
+  return 1.0;
 }
 
 fn evalDielectric(ia: ptr<function, IA>) -> vec3f
@@ -854,15 +868,18 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
   switch(ia.mtl.flags & MTL_TYPE_MASK)
   {
     case MT_LAMBERT: {
-      sampleLambert(ia, &pdf);
+      sampleLambert(ia);
+      pdf = pdfLambert(ia);
       return select(evalLambert(ia) / pdf, vec3f(0), pdf < EPSILON);
     }
     case MT_METAL: {
-      sampleMetal(ia, &pdf);
+      sampleMetal(ia);
+      pdf = pdfMetal(ia);
       return evalMetal(ia) / pdf;
     }
     case MT_DIELECTRIC: {
-      sampleDielectric(ia, &pdf);
+      sampleDielectric(ia);
+      pdf = pdfDielectric(ia);
       return evalDielectric(ia) / pdf;
     }
     case MT_EMISSIVE: {
@@ -889,15 +906,14 @@ fn rand3Barycentric(a: vec3f, b: vec3f, c: vec3f) -> vec3f
   return a + r * (b - a) + s * (c - a);
 }
 
-fn sampleLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, pdf: ptr<function, f32>) -> vec3f
+fn sampleLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
 {
   // Find random point on light surface and calc light dir
   var lightDir = rand3Barycentric((*ltri).v0, (*ltri).v1, (*ltri).v2) - (*ia).pos;
 
   if(dot(lightDir, (*ltri).nrm) > EPSILON) {
     // Light is facing away
-    (*pdf) = 0.0;
-    return vec3f(0);
+    return 0.0;
   }
 
   let dist = length(lightDir);
@@ -906,18 +922,24 @@ fn sampleLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, pdf: ptr<func
   // Probe visibility of light
   if(intersectTlasAnyHit(Ray((*ia).pos, lightDir), dist - EPSILON)) {
     // Light is obstructed
-    (*pdf) = 0.0;
-    return vec3f(0);
+    return 0.0;
   }
 
   // Light dir is input dir to sampling material
   (*ia).inDir = lightDir;
 
+  return pdfLightTri(ia, ltri, dist);
+}
+
+fn pdfLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, dist: f32) -> f32
+{
   // Account for single ray in direction of light
   // pdf is 1 / solid angle subtended by the light (light area projected on unit hemisphere)
-  *pdf = (dist * dist) / ((*ltri).area * dot(-lightDir, (*ltri).nrm));
+  return (dist * dist) / ((*ltri).area * dot(-(*ia).inDir, (*ltri).nrm));
+}
 
-  // Light emission
+fn evalLightTri(ltri: ptr<storage, LTri>) -> vec3f
+{
   return (*ltri).emission;
 }
 
@@ -925,7 +947,7 @@ fn sampleAndEvalLight(ia: ptr<function, IA>) -> vec3f
 {
   // TODO
   // - skew random light selection by light importance (area*power)
-  // - add MIS
+  // - Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
  
   // Current material is specular
   if(((*ia).mtl.flags & MTL_TYPE_MASK) != MT_LAMBERT) {
@@ -933,10 +955,10 @@ fn sampleAndEvalLight(ia: ptr<function, IA>) -> vec3f
   }
 
   // Randomly sample one light tri (currently with uniform distribution)
-  var pdf: f32;
   let ltriCnt = arrayLength(&ltris);
-  let emission = sampleLightTri(ia, &ltris[u32(rand() * f32(ltriCnt))], &pdf);
-  return select(vec3f(0), f32(ltriCnt) * evalMaterial(ia) * emission / pdf, pdf > EPSILON);
+  let ltri = &ltris[u32(rand() * f32(ltriCnt))];
+  let pdf = sampleLightTri(ia, ltri);
+  return select(vec3f(0), f32(ltriCnt) * evalMaterial(ia) * evalLightTri(ltri) / pdf, pdf > EPSILON);
 }
 
 fn render(initialRay: Ray) -> vec3f
