@@ -151,7 +151,7 @@ const EPSILON             = 0.0001;
 const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
 const MAX_DISTANCE        = 3.402823466e+38;
-const MAX_INTENSITY       = 3.0;  // Value for intensity clamping, will need trial and error
+const MAX_INTENSITY       = 2.5;  // Value for intensity clamping, will need trial and error
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -251,8 +251,8 @@ fn clampIntensity(contribution: vec3f) -> vec3f
 
 fn isNan(v: f32) -> bool
 {
-  return v == v;
-  //return select(true, false, v < 0.0 || 0.0 < v || v == 0.0);
+  //return v != v;
+  return select(true, false, v < 0.0 || 0.0 < v || v == 0.0);
 }
 
 fn fixNan3(v: vec3f) -> vec3f
@@ -384,43 +384,50 @@ fn intersectUnitSphereAnyHit(ray: Ray, tfar: f32) -> bool
 
 // Moeller/Trumbore ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-fn intersectTri(ray: Ray, tri: Tri, instTriId: u32, h: ptr<function, Hit>) -> bool
+fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<function, f32>, v: ptr<function, f32>) -> f32
 {
   // Vectors of two edges sharing vertex 0
-  let edge1 = tri.v1 - tri.v0;
-  let edge2 = tri.v2 - tri.v0;
+  let edge1 = v1 - v0;
+  let edge2 = v2 - v0;
 
   // Calculate determinant and u parameter later on
-  let pvec = cross(ray.dir, edge2);
+  let pvec = cross(dir, edge2);
   let det = dot(edge1, pvec);
 
   if(abs(det) < EPSILON) {
     // Ray in plane of triangle
-    return false;
+    return MAX_DISTANCE;
   }
 
   let invDet = 1 / det;
 
   // Distance vertex 0 to origin
-  let tvec = ray.ori - tri.v0;
+  let tvec = ori - v0;
 
   // Calculate parameter u and test bounds
-  let u = dot(tvec, pvec) * invDet;
-  if(u < 0 || u > 1) {
-    return false;
+  *u = dot(tvec, pvec) * invDet;
+  if(*u < 0 || *u > 1) {
+    return MAX_DISTANCE;
   }
 
   // Prepare to test for v
   let qvec = cross(tvec, edge1);
 
   // Calculate parameter u and test bounds
-  let v = dot(ray.dir, qvec) * invDet;
-  if(v < 0 || u + v > 1) {
-    return false;
+  *v = dot(dir, qvec) * invDet;
+  if(*v < 0 || *u + *v > 1) {
+    return MAX_DISTANCE;
   }
 
   // Calc distance
-  let dist = dot(edge2, qvec) * invDet;
+  return dot(edge2, qvec) * invDet;
+}
+
+fn intersectTriClosest(ray: Ray, tri: Tri, instTriId: u32, h: ptr<function, Hit>) -> bool
+{
+  var u: f32;
+  var v: f32;
+  let dist = intersectTri(ray.ori, ray.dir, tri.v0, tri.v1, tri.v2, &u, &v);
   if(dist > EPSILON && dist < (*h).t) {
     (*h).t = dist;
     (*h).u = u;
@@ -434,41 +441,9 @@ fn intersectTri(ray: Ray, tri: Tri, instTriId: u32, h: ptr<function, Hit>) -> bo
 
 fn intersectTriAnyHit(ray: Ray, tfar: f32, tri: Tri) -> bool
 {
-  // Vectors of two edges sharing vertex 0
-  let edge1 = tri.v1 - tri.v0;
-  let edge2 = tri.v2 - tri.v0;
-
-  // Calculate determinant and u parameter later on
-  let pvec = cross(ray.dir, edge2);
-  let det = dot(edge1, pvec);
-
-  if(abs(det) < EPSILON) {
-    // Ray in plane of triangle
-    return false;
-  }
-
-  let invDet = 1 / det;
-
-  // Distance vertex 0 to origin
-  let tvec = ray.ori - tri.v0;
-
-  // Calculate parameter u and test bounds
-  let u = dot(tvec, pvec) * invDet;
-  if(u < 0 || u > 1) {
-    return false;
-  }
-
-  // Prepare to test for v
-  let qvec = cross(tvec, edge1);
-
-  // Calculate parameter u and test bounds
-  let v = dot(ray.dir, qvec) * invDet;
-  if(v < 0 || u + v > 1) {
-    return false;
-  }
-
-  // Calc distance
-  let dist = dot(edge2, qvec) * invDet;
+  var u: f32;
+  var v: f32;
+  let dist = intersectTri(ray.ori, ray.dir, tri.v0, tri.v1, tri.v2, &u, &v);
   return dist > EPSILON && dist < tfar;
 }
 
@@ -488,7 +463,7 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
       // Leaf node, intersect all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
         let triId = indices[dataOfs + nodeStartIndex + i];
-        intersectTri(ray, tris[dataOfs + triId], (triId << 16) | (instId & INST_ID_MASK), hit);
+        intersectTriClosest(ray, tris[dataOfs + triId], (triId << 16) | (instId & INST_ID_MASK), hit);
       }
     } else {
       // Interior node
@@ -747,20 +722,24 @@ fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> ve
   return normalize(nrm * toMat3x3(&(*inst).transform));
 }
 
-fn sampleLambert(ia: ptr<function, IA>)
+fn sampleLambert(ia: ptr<function, IA>) -> f32
 {
   // Uniform
   //(*ia).inDir = rand3Hemi((*ia).nrm);
   //(*ia).flags &= ~IA_SPECULAR;
-  //(*pdf) = 1.0 / (2.0 * PI);
 
   // Importance sampled cos
   (*ia).inDir = rand3HemiCosWeighted((*ia).nrm);
   (*ia).flags &= ~IA_SPECULAR;
+
+  return pdfLambert(ia);
 }
 
 fn pdfLambert(ia: ptr<function, IA>) -> f32
 {
+  // Uniform
+  //return 1.0 / (2.0 * PI);
+  
   return dot((*ia).inDir, (*ia).nrm) * INV_PI;
 }
 
@@ -769,12 +748,14 @@ fn evalLambert(ia: ptr<function, IA>) -> vec3f
   return (*ia).mtl.color * INV_PI * dot((*ia).inDir, (*ia).nrm);
 }
 
-fn sampleMetal(ia: ptr<function, IA>)
+fn sampleMetal(ia: ptr<function, IA>) -> f32
 {
-  // Fuzzy reflection calc/distribution is NOT really correct
+  // TODO Fuzzy reflection calc/distribution is NOT really correct
   let dir = reflect(-(*ia).outDir, (*ia).nrm); 
   (*ia).inDir = normalize(dir + (*ia).mtl.value * rand3Hemi(dir)); 
   (*ia).flags |= IA_SPECULAR;
+
+  return pdfMetal(ia);
 }
 
 fn pdfMetal(ia: ptr<function, IA>) -> f32
@@ -795,7 +776,7 @@ fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
   return r0 + (1 - r0) * pow(1 - cosTheta, 5);
 }
 
-fn sampleDielectric(ia: ptr<function, IA>)
+fn sampleDielectric(ia: ptr<function, IA>) -> f32
 {
   var refracIndexRatio: f32;
   var nrm: vec3f;
@@ -823,6 +804,8 @@ fn sampleDielectric(ia: ptr<function, IA>)
   }
 
   (*ia).flags |= IA_SPECULAR;
+
+  return pdfDielectric(ia);
 }
 
 fn pdfDielectric(ia: ptr<function, IA>) -> f32
@@ -860,6 +843,26 @@ fn evalMaterial(ia: ptr<function, IA>) -> vec3f
   }
 }
 
+fn sampleMaterial(ia: ptr<function, IA>) -> f32
+{
+  switch(ia.mtl.flags & MTL_TYPE_MASK)
+  {
+    case MT_LAMBERT: {
+      return sampleLambert(ia);
+    }
+    case MT_METAL: {
+      return sampleMetal(ia);
+    }
+    case MT_DIELECTRIC: {
+      return sampleDielectric(ia);
+    }
+    default: {
+      // Error
+      return 1000.0;
+    }
+  }
+}
+
 fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
 {
   // TODO Unify different terms/types to one "lambert material"
@@ -868,18 +871,15 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
   switch(ia.mtl.flags & MTL_TYPE_MASK)
   {
     case MT_LAMBERT: {
-      sampleLambert(ia);
-      pdf = pdfLambert(ia);
+      pdf = sampleLambert(ia);
       return select(evalLambert(ia) / pdf, vec3f(0), pdf < EPSILON);
     }
     case MT_METAL: {
-      sampleMetal(ia);
-      pdf = pdfMetal(ia);
+      pdf = sampleMetal(ia);
       return evalMetal(ia) / pdf;
     }
     case MT_DIELECTRIC: {
-      sampleDielectric(ia);
-      pdf = pdfDielectric(ia);
+      pdf = sampleDielectric(ia);
       return evalDielectric(ia) / pdf;
     }
     case MT_EMISSIVE: {
@@ -900,10 +900,35 @@ fn rand3Barycentric(a: vec3f, b: vec3f, c: vec3f) -> vec3f
   var s = rand();
   // TODO Do w/o condition
   if(r + s >= 1.0) {
-    r = 1.0 - r;
-    s = 1.0 - s;
+    r = 1 - r;
+    s = 1 - s;
   }
   return a + r * (b - a) + s * (c - a);
+}
+
+fn probeLightDir(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
+{
+  if(dot((*ia).inDir, (*ltri).nrm) > 0) {
+    // Light is facing away (lights are not double sided)
+    return 0;
+  }
+
+  // Get us the distance to the light if we actually intersect it
+  var u: f32;
+  var v: f32;
+  let dist = intersectTri((*ia).pos, (*ia).inDir, (*ltri).v0, (*ltri).v1, (*ltri).v2, &v, &u);
+  if(dist == MAX_DISTANCE) {
+    // Not hitting the light tri
+    return 0;
+  }
+
+  // Check if light is obstructed
+  if(intersectTlasAnyHit(Ray((*ia).pos, (*ia).inDir), dist - EPSILON)) {
+    return 0;
+  }
+
+  // Visible, calc pdf for current direction
+  return pdfLightTri(ia, ltri, dist);
 }
 
 fn sampleLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
@@ -911,30 +936,30 @@ fn sampleLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
   // Find random point on light surface and calc light dir
   var lightDir = rand3Barycentric((*ltri).v0, (*ltri).v1, (*ltri).v2) - (*ia).pos;
 
-  if(dot(lightDir, (*ltri).nrm) > EPSILON) {
-    // Light is facing away
-    return 0.0;
+  if(dot(lightDir, (*ltri).nrm) > 0) {
+    // Light is facing away (lights are not double sided)
+    return 0;
   }
 
   let dist = length(lightDir);
-  lightDir = lightDir * (1.0 / dist);
-
-  // Probe visibility of light
-  if(intersectTlasAnyHit(Ray((*ia).pos, lightDir), dist - EPSILON)) {
-    // Light is obstructed
-    return 0.0;
-  }
+  lightDir = lightDir * (1 / dist);
 
   // Light dir is input dir to sampling material
   (*ia).inDir = lightDir;
 
+  // Check if light is obstructed
+  if(intersectTlasAnyHit(Ray((*ia).pos, (*ia).inDir), dist - EPSILON)) {
+    return 0;
+  }
+
+  // Visivle, calc pdf for current direction
   return pdfLightTri(ia, ltri, dist);
 }
 
 fn pdfLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, dist: f32) -> f32
 {
   // Account for single ray in direction of light
-  // pdf is 1 / solid angle subtended by the light (light area projected on unit hemisphere)
+  // pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
   return (dist * dist) / ((*ltri).area * dot(-(*ia).inDir, (*ltri).nrm));
 }
 
@@ -943,22 +968,48 @@ fn evalLightTri(ltri: ptr<storage, LTri>) -> vec3f
   return (*ltri).emission;
 }
 
-fn sampleAndEvalLight(ia: ptr<function, IA>) -> vec3f
+// MIS from Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
+fn sampleAndEvalLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> vec3f
 {
-  // TODO
-  // - skew random light selection by light importance (area*power)
-  // - Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
- 
-  // Current material is specular
-  if(((*ia).mtl.flags & MTL_TYPE_MASK) != MT_LAMBERT) {
-    return vec3f(0);
+  var contribution = vec3f(0);
+  
+  // Sample the light only if current brdf is not specular
+  if(((*ia).mtl.flags & MTL_TYPE_MASK) == MT_LAMBERT) {
+    // Sample light (sets direction to random point on light tri)
+    let lightPdf = sampleLightTri(ia, ltri);
+    if(lightPdf != 0) {
+      let brdfPdf = pdfLambert(ia);
+      if(brdfPdf != 0) {
+        // Power heuristic
+        let weight = lightPdf * lightPdf / (brdfPdf * brdfPdf + lightPdf * lightPdf);
+        contribution += evalMaterial(ia) * evalLightTri(ltri) * weight / lightPdf;
+      }
+    }
   }
 
-  // Randomly sample one light tri (currently with uniform distribution)
+  // Sample brdf (sets direction according to material brdf)
+  let brdfPdf = sampleMaterial(ia);
+  if(brdfPdf != 0) {
+    let lightPdf = probeLightDir(ia, ltri);
+    if(lightPdf != 0) {
+      let weight = brdfPdf * brdfPdf / (brdfPdf * brdfPdf + lightPdf * lightPdf);
+      contribution += evalLightTri(ltri) * evalMaterial(ia) * weight / brdfPdf;
+    }
+  }
+
+  return contribution;
+}
+
+fn sampleDirectLight(ia: ptr<function, IA>) -> vec3f
+{
+  // TODO
+  // - Test with multiple lights
+  // - Skew random light selection by light importance (area*power)
+
+  // Randomly select one light tri to sample
   let ltriCnt = arrayLength(&ltris);
   let ltri = &ltris[u32(rand() * f32(ltriCnt))];
-  let pdf = sampleLightTri(ia, ltri);
-  return select(vec3f(0), f32(ltriCnt) * evalMaterial(ia) * evalLightTri(ltri) / pdf, pdf > EPSILON);
+  return f32(ltriCnt) * sampleAndEvalLightTri(ia, ltri);
 }
 
 fn render(initialRay: Ray) -> vec3f
@@ -1016,9 +1067,9 @@ fn render(initialRay: Ray) -> vec3f
       break;
     }
 
-    // Sample light(s) directly
-    //col += fixNan3(clampIntensity(throughput * sampleAndEvalLight(&ia)));
-    col += throughput * sampleAndEvalLight(&ia);
+    // Sample direct light
+    //col += fixNan3(clampIntensity(throughput * sampleDirectLight(&ia)));
+    col += throughput * sampleDirectLight(&ia);
 
     // Sample indirect light
     throughput *= sampleAndEvalMaterial(&ia);
