@@ -894,16 +894,13 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
 }
 
 // https://mathworld.wolfram.com/TrianglePointPicking.html
-fn rand3Barycentric(a: vec3f, b: vec3f, c: vec3f) -> vec3f
+fn randBarycentric(r0: f32, r1: f32) -> vec3f
 {
-  var r = rand();
-  var s = rand();
-  // TODO Do w/o condition
-  if(r + s >= 1.0) {
-    r = 1 - r;
-    s = 1 - s;
-  }
-  return a + r * (b - a) + s * (c - a);
+  // TODO Improved tri point picking: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
+  let r0Sqrt = sqrt(r0);
+  let b0 = 1 - r0Sqrt;
+  let b1 = r1 * r0Sqrt;
+  return vec3f(b0, b1, 1.0 - b0 - b1);
 }
 
 fn probeLightDir(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
@@ -931,10 +928,10 @@ fn probeLightDir(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
   return pdfLightTri(ia, ltri, dist);
 }
 
-fn sampleLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
+fn sampleLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, bc: vec3f) -> f32
 {
   // Find random point on light surface and calc light dir
-  var lightDir = rand3Barycentric((*ltri).v0, (*ltri).v1, (*ltri).v2) - (*ia).pos;
+  var lightDir = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z - (*ia).pos;
 
   if(dot(lightDir, (*ltri).nrm) > 0) {
     // Light is facing away (lights are not double sided)
@@ -963,12 +960,25 @@ fn pdfLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, dist: f32) -> f3
   return (dist * dist) / ((*ltri).area * dot(-(*ia).inDir, (*ltri).nrm));
 }
 
+fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
+{
+  // TODO
+  return 0.0;
+}
+
+fn calcLTriPickProb(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
+{
+  // TODO picking probability based on: power / dist^2
+  return 1.0 / f32(arrayLength(&ltris));
+}
+
 fn evalLightTri(ltri: ptr<storage, LTri>) -> vec3f
 {
   return (*ltri).emission;
 }
 
-// MIS from Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
+// Apply MIS to direct light sampling. Choose light randomly based on picking prob power / dist^2.
+// Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
 fn sampleAndEvalLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> vec3f
 {
   var contribution = vec3f(0);
@@ -976,11 +986,11 @@ fn sampleAndEvalLightTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> vec
   // Sample the light only if current brdf is not specular
   if(((*ia).mtl.flags & MTL_TYPE_MASK) == MT_LAMBERT) {
     // Sample light (sets direction to random point on light tri)
-    let lightPdf = sampleLightTri(ia, ltri);
+    let lightPdf = sampleLightTri(ia, ltri, randBarycentric(rand(), rand()));
     if(lightPdf != 0) {
       let brdfPdf = pdfLambert(ia);
       if(brdfPdf != 0) {
-        // Power heuristic
+        // Power heuristic with beta = 2
         let weight = lightPdf * lightPdf / (brdfPdf * brdfPdf + lightPdf * lightPdf);
         contribution += evalMaterial(ia) * evalLightTri(ltri) * weight / lightPdf;
       }
