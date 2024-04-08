@@ -104,9 +104,9 @@ struct LTri
   v2:       vec3f,
   area:     f32,
   nrm:      vec3f,
-  pad0:     f32,
+  power:    f32,          // Precalculated product of area and emission
   emission: vec3f,
-  pad1:     f32
+  pad0:     f32
 }
 
 struct Inst
@@ -895,11 +895,10 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
 }
 
 // https://mathworld.wolfram.com/TrianglePointPicking.html
-fn randBarycentric(r: vec2f) -> vec3f
+fn randBarycentric(r0: f32, r1: f32) -> vec3f
 {
-  // TODO Improved tri point picking: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
-  let rxSqrt = sqrt(r.x);
-  let b = vec2f(1 - rxSqrt, r.y * rxSqrt);
+  let rxSqrt = sqrt(r0);
+  let b = vec2f(1 - rxSqrt, r1 * rxSqrt);
   return vec3f(b, 1 - b.x - b.y);
 }
 
@@ -911,8 +910,8 @@ fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
   let ltri = &ltris[ltriIdx];
   var lightDir = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z - (*ia).pos;
 
-  let dist = length(lightDir);
-  lightDir *= 1 / dist;
+  let invDist = 1 / length(lightDir);
+  lightDir *= invDist;
 
   // Inclination between light normal and light dir
   // (how much the light faces the light dir)
@@ -922,12 +921,8 @@ fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
   // (how much the surface aligns with the light dir)
   let nDotL = max(0, dot((*ia).nrm, lightDir));
 
-  // TODO Precalc and store in ltri
-  let emission = evalLTri(ltri);
-  let power = (*ltri).area * (emission.x + emission.y + emission.z);
-
   // Inclination angles scale our measure of light power / dist^2
-  return lnDotL * nDotL * power / (dist * dist);
+  return lnDotL * nDotL * (*ltri).power * invDist * invDist;
 }
 
 fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<function, u32>) -> f32
@@ -1029,30 +1024,29 @@ fn pdfLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, dist: f32) -> f32
   return (dist * dist) / ((*ltri).area * dot(-(*ia).inDir, (*ltri).nrm));
 }
 
-// Apply MIS to direct light sampling. Choose light randomly based on picking prob power / dist^2.
+// Apply MIS to direct light sampling. Choose light randomly based on picking prob.
 // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
 fn sampleDirectLight(ia: ptr<function, IA>) -> vec3f
-{  
-  var contribution = vec3f(0);
-  var pickPdf: f32;
+{
+  // TODO Improved tri point picking: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
+  // Prepare random barycentric coordinates
+  let bc = randBarycentric(rand(), rand());
+
+  // Pick ltri according to contribution and calc picking probability
   var ltriIdx: u32;
+  let pickPdf = pickLTriRandomly(ia, rand(), bc, &ltriIdx);
+  let ltri = &ltris[ltriIdx];
+
+  var contribution = vec3f(0);
 
   // Sample the light only if current brdf is not specular
   if(((*ia).mtl.flags & MTL_TYPE_MASK) == MT_LAMBERT) {
-    let r = vec3f(rand(), rand(), rand());
-    let bc = randBarycentric(r.xy);
-
-    // TODO Optimize calculating stuff twice in picking and sampling
-    pickPdf = pickLTriRandomly(ia, r.z, bc, &ltriIdx);
-
-    let ltri = &ltris[ltriIdx];
-    
     // Sample light (sets direction to random point on light tri)
     let lightPdf = pickPdf * sampleLTri(ia, ltri, bc);
     if(lightPdf < EPSILON) {
       return contribution;
     }
-    
+
     let brdfPdf = pdfLambert(ia);
     if(brdfPdf > 0) {
       // Power heuristic with beta = 2
@@ -1064,7 +1058,6 @@ fn sampleDirectLight(ia: ptr<function, IA>) -> vec3f
   // Sample brdf (sets direction according to material brdf)
   let brdfPdf = sampleMaterial(ia);
   if(brdfPdf > 0) {
-    let ltri = &ltris[ltriIdx];
     let lightPdf = pickPdf * probeLightDir(ia, ltri);
     if(lightPdf > 0) {
       let weight = brdfPdf * brdfPdf / (brdfPdf * brdfPdf + lightPdf * lightPdf);

@@ -105,21 +105,8 @@ void update_ltris(scene *s, inst *inst, inst_info *info)
 {
   tri *tris = s->meshes[info->mesh_shape].tris;
   for(uint32_t i=0; i<info->ltri_cnt; i++) {
-    mat4 trans;
-    mat4_from_row3x4(trans, inst->transform);
-
-    // TODO Check if product from current transform and previous inverse is
-    // faster than fetching the original triangle data
     ltri *lt = &s->ltris[info->ltri_ofs + i];
-    tri *t = &tris[lt->tri_id];
-    
-    lt->v0 = mat4_mul_pos(trans, t->v0);
-    lt->v1 = mat4_mul_pos(trans, t->v1);
-    lt->v2 = mat4_mul_pos(trans, t->v2);
-  
-    lt->nrm = vec3_unit(mat4_mul_dir(trans, t->n0));
-    
-    lt->area = tri_calc_area(lt->v0, lt->v1, lt->v2);
+    tri_update_ltri(lt, &tris[lt->tri_id], inst->transform);
   }
 
   scene_set_dirty(s, RT_LTRI);

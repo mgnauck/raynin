@@ -198,8 +198,6 @@ void init(uint32_t width, uint32_t height)
 
 void update_scene(scene *s, float time)
 {
-  static float last = 0;
-
   // Update camera
   if(orbit_cam) {
     float v = 0.5f;
@@ -213,6 +211,7 @@ void update_scene(scene *s, float time)
   if(!paused) {
     /*
     // Randomly enable/disable instances
+    static float last = 0;
     if(time - last > 0.05f) {
       uint32_t idx = 2 + (uint32_t)(pcg_randf() * (s->inst_cnt - 2));
       if(scene_get_inst_state(s, idx) & IS_DISABLED)
@@ -236,7 +235,7 @@ void update_scene(scene *s, float time)
     mat4_mul(transform, scale, rotation);
     mat4_trans(translation, (vec3){ 0.0f, 5.0f + sinf(time * 0.6f) * 2.0f, 0.0f });
     mat4_mul(transform, translation, transform);
-    scene_upd_inst_trans(s, 0, transform);
+    scene_upd_inst_trans(s, 1, transform);
   }
 }
 
