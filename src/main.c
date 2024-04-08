@@ -198,6 +198,9 @@ void init(uint32_t width, uint32_t height)
 
 void update_scene(scene *s, float time)
 {
+  // Set scene always dirty
+  scene_set_dirty(s, RT_CAM_VIEW);
+
   // Update camera
   if(orbit_cam) {
     float v = 0.5f;

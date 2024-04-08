@@ -64,12 +64,13 @@ struct Mtl
 
 struct IA
 {
-  pos:    vec3f,
-  nrm:    vec3f,
-  outDir: vec3f,
-  inDir:  vec3f,
-  mtl:    Mtl,
-  flags:  u32
+  pos:      vec3f,
+  nrm:      vec3f,
+  outDir:   vec3f,
+  inDir:    vec3f,
+  mtl:      Mtl,
+  flags:    u32,
+  faceDir:  f32
 }
 
 struct Tri
@@ -143,8 +144,7 @@ const MT_DIELECTRIC       = 2u;
 const MT_EMISSIVE         = 3u;
 
 // Interaction flags
-const IA_BACKFACE         = 1u;
-const IA_SPECULAR         = 2u;
+const IA_SPECULAR         = 1u;
 
 // Math constants
 const EPSILON             = 0.0001;
@@ -780,17 +780,9 @@ fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
 
 fn sampleDielectric(ia: ptr<function, IA>) -> f32
 {
-  var refracIndexRatio: f32;
-  var nrm: vec3f;
-  if(((*ia).flags & IA_BACKFACE) > 0) {
-    refracIndexRatio = (*ia).mtl.value;
-    nrm = -(*ia).nrm;
-  } else {
-    // The other medium is air (ior = 1)
-    refracIndexRatio = 1 / (*ia).mtl.value;
-    nrm = (*ia).nrm;
-  }
-  
+  // The other medium is air (ior = 1)
+  let refracIndexRatio = select(1 / (*ia).mtl.value, (*ia).mtl.value, (*ia).faceDir < 0);
+  let nrm = (*ia).faceDir * (*ia).nrm;
   let cosTheta = min(dot((*ia).outDir, nrm), 1);
   //let sinTheta = sqrt(1 - cosTheta * cosTheta);
   //
@@ -896,11 +888,55 @@ fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
 }
 
 // https://mathworld.wolfram.com/TrianglePointPicking.html
-fn randBarycentric(r0: f32, r1: f32) -> vec3f
+/*fn randBarycentric2(r0: f32, r1: f32) -> vec3f
 {
   let rxSqrt = sqrt(r0);
   let b = vec2f(1 - rxSqrt, r1 * rxSqrt);
   return vec3f(b, 1 - b.x - b.y);
+}*/
+
+// TODO Use together with blue noise
+// Basu/Owen "Low discrepancy constructions in the triangle"
+// Implementation copied from: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
+fn randBarycentric(u: f32) -> vec3f
+{
+  let uf = u32(u * 4294967296); // Convert to 0.32 fixed point base-2
+  var a = vec2f(1, 0); // Barycentrics of 3 corners of the current subtriangle
+  var b = vec2f(0, 1);
+  var c = vec2f(0, 0);
+  for(var i=0u; i<16u; i++) { // For each base 4-digit
+    let d = (uf >> (2u * (15u - i))) & 0x3; // Get the digit
+    var an: vec2f;
+    var bn: vec2f;
+    var cn: vec2f;
+    switch(d) {
+      case 0: {
+        an = (b + c) * 0.5;
+        bn = (a + c) * 0.5;
+        cn = (a + b) * 0.5;
+      }
+      case 1: {
+        an = a;
+        bn = (a + b) * 0.5;
+        cn = (a + c) * 0.5;
+      }
+      case 2: {
+        an = (b + a) * 0.5;
+        bn = b;
+        cn = (b + c) * 0.5;
+      }
+      case 3, default: {
+        an = (c + a) * 0.5;
+        bn = (c + b) * 0.5;
+        cn = c;
+      }
+    }
+    a = an;
+    b = bn;
+    c = cn;
+  }
+  let r = (a + b + c) * 0.33333;
+  return vec3f(r.x, r.y, 1 - r.x - r.y);
 }
 
 fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
@@ -1030,9 +1066,8 @@ fn pdfLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, dist: f32) -> f32
 // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
 fn sampleDirectLight(ia: ptr<function, IA>) -> vec3f
 {
-  // TODO Improved tri point picking: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
   // Prepare random barycentric coordinates
-  let bc = randBarycentric(rand(), rand());
+  let bc = randBarycentric(rand());
 
   // Pick ltri according to contribution and calc picking probability
   var ltriIdx: u32;
@@ -1108,10 +1143,6 @@ fn render(initialRay: Ray) -> vec3f
       ia.nrm = calcTriNormal(hit, inst, tri);
     }
 
-    // Detect backface
-    ia.flags = select(ia.flags & ~IA_BACKFACE, ia.flags | IA_BACKFACE, dot(ia.outDir, ia.nrm) <= 0);
-    // TODO store face dir in IA and consider during sampling
-
     // Get material data
     ia.mtl = materials[mtl & MTL_ID_MASK];
 
@@ -1119,13 +1150,17 @@ fn render(initialRay: Ray) -> vec3f
     if((ia.mtl.flags & MTL_TYPE_MASK) == MT_EMISSIVE) {
       // Only consider if a primary ray or last bounce was specular
       if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
-        ((ia.flags & IA_BACKFACE) == 0)) {
+        // Lights have no back side
+        (dot(ia.outDir, ia.nrm) > EPSILON)) {
         //col += fixNan3(clampIntensity(throughput * ia.mtl.emission));
         col += throughput * ia.mtl.emission;
       }
       break;
     }
 
+    // Remember backside hit
+    ia.faceDir = select(1.0, -1.0, dot(ia.outDir, ia.nrm) < EPSILON);
+    
     // Sample direct light
     //col += fixNan3(clampIntensity(throughput * sampleDirectLight(&ia)));
     col += throughput * sampleDirectLight(&ia);
