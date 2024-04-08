@@ -151,6 +151,7 @@ const EPSILON             = 0.0001;
 const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
 const MAX_DISTANCE        = 3.402823466e+38;
+const MAX_NODE_CNT        = 32;
 const MAX_INTENSITY       = 2.5;  // Value for intensity clamping, will need trial and error
 const MAX_LTRIS           = 64;
 
@@ -164,8 +165,8 @@ const MAX_LTRIS           = 64;
 @group(0) @binding(7) var<storage, read> materials: array<Mtl>;
 @group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
-var<private> bvhNodeStack: array<u32, 32>;
-var<private> tlasNodeStack: array<u32, 32>;
+var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
+var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> rngState: u32;
 
 fn minComp(v: vec3f) -> f32
@@ -925,6 +926,7 @@ fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
   return lnDotL * nDotL * (*ltri).power * invDist * invDist;
 }
 
+// https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
 fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<function, u32>) -> f32
 {
   // Calculate picking probability with respect to ltri contributions
