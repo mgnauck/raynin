@@ -56,10 +56,10 @@ struct BvhNode
 
 struct Mtl
 {
-  color: vec3f,
-  value: f32,
-  emission: vec3f,
-  flags: u32
+  col: vec3f,             // Albedo/diffuse. If component > 1.0, obj emits light.
+  fuzz: f32,              // Fuzziness = 1 - glossiness
+  trans: vec3f,           // Transmittance per component
+  ior: f32                // Refraction index of obj we are entering
 }
 
 struct IA
@@ -130,8 +130,6 @@ const MESH_SHAPE_MASK     = 0x3fffffffu;
 const MTL_OVERRIDE_BIT    = 0x80000000u;
 const INST_DATA_MASK      = 0x7fffffffu;
 
-const MTL_TYPE_MASK       = 0xfu;
-
 // Shape types
 const ST_PLANE            = 0u;
 const ST_BOX              = 1u;
@@ -198,51 +196,36 @@ fn rand() -> f32
   return ldexp(f32((word >> 22u) ^ word), -32);
 }
 
-fn randRange(valueMin: f32, valueMax: f32) -> f32
-{
-  return mix(valueMin, valueMax, rand());
-}
-
-fn rand3() -> vec3f
-{
-  return vec3f(rand(), rand(), rand());
-}
-
-fn rand3Range(valueMin: f32, valueMax: f32) -> vec3f
-{
-  return vec3f(randRange(valueMin, valueMax), randRange(valueMin, valueMax), randRange(valueMin, valueMax));
-}
-
 // https://mathworld.wolfram.com/SpherePointPicking.html
-fn rand3UnitSphere() -> vec3f
+fn rand3UnitSphere(r: vec2f) -> vec3f
 {
-  let u = 2 * rand() - 1;
-  let theta = 2 * PI * rand();
-  let r = sqrt(1 - u * u);
-  return vec3f(r * cos(theta), r * sin(theta), u);
+  let u = 2 * r.x - 1;
+  let theta = 2 * PI * r.y;
+  let radius = sqrt(1 - u * u);
+  return vec3f(radius * cos(theta), radius * sin(theta), u);
 }
 
-fn rand3Hemi(nrm: vec3f) -> vec3f
+fn rand3Hemi(nrm: vec3f, r: vec2f) -> vec3f
 {
   // Uniform + rejection sampling
-  let v = rand3UnitSphere();
+  let v = rand3UnitSphere(r);
   return select(-v, v, dot(v, nrm) > 0);
 }
 
 // http://psgraphics.blogspot.com/2019/02/picking-points-on-hemisphere-with.html
-fn rand3HemiCosWeighted(nrm: vec3f) -> vec3f
+fn rand3HemiCosWeighted(nrm: vec3f, r: vec2f) -> vec3f
 {
   // Expects nrm to be unit vector
-  let dir = nrm + rand3UnitSphere();
+  let dir = nrm + rand3UnitSphere(r);
   return select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
 }
 
 // https://mathworld.wolfram.com/DiskPointPicking.html
-fn rand2Disk() -> vec2f
+fn rand2Disk(r: vec2f) -> vec2f
 {
-  let r = sqrt(rand());
-  let theta = 2 * PI * rand();
-  return vec2f(r * cos(theta), r * sin(theta));
+  let radius = sqrt(r.x);
+  let theta = 2 * PI * r.y;
+  return vec2f(radius * cos(theta), radius * sin(theta));
 }
 
 fn clampIntensity(contribution: vec3f) -> vec3f
@@ -724,167 +707,47 @@ fn calcTriNormal(h: Hit, inst: ptr<storage, Inst>, tri: ptr<storage, Tri>) -> ve
   return normalize(nrm * toMat3x3(&(*inst).transform));
 }
 
-fn sampleLambert(ia: ptr<function, IA>) -> f32
+fn isEmissive(mtl: ptr<function, Mtl>) -> bool
 {
-  // Uniform
-  //(*ia).inDir = rand3Hemi((*ia).nrm);
-  //(*ia).flags &= ~IA_SPECULAR;
-
-  // Importance sampled cos
-  (*ia).inDir = rand3HemiCosWeighted((*ia).nrm);
-  (*ia).flags &= ~IA_SPECULAR;
-
-  return pdfLambert(ia);
+  return any((*mtl).col > vec3f(1.0));
 }
 
-fn pdfLambert(ia: ptr<function, IA>) -> f32
+fn evalMaterial(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 {
-  // Uniform
-  //return 1.0 / (2.0 * PI);
-  
-  return dot((*ia).inDir, (*ia).nrm) * INV_PI;
+  // This is called for light sampling only, which is not executed for
+  // specular. Thus eval only the diffuse term here.
+  if(((*ia).flags & IA_SPECULAR) > 0) {
+    // Error
+    *pdf = 1;
+    return vec3f(0, 0, 1000);
+  }
+
+  let lDotN = max(0, dot((*ia).inDir, (*ia).faceDir * (*ia).nrm));
+  *pdf = lDotN * INV_PI;
+  return (*ia).mtl.col * INV_PI * lDotN;
 }
 
-fn evalLambert(ia: ptr<function, IA>) -> vec3f
-{ 
-  return (*ia).mtl.color * INV_PI * dot((*ia).inDir, (*ia).nrm);
-}
-
-fn sampleMetal(ia: ptr<function, IA>) -> f32
+fn sampleMaterial(ia: ptr<function, IA>, r: vec2f, pdf: ptr<function, f32>) -> vec3f
 {
-  // TODO Fuzzy reflection calc/distribution is NOT really correct
-  let dir = reflect(-(*ia).outDir, (*ia).nrm); 
-  (*ia).inDir = normalize(dir + (*ia).mtl.value * rand3Hemi(dir)); 
-  (*ia).flags |= IA_SPECULAR;
-
-  return pdfMetal(ia);
-}
-
-fn pdfMetal(ia: ptr<function, IA>) -> f32
-{
-  // One direction only
-  return 1.0;
-}
-
-fn evalMetal(ia: ptr<function, IA>) -> vec3f
-{ 
-  return (*ia).mtl.color;
-}
-
-fn schlickReflectance(cosTheta: f32, refractionIndexRatio: f32) -> f32
-{
-  var r0 = (1 - refractionIndexRatio) / (1 + refractionIndexRatio);
-  r0 = r0 * r0;
-  return r0 + (1 - r0) * pow(1 - cosTheta, 5);
-}
-
-fn sampleDielectric(ia: ptr<function, IA>) -> f32
-{
-  // The other medium is air (ior = 1)
-  let refracIndexRatio = select(1 / (*ia).mtl.value, (*ia).mtl.value, (*ia).faceDir < 0);
+  // Flip the normal if we are inside or seeing a backface
   let nrm = (*ia).faceDir * (*ia).nrm;
-  let cosTheta = min(dot((*ia).outDir, nrm), 1);
-  //let sinTheta = sqrt(1 - cosTheta * cosTheta);
-  //
-  //if(refracIndexRatio * sinTheta > 1 || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
-  //  (*ia).inDir = reflect(-(*ia).outDir, nrm);
-  //} else {
-  //  (*ia).inDir = refract(-(*ia).outDir, nrm, refracIndexRatio);
-  //}
-
-  (*ia).inDir = refract(-(*ia).outDir, nrm, refracIndexRatio);
-  if(all((*ia).inDir == vec3f(0)) || schlickReflectance(cosTheta, refracIndexRatio) > rand()) {
-    (*ia).inDir = reflect(-(*ia).outDir, nrm);
-  }
-
-  (*ia).flags |= IA_SPECULAR;
-
-  return pdfDielectric(ia);
-}
-
-fn pdfDielectric(ia: ptr<function, IA>) -> f32
-{
-  // One direction only
-  return 1.0;
-}
-
-fn evalDielectric(ia: ptr<function, IA>) -> vec3f
-{
-  return (*ia).mtl.color;
-}
-
-fn evalMaterial(ia: ptr<function, IA>) -> vec3f
-{
-  switch(ia.mtl.flags & MTL_TYPE_MASK)
-  {
-    case MT_LAMBERT {
-      return evalLambert(ia);
-    }
-    case MT_METAL: {
-      return evalMetal(ia);
-    }
-    case MT_DIELECTRIC: {
-      return evalDielectric(ia);
-    }
-    case MT_EMISSIVE: {
-      // Backside of a light
-      return vec3f(0.0, 10.0, 0.0);
-    }
-    default: {
-      // Error
-      return vec3f(10.0, 0.0, 0.0);
+  if(all((*ia).mtl.trans == vec3f(0))) {
+    if(r.x < 1 - (*ia).mtl.fuzz) {
+      // Perfect reflection
+      (*ia).inDir = reflect(-(*ia).outDir, nrm);
+      (*ia).flags |= IA_SPECULAR;
+      *pdf = 1.0; // One ray dir only
+      return (*ia).mtl.col / abs(dot((*ia).inDir, nrm));
+    } else {
+      // Diffuse
+      (*ia).inDir = rand3HemiCosWeighted(nrm, r.xy);
+      *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI;
+      return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
     }
   }
-}
-
-fn sampleMaterial(ia: ptr<function, IA>) -> f32
-{
-  switch(ia.mtl.flags & MTL_TYPE_MASK)
-  {
-    case MT_LAMBERT: {
-      return sampleLambert(ia);
-    }
-    case MT_METAL: {
-      return sampleMetal(ia);
-    }
-    case MT_DIELECTRIC: {
-      return sampleDielectric(ia);
-    }
-    default: {
-      // Error
-      return 1000.0;
-    }
-  }
-}
-
-fn sampleAndEvalMaterial(ia: ptr<function, IA>) -> vec3f
-{
-  // TODO Unify different terms/types to one "lambert material"
-
-  var pdf: f32;
-  switch(ia.mtl.flags & MTL_TYPE_MASK)
-  {
-    case MT_LAMBERT: {
-      pdf = sampleLambert(ia);
-      return select(evalLambert(ia) / pdf, vec3f(0), pdf < EPSILON);
-    }
-    case MT_METAL: {
-      pdf = sampleMetal(ia);
-      return evalMetal(ia) / pdf;
-    }
-    case MT_DIELECTRIC: {
-      pdf = sampleDielectric(ia);
-      return evalDielectric(ia) / pdf;
-    }
-    case MT_EMISSIVE: {
-      // Backside of a light
-      return vec3f(0.0, 10.0, 0.0);
-    }
-    default: {
-      // Error
-      return vec3f(10.0, 0.0, 0.0);
-    }
-  }
+  
+  // Error
+  return vec3f(0.0, 0.0, 1000.0);
 }
 
 // https://mathworld.wolfram.com/TrianglePointPicking.html
@@ -963,7 +826,7 @@ fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
 }
 
 // https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
-fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<function, u32>) -> f32
+fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<function, u32>, pdf: ptr<function, f32>)
 {
   // Calculate picking probability with respect to ltri contributions
   var contributions: array<f32, MAX_LTRIS>;
@@ -979,7 +842,8 @@ fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<funct
 
   // No ltri can be picked, i.e. each ltri faces away
   if(totalContrib < EPSILON) {
-    return 0;  
+    *pdf = 0;
+    return;
   }
 
   // Same as scaling contributions[i] by totalContrib
@@ -997,19 +861,22 @@ fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<funct
   }
 
   // Scale contributions by total, so that our picking pdf integrates to 1
-  return contributions[*ltriIdx] / totalContrib;
+  *pdf = contributions[*ltriIdx] / totalContrib;
 }
 
-fn evalLTri(ltri: ptr<storage, LTri>) -> vec3f
+fn pdfLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, dist: f32) -> f32
 {
-  return (*ltri).emission;
+  // Account for single ray in direction of light
+  // pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
+  return (dist * dist) / ((*ltri).area * dot(-(*ia).inDir, (*ltri).nrm));
 }
 
-fn probeLightDir(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
+fn evalLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, pdf: ptr<function, f32>) -> vec3f
 {
   if(dot((*ia).inDir, (*ltri).nrm) > 0) {
     // Light is facing away (lights are not double sided)
-    return 0;
+    *pdf = 0;
+    return vec3f(0);
   }
 
   // Get us the distance to the light if we actually intersect it
@@ -1018,26 +885,30 @@ fn probeLightDir(ia: ptr<function, IA>, ltri: ptr<storage, LTri>) -> f32
   let dist = intersectTri((*ia).pos, (*ia).inDir, (*ltri).v0, (*ltri).v1, (*ltri).v2, &v, &u);
   if(dist == MAX_DISTANCE) {
     // Not hitting the light tri
-    return 0;
+    *pdf = 0;
+    return vec3f(0);
   }
 
   // Check if light is obstructed
   if(intersectTlasAnyHit(Ray((*ia).pos, (*ia).inDir), dist - EPSILON)) {
-    return 0;
+    *pdf = 0;
+    return vec3f(0);
   }
 
   // Visible, calc pdf for current direction
-  return pdfLTri(ia, ltri, dist);
+  *pdf = pdfLTri(ia, ltri, dist);
+  return (*ltri).emission;
 }
 
-fn sampleLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, bc: vec3f) -> f32
+fn sampleLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, bc: vec3f, pdf: ptr<function, f32>) -> vec3f
 {
   // Find random point on light surface and calc light dir
   var lightDir = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z - (*ia).pos;
 
   if(dot(lightDir, (*ltri).nrm) > 0) {
     // Light is facing away (lights are not double sided)
-    return 0;
+    *pdf = 0;
+    return vec3f(0);
   }
 
   let dist = length(lightDir);
@@ -1048,57 +919,66 @@ fn sampleLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, bc: vec3f) -> f32
 
   // Check if light is obstructed
   if(intersectTlasAnyHit(Ray((*ia).pos, (*ia).inDir), dist - EPSILON)) {
-    return 0;
+    *pdf = 0;
+    return vec3f(0);
   }
 
   // Visible, calc pdf for current direction
-  return pdfLTri(ia, ltri, dist);
-}
-
-fn pdfLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, dist: f32) -> f32
-{
-  // Account for single ray in direction of light
-  // pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
-  return (dist * dist) / ((*ltri).area * dot(-(*ia).inDir, (*ltri).nrm));
+  *pdf = pdfLTri(ia, ltri, dist);
+  return (*ltri).emission;
 }
 
 // Apply MIS to direct light sampling. Choose light randomly based on picking prob.
 // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
-fn sampleDirectLight(ia: ptr<function, IA>) -> vec3f
+fn sampleDirectLight(ia: ptr<function, IA>, r: vec4f) -> vec3f
 {
   // Prepare random barycentric coordinates
-  let bc = randBarycentric(rand());
-
-  // Pick ltri according to contribution and calc picking probability
-  var ltriIdx: u32;
-  let pickPdf = pickLTriRandomly(ia, rand(), bc, &ltriIdx);
-  let ltri = &ltris[ltriIdx];
+  let bc = randBarycentric(r.x);
 
   var contribution = vec3f(0);
 
-  // Sample the light only if current brdf is not specular
-  if(((*ia).mtl.flags & MTL_TYPE_MASK) == MT_LAMBERT) {
-    // Sample light (sets direction to random point on light tri)
-    let lightPdf = pickPdf * sampleLTri(ia, ltri, bc);
-    if(lightPdf < EPSILON) {
+  // Pick ltri according to contribution and calc picking probability
+  var pickPdf: f32;
+  var ltriIdx: u32;
+  pickLTriRandomly(ia, r.y, bc, &ltriIdx, &pickPdf);
+  if(pickPdf == 0) {
+    return contribution;
+  }
+  
+  let ltri = &ltris[ltriIdx];
+
+  // Sample the light only if current bsdf is not specular
+  if(((*ia).flags & IA_SPECULAR) == 0) {
+
+    // Sample light tri (sets direction to random point on ltri)
+    var ltriPdf: f32;
+    let emission = sampleLTri(ia, ltri, bc, &ltriPdf);
+    if(ltriPdf < EPSILON) {
       return contribution;
     }
+    ltriPdf *= pickPdf;
 
-    let brdfPdf = pdfLambert(ia);
-    if(brdfPdf > 0) {
+    var bsdfPdf: f32;
+    // Scale by the probability of the mtl producing a diffuse bounce
+    // because the bsdf can produce specular reflection/refraction bounces
+    let bsdf = evalMaterial(ia, &bsdfPdf) * (*ia).mtl.fuzz;
+    if(bsdfPdf > 0) {
       // Power heuristic with beta = 2
-      let weight = lightPdf * lightPdf / (brdfPdf * brdfPdf + lightPdf * lightPdf);
-      contribution += evalMaterial(ia) * evalLTri(ltri) * weight / lightPdf;
+      let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
+      contribution += bsdf * emission * weight / ltriPdf;
     }
   }
 
-  // Sample brdf (sets direction according to material brdf)
-  let brdfPdf = sampleMaterial(ia);
-  if(brdfPdf > 0) {
-    let lightPdf = pickPdf * probeLightDir(ia, ltri);
-    if(lightPdf > 0) {
-      let weight = brdfPdf * brdfPdf / (brdfPdf * brdfPdf + lightPdf * lightPdf);
-      contribution += evalLTri(ltri) * evalMaterial(ia) * weight / brdfPdf;
+  // Sample bsdf (sets direction according to material bsdf)
+  var bsdfPdf: f32;
+  let bsdf = sampleMaterial(ia, r.zw, &bsdfPdf);
+  if(bsdfPdf > 0) {
+    var ltriPdf: f32;
+    let emission = evalLTri(ia, ltri, &ltriPdf);
+    if(ltriPdf > 0) {
+      ltriPdf *= pickPdf;
+      let weight = bsdfPdf * bsdfPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
+      contribution += emission * bsdf * weight / bsdfPdf;
     }
   }
 
@@ -1118,8 +998,8 @@ fn render(initialRay: Ray) -> vec3f
     
     // No hit
     if(hit.t == MAX_DISTANCE) {
-      //col += fixNan3(clampIntensity(throughput * globals.bgColor));
-      col += throughput * globals.bgColor;
+      col += clampIntensity(throughput * globals.bgColor);
+      //col += throughput * globals.bgColor;
       break;
     }
 
@@ -1147,26 +1027,38 @@ fn render(initialRay: Ray) -> vec3f
     ia.mtl = materials[mtl & MTL_ID_MASK];
 
     // Hit a light
-    if((ia.mtl.flags & MTL_TYPE_MASK) == MT_EMISSIVE) {
+    if(isEmissive(&ia.mtl)) {
       // Only consider if a primary ray or last bounce was specular
       if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
         // Lights have no back side
         (dot(ia.outDir, ia.nrm) > EPSILON)) {
-        //col += fixNan3(clampIntensity(throughput * ia.mtl.emission));
-        col += throughput * ia.mtl.emission;
+        col += clampIntensity(throughput * ia.mtl.col);
+        //col += throughput * ia.mtl.col;
       }
       break;
     }
 
     // Remember backside hit
     ia.faceDir = select(1.0, -1.0, dot(ia.outDir, ia.nrm) < EPSILON);
+
+    // Flag if material is specular
+    ia.flags = select(ia.flags & ~IA_SPECULAR, ia.flags | IA_SPECULAR,
+                      any(ia.mtl.trans > vec3f(0.5)) || ia.mtl.fuzz < 0.1);
+
+    // Get us some randomness
+    let r = vec4f(rand(), rand(), rand(), rand());
     
     // Sample direct light
-    //col += fixNan3(clampIntensity(throughput * sampleDirectLight(&ia)));
-    col += throughput * sampleDirectLight(&ia);
+    col += clampIntensity(throughput * sampleDirectLight(&ia, r));
+    //col += throughput * sampleDirectLight(&ia);
 
     // Sample indirect light
-    throughput *= sampleAndEvalMaterial(&ia);
+    var bsdfPdf: f32;
+    let bsdf = sampleMaterial(&ia, vec2f(rand(), rand()), &bsdfPdf);
+    if(bsdfPdf < EPSILON || isNan(bsdfPdf)) {
+      break;
+    }
+    throughput *= bsdf / bsdfPdf;
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
@@ -1186,15 +1078,15 @@ fn render(initialRay: Ray) -> vec3f
   return col;
 }
 
-fn createPrimaryRay(pixelPos: vec2f) -> Ray
+fn createPrimaryRay(pixelPos: vec2f, r: vec4f) -> Ray
 {
   var pixelSample = globals.pixelTopLeft + globals.pixelDeltaX * pixelPos.x + globals.pixelDeltaY * pixelPos.y;
-  pixelSample += (rand() - 0.5) * globals.pixelDeltaX + (rand() - 0.5) * globals.pixelDeltaY;
+  pixelSample += (r.x - 0.5) * globals.pixelDeltaX + (r.y - 0.5) * globals.pixelDeltaY;
 
   var eyeSample = globals.eye;
   if(globals.focAngle > 0) {
     let focRadius = globals.focDist * tan(0.5 * radians(globals.focAngle));
-    let diskSample = rand2Disk();
+    let diskSample = rand2Disk(r.zw);
     eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
   }
 
@@ -1213,7 +1105,8 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    col += render(createPrimaryRay(vec2f(globalId.xy)));
+    let r = vec4f(rand(), rand(), rand(), rand());
+    col += render(createPrimaryRay(vec2f(globalId.xy), r));
   }
 
   buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);

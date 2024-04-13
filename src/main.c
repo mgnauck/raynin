@@ -112,7 +112,7 @@ void init_scene_riow(scene *s)
   
   // Floor mesh
   m = mtl_create_lambert();
-  m.color = (vec3){ 0.5f, 0.5f, 0.5f };
+  m.col = (vec3){ 0.5f, 0.5f, 0.5f };
   mtl_id = scene_add_mtl(s, &m);
   uint16_t fid = scene_add_quad(s, 10, 10, mtl_id);
  
@@ -134,21 +134,21 @@ void init_scene_riow(scene *s)
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
   m = mtl_create_metal();
-  m.color = (vec3){ 0.7f, 0.6f, 0.5f };
-  m.value = 0.001f;
+  m.col = (vec3){ 0.7f, 0.6f, 0.5f };
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  m = mtl_create_dielectric();
+  ///m = mtl_create_dielectric();
+  m = mtl_create_lambert();
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, 1, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   m = mtl_create_lambert();
-  m.color = (vec3){ 0.1f, 0.2f, 0.4f };
+  m.col = (vec3){ 0.1f, 0.2f, 0.4f };
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
@@ -163,13 +163,14 @@ void init_scene_riow(scene *s)
         if(mtl_p < 0.8f) {
           m = mtl_create_lambert();
           mtl_id = scene_add_mtl(s, &m);
-        } else if(mtl_p < 0.95f) {
+        } else /*if(mtl_p < 0.95f)*/ {
           m = mtl_create_metal();
+          m.fuzz = pcg_randf() * 0.1f;
           mtl_id = scene_add_mtl(s, &m);
-        } else {
+        } /*else {
           m = mtl_create_dielectric();
           mtl_id = scene_add_mtl(s, &m);
-        }
+        }*/
 
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
@@ -198,7 +199,7 @@ void init(uint32_t width, uint32_t height)
 
 void update_scene(scene *s, float time)
 {
-  // Set scene always dirty
+  // Set scene always dirty, i.e. do not converge
   scene_set_dirty(s, RT_CAM_VIEW);
 
   // Update camera

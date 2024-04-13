@@ -81,7 +81,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
       tri *t = &tris[i];
       tri_build_ltri(&s->ltris[ltri_ofs + ltri_cnt++], &tris[i],
           inst->id & 0xffff, i, inst->transform,
-          s->mtls[t->mtl & 0xffff].emission);
+          s->mtls[t->mtl & 0xffff].col);
     }
   } else {
     // Create ltris for emissive tris of the mesh
@@ -90,7 +90,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
       mtl *mtl = &s->mtls[t->mtl & 0xffff];
       if(mtl_is_emissive(mtl))
         tri_build_ltri(&s->ltris[ltri_ofs + ltri_cnt++], t,
-            inst->id & 0xffff, i, inst->transform, mtl->emission);
+            inst->id & 0xffff, i, inst->transform, mtl->col);
     }
   }
 
