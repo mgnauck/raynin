@@ -14,7 +14,7 @@ typedef struct mtl {
 bool  mtl_is_emissive(const mtl *mtl);
 
 // Generate random materials
-mtl   mtl_create_lambert();
+mtl   mtl_create_diffuse();
 mtl   mtl_create_metal();
 mtl   mtl_create_dielectric();
 mtl   mtl_create_emissive();

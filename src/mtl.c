@@ -6,7 +6,7 @@ bool mtl_is_emissive(const mtl *mtl)
   return mtl->col.x > 1.0f || mtl->col.y > 1.0f || mtl->col.z > 1.0f;
 }
 
-mtl mtl_create_lambert()
+mtl mtl_create_diffuse()
 {
   return (mtl){
     .col = vec3_mul(vec3_rand(), vec3_rand()),
@@ -29,7 +29,7 @@ mtl mtl_create_dielectric()
   return (mtl){
     .col = (vec3){ 1.0f, 1.0f, 1.0f },
     .fuzz = 0.0f,
-    .trans = (vec3){ 1.0f, 1.0, 1.0f },
+    .trans = (vec3){ 1.0f, 1.0f, 1.0f },
     .ior = 1.5f // Glass
  };
 }

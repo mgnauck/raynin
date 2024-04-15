@@ -135,12 +135,6 @@ const ST_PLANE            = 0u;
 const ST_BOX              = 1u;
 const ST_SPHERE           = 2u;
 
-// Material types
-const MT_LAMBERT          = 0u;
-const MT_METAL            = 1u;
-const MT_DIELECTRIC       = 2u;
-const MT_EMISSIVE         = 3u;
-
 // Interaction flags
 const IA_SPECULAR         = 1u;
 
@@ -727,27 +721,56 @@ fn evalMaterial(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
   return (*ia).mtl.col * INV_PI * lDotN;
 }
 
+fn schlickReflectance(cosTheta: f32, iorRatio: f32) -> f32
+{
+  var r0 = (1 - iorRatio) / (1 + iorRatio);
+  r0 *= r0;
+  return r0 + (1 - r0) * pow(1 - cosTheta, 5);
+}
+
 fn sampleMaterial(ia: ptr<function, IA>, r: vec2f, pdf: ptr<function, f32>) -> vec3f
 {
-  // Flip the normal if we are inside or seeing a backface
+  // Flip the normal if we are inside or seeing a backface of not closed mesh
   let nrm = (*ia).faceDir * (*ia).nrm;
-  if(all((*ia).mtl.trans == vec3f(0))) {
-    if(r.x < 1 - (*ia).mtl.fuzz) {
-      // Perfect reflection
-      (*ia).inDir = reflect(-(*ia).outDir, nrm);
+  let pt = maxComp((*ia).mtl.trans);
+  if(r.x < pt) {
+    // Refraction
+	  let iorRatio = select(1 /* air */ / (*ia).mtl.ior, (*ia).mtl.ior, (*ia).faceDir < 0);
+	  let cosTheta = min(dot((*ia).outDir, nrm), 1);
+	  (*ia).inDir = refract(-(*ia).outDir, nrm, iorRatio);
+    if(all((*ia).inDir == vec3f(0)) || r.y < schlickReflectance(cosTheta, iorRatio)) {
+      // Reflection
+		  (*ia).inDir = reflect(-(*ia).outDir, nrm);
+	  }
+ 	  (*ia).flags |= IA_SPECULAR;
+    *pdf = 1.0;
+    return (*ia).mtl.col / abs(dot((*ia).inDir, nrm));
+  } else {
+    let pr = 1 - (*ia).mtl.fuzz;
+    if(r.y < pr) {
+      // Reflection
+      // TODO Fuzziness handling is not really accurate
+      let rr = vec2f((r.x - pt) / (1 - pt), rand());
+      let dir = reflect(-(*ia).outDir, nrm);
+      (*ia).inDir = normalize(dir + (*ia).mtl.fuzz * rand3Hemi(dir, rr));
       (*ia).flags |= IA_SPECULAR;
-      *pdf = 1.0; // One ray dir only
-      return (*ia).mtl.col / abs(dot((*ia).inDir, nrm));
+      *pdf = 1.0;
+      let nDotR = dot((*ia).inDir, nrm);
+      if(nDotR > 0) {
+        return (*ia).mtl.col / nDotR;
+      } else {
+        // Exclude lower hemisphere
+        *pdf = 0;
+        return vec3f(0);
+      }
     } else {
       // Diffuse
-      (*ia).inDir = rand3HemiCosWeighted(nrm, r.xy);
+      let rr = vec2f((r.x - pt) / (1 - pt), (r.y - pr) / (1 - pr));
+      (*ia).inDir = rand3HemiCosWeighted(nrm, rr);
       *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI;
       return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
     }
   }
-  
-  // Error
-  return vec3f(0.0, 0.0, 1000.0);
 }
 
 // https://mathworld.wolfram.com/TrianglePointPicking.html
@@ -763,15 +786,23 @@ fn sampleMaterial(ia: ptr<function, IA>, r: vec2f, pdf: ptr<function, f32>) -> v
 // Implementation copied from: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
 fn randBarycentric(u: f32) -> vec3f
 {
-  let uf = u32(u * 4294967296); // Convert to 0.32 fixed point base-2
-  var a = vec2f(1, 0); // Barycentrics of 3 corners of the current subtriangle
+  // Convert to 0.32 fixed point base-2
+  let uf = u32(u * 4294967296);
+
+  // Barycentrics of 3 corners of the current subtriangle
+  var a = vec2f(1, 0);
   var b = vec2f(0, 1);
   var c = vec2f(0, 0);
-  for(var i=0u; i<16u; i++) { // For each base 4-digit
-    let d = (uf >> (2u * (15u - i))) & 0x3; // Get the digit
+
+  // For each base 4-digit
+  for(var i=0u; i<16u; i++) {
+    // Get the digit
+    let d = (uf >> (2u * (15u - i))) & 0x3;
+  
     var an: vec2f;
     var bn: vec2f;
     var cn: vec2f;
+    
     switch(d) {
       case 0: {
         an = (b + c) * 0.5;
@@ -798,6 +829,7 @@ fn randBarycentric(u: f32) -> vec3f
     b = bn;
     c = cn;
   }
+
   let r = (a + b + c) * 0.33333;
   return vec3f(r.x, r.y, 1 - r.x - r.y);
 }
@@ -819,7 +851,7 @@ fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
 
   // Inclination between surface normal and light dir
   // (how much the surface aligns with the light dir)
-  let nDotL = max(0, dot((*ia).nrm, lightDir));
+  let nDotL = max(0, dot((*ia).faceDir * (*ia).nrm, lightDir));
 
   // Inclination angles scale our measure of light power / dist^2
   return lnDotL * nDotL * (*ltri).power * invDist * invDist;
@@ -958,14 +990,14 @@ fn sampleDirectLight(ia: ptr<function, IA>, r: vec4f) -> vec3f
     }
     ltriPdf *= pickPdf;
 
-    var bsdfPdf: f32;
     // Scale by the probability of the mtl producing a diffuse bounce
-    // because the bsdf can produce specular reflection/refraction bounces
+    // because the bsdf can produce specular reflection/refraction
+    var bsdfPdf: f32;
     let bsdf = evalMaterial(ia, &bsdfPdf) * (*ia).mtl.fuzz;
     if(bsdfPdf > 0) {
       // Power heuristic with beta = 2
       let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
-      contribution += bsdf * emission * weight / ltriPdf;
+      contribution += emission * bsdf * weight / ltriPdf;
     }
   }
 
@@ -998,8 +1030,8 @@ fn render(initialRay: Ray) -> vec3f
     
     // No hit
     if(hit.t == MAX_DISTANCE) {
-      col += clampIntensity(throughput * globals.bgColor);
-      //col += throughput * globals.bgColor;
+      //col += clampIntensity(throughput * globals.bgColor);
+      col += throughput * globals.bgColor;
       break;
     }
 
@@ -1032,8 +1064,8 @@ fn render(initialRay: Ray) -> vec3f
       if((bounces == 0 || ((ia.flags & IA_SPECULAR) > 0)) &&
         // Lights have no back side
         (dot(ia.outDir, ia.nrm) > EPSILON)) {
-        col += clampIntensity(throughput * ia.mtl.col);
-        //col += throughput * ia.mtl.col;
+        //col += clampIntensity(throughput * ia.mtl.col);
+        col += throughput * ia.mtl.col;
       }
       break;
     }
@@ -1041,13 +1073,13 @@ fn render(initialRay: Ray) -> vec3f
     // Remember backside hit
     ia.faceDir = select(1.0, -1.0, dot(ia.outDir, ia.nrm) < EPSILON);
 
-    // Flag if material is specular
+    // Flag pure reflection or refraction materials, to exclude from light sampling
     ia.flags = select(ia.flags & ~IA_SPECULAR, ia.flags | IA_SPECULAR,
-                      any(ia.mtl.trans > vec3f(0.5)) || ia.mtl.fuzz < 0.1);
+                      any(ia.mtl.trans > vec3f(0.5)) || ia.mtl.fuzz < 0.01);
 
-    // Get us some randomness
+    // Get some randomness
     let r = vec4f(rand(), rand(), rand(), rand());
-    
+   
     // Sample direct light
     col += clampIntensity(throughput * sampleDirectLight(&ia, r));
     //col += throughput * sampleDirectLight(&ia);
@@ -1055,10 +1087,11 @@ fn render(initialRay: Ray) -> vec3f
     // Sample indirect light
     var bsdfPdf: f32;
     let bsdf = sampleMaterial(&ia, vec2f(rand(), rand()), &bsdfPdf);
-    if(bsdfPdf < EPSILON || isNan(bsdfPdf)) {
+    if(bsdfPdf > EPSILON) {
+      throughput *= bsdf / bsdfPdf;
+    } else {
       break;
     }
-    throughput *= bsdf / bsdfPdf;
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
