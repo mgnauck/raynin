@@ -57,13 +57,18 @@ struct BvhNode
 struct Mtl
 {
   col: vec3f,             // Albedo/diffuse. If component > 1.0, obj emits light.
+  refl: f32,              // Probability of reflection
+  refr: f32,              // Probability of refraction
   fuzz: f32,              // Fuzziness = 1 - glossiness
-  trans: vec3f,           // Transmittance per component
-  ior: f32                // Refraction index of obj we are entering
+  ior: f32,               // Refraction index of obj we are entering
+  pad0: f32,
+  att: vec3f,             // Attenuation of transmission per col comp (beer)
+  pad1: f32
 }
 
 struct IA
 {
+  dist:     f32,
   pos:      vec3f,
   nrm:      vec3f,
   outDir:   vec3f,
@@ -728,45 +733,38 @@ fn schlickReflectance(cosTheta: f32, iorRatio: f32) -> f32
   return r0 + (1 - r0) * pow(1 - cosTheta, 5);
 }
 
-fn sampleMaterial(ia: ptr<function, IA>, r: vec2f, pdf: ptr<function, f32>) -> vec3f
+// https://computergraphics.stackexchange.com/questions/2482/choosing-reflection-or-refraction-in-path-tracing
+fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> vec3f
 {
   // Flip the normal if we are inside or seeing a backface of not closed mesh
-  let nrm = (*ia).faceDir * (*ia).nrm;
-  let pt = maxComp((*ia).mtl.trans);
-  if(r.x < pt) {
-    // Refraction
+  let nrm = (*ia).faceDir * (*ia).nrm; 
+  if(r.x < (*ia).mtl.refr) {
+    // Specular refraction
 	  let iorRatio = select(1 /* air */ / (*ia).mtl.ior, (*ia).mtl.ior, (*ia).faceDir < 0);
 	  let cosTheta = min(dot((*ia).outDir, nrm), 1);
 	  (*ia).inDir = refract(-(*ia).outDir, nrm, iorRatio);
-    if(all((*ia).inDir == vec3f(0)) || r.y < schlickReflectance(cosTheta, iorRatio)) {
-      // Reflection
-		  (*ia).inDir = reflect(-(*ia).outDir, nrm);
-	  }
  	  (*ia).flags |= IA_SPECULAR;
     *pdf = 1.0;
-    return (*ia).mtl.col / abs(dot((*ia).inDir, nrm));
+    // Apply fuzziness to reflection and refraction paths
+    if(r.y < schlickReflectance(cosTheta, iorRatio) || all((*ia).inDir == vec3f(0))) {
+      let reflDir = reflect(-(*ia).outDir, nrm);
+		  (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, r.zw));
+    } else {
+      (*ia).inDir = normalize((*ia).inDir + (*ia).mtl.fuzz * rand3Hemi((*ia).inDir, r.zw));
+    }
+    let beer = exp(-(*ia).mtl.att * (*ia).dist) * step((*ia).faceDir, 0) + step(0, (*ia).faceDir);
+    return (*ia).mtl.col * beer / abs(dot((*ia).inDir, nrm));
   } else {
-    let pr = 1 - (*ia).mtl.fuzz;
-    if(r.y < pr) {
-      // Reflection
-      // TODO Fuzziness handling is not really accurate
-      let rr = vec2f((r.x - pt) / (1 - pt), rand());
-      let dir = reflect(-(*ia).outDir, nrm);
-      (*ia).inDir = normalize(dir + (*ia).mtl.fuzz * rand3Hemi(dir, rr));
-      (*ia).flags |= IA_SPECULAR;
+    if(r.y < (*ia).mtl.refl) {
+      // Specular reflection
+      let reflDir = reflect(-(*ia).outDir, nrm);
+      (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, r.zw));
+ 	    (*ia).flags |= IA_SPECULAR;
       *pdf = 1.0;
-      let nDotR = dot((*ia).inDir, nrm);
-      if(nDotR > 0) {
-        return (*ia).mtl.col / nDotR;
-      } else {
-        // Exclude lower hemisphere
-        *pdf = 0;
-        return vec3f(0);
-      }
+      return (*ia).mtl.col / abs(dot((*ia).inDir, nrm));
     } else {
       // Diffuse
-      let rr = vec2f((r.x - pt) / (1 - pt), (r.y - pr) / (1 - pr));
-      (*ia).inDir = rand3HemiCosWeighted(nrm, rr);
+      (*ia).inDir = rand3HemiCosWeighted(nrm, r.zw);
       *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI;
       return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
     }
@@ -962,17 +960,17 @@ fn sampleLTri(ia: ptr<function, IA>, ltri: ptr<storage, LTri>, bc: vec3f, pdf: p
 
 // Apply MIS to direct light sampling. Choose light randomly based on picking prob.
 // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
-fn sampleDirectLight(ia: ptr<function, IA>, r: vec4f) -> vec3f
+fn sampleDirectLight(ia: ptr<function, IA>, r1: vec2f, r2: vec4f) -> vec3f
 {
   // Prepare random barycentric coordinates
-  let bc = randBarycentric(r.x);
+  let bc = randBarycentric(r1.x);
 
   var contribution = vec3f(0);
 
   // Pick ltri according to contribution and calc picking probability
   var pickPdf: f32;
   var ltriIdx: u32;
-  pickLTriRandomly(ia, r.y, bc, &ltriIdx, &pickPdf);
+  pickLTriRandomly(ia, r1.y, bc, &ltriIdx, &pickPdf);
   if(pickPdf == 0) {
     return contribution;
   }
@@ -993,7 +991,7 @@ fn sampleDirectLight(ia: ptr<function, IA>, r: vec4f) -> vec3f
     // Scale by the probability of the mtl producing a diffuse bounce
     // because the bsdf can produce specular reflection/refraction
     var bsdfPdf: f32;
-    let bsdf = evalMaterial(ia, &bsdfPdf) * (*ia).mtl.fuzz;
+    let bsdf = evalMaterial(ia, &bsdfPdf) * (1 - (*ia).mtl.refl - (*ia).mtl.refr);
     if(bsdfPdf > 0) {
       // Power heuristic with beta = 2
       let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
@@ -1003,7 +1001,7 @@ fn sampleDirectLight(ia: ptr<function, IA>, r: vec4f) -> vec3f
 
   // Sample bsdf (sets direction according to material bsdf)
   var bsdfPdf: f32;
-  let bsdf = sampleMaterial(ia, r.zw, &bsdfPdf);
+  let bsdf = sampleMaterial(ia, r2, &bsdfPdf);
   if(bsdfPdf > 0) {
     var ltriPdf: f32;
     let emission = evalLTri(ia, ltri, &ltriPdf);
@@ -1039,6 +1037,7 @@ fn render(initialRay: Ray) -> vec3f
     let inst = &instances[hit.e & INST_ID_MASK]; 
     var mtl: u32;
 
+    ia.dist = hit.t;
     ia.pos = ray.ori + hit.t * ray.dir;
     ia.outDir = -ray.dir;
     
@@ -1070,23 +1069,26 @@ fn render(initialRay: Ray) -> vec3f
       break;
     }
 
-    // Remember backside hit
+    // Indicate backside hit
     ia.faceDir = select(1.0, -1.0, dot(ia.outDir, ia.nrm) < EPSILON);
 
-    // Flag pure reflection or refraction materials, to exclude from light sampling
+    // Flag reflection or refraction materials, to exclude from light sampling
     ia.flags = select(ia.flags & ~IA_SPECULAR, ia.flags | IA_SPECULAR,
-                      any(ia.mtl.trans > vec3f(0.5)) || ia.mtl.fuzz < 0.01);
+                      (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.5) && ia.mtl.fuzz < 0.1);
 
     // Get some randomness
-    let r = vec4f(rand(), rand(), rand(), rand());
+    // TODO Blue noise
+    let r1 = vec2f(rand(), rand());
+    let r2 = vec4f(rand(), rand(), rand(), rand());
+    let r3 = vec4f(rand(), rand(), rand(), rand());
    
     // Sample direct light
-    col += clampIntensity(throughput * sampleDirectLight(&ia, r));
+    col += clampIntensity(throughput * sampleDirectLight(&ia, r1, r2));
     //col += throughput * sampleDirectLight(&ia);
 
     // Sample indirect light
     var bsdfPdf: f32;
-    let bsdf = sampleMaterial(&ia, vec2f(rand(), rand()), &bsdfPdf);
+    let bsdf = sampleMaterial(&ia, r3, &bsdfPdf);
     if(bsdfPdf > EPSILON) {
       throughput *= bsdf / bsdfPdf;
     } else {
@@ -1155,5 +1157,6 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec
 @fragment
 fn fragmentMain(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
+  // TODO Postprocessing
   return vec4f(pow(buffer[globals.width * u32(pos.y) + u32(pos.x)].xyz, vec3f(0.4545)), 1);
 }

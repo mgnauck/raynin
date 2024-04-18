@@ -133,14 +133,15 @@ void init_scene_riow(scene *s)
  
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  m = mtl_create_metal();
+  m = mtl_create_mirror();
   m.col = (vec3){ 0.7f, 0.6f, 0.5f };
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  m = mtl_create_dielectric();
+  m = mtl_create_glass();
+  m.att = vec3_scale((vec3){ 1.0f, 2.0f, 3.0f }, 0.5f);
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, 1, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
@@ -148,6 +149,7 @@ void init_scene_riow(scene *s)
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   m = mtl_create_diffuse();
   m.col = (vec3){ 0.1f, 0.2f, 0.4f };
+  m.refl = 0.1f;
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
@@ -163,11 +165,11 @@ void init_scene_riow(scene *s)
           m = mtl_create_diffuse();
           mtl_id = scene_add_mtl(s, &m);
         } else if(mtl_p < 0.95f) {
-          m = mtl_create_metal();
+          m = mtl_create_mirror();
           m.fuzz = pcg_randf() * 0.2f;
           mtl_id = scene_add_mtl(s, &m);
         } else {
-          m = mtl_create_dielectric();
+          m = mtl_create_glass();
           mtl_id = scene_add_mtl(s, &m);
         }
 
