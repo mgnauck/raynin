@@ -1042,28 +1042,24 @@ fn render(initialRay: Ray) -> vec3f
     }
 
     // Finalize hit data
-    let inst = &instances[hit.e & INST_ID_MASK]; 
-    var mtl: u32;
+    let inst = instances[hit.e & INST_ID_MASK];
 
     ia.dist = hit.t;
     ia.pos = ray.ori + hit.t * ray.dir;
     ia.outDir = -ray.dir;
     
-    if(((*inst).data & SHAPE_TYPE_BIT) > 0) {
+    if((inst.data & SHAPE_TYPE_BIT) > 0) {
       // Shape
-      mtl = (*inst).id >> 16;
-      ia.nrm = calcShapeNormal(*inst, ia.pos);
+      ia.mtl = materials[(inst.id >> 16) & MTL_ID_MASK];
+      ia.nrm = calcShapeNormal(inst, ia.pos);
     } else {
       // Mesh
-      let ofs = (*inst).data & MESH_SHAPE_MASK;
-      let tri = &tris[ofs + (hit.e >> 16)];
+      let ofs = inst.data & MESH_SHAPE_MASK;
+      let tri = tris[ofs + (hit.e >> 16)];
       // Either use the material id from the triangle or the material override from the instance
-      mtl = select((*tri).mtl, (*inst).id >> 16, ((*inst).data & MTL_OVERRIDE_BIT) > 0);
-      ia.nrm = calcTriNormal(hit, *inst, *tri);
+      ia.mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
+      ia.nrm = calcTriNormal(hit, inst, tri);
     }
-
-    // Get material data
-    ia.mtl = materials[mtl & MTL_ID_MASK];
 
     // Hit a light
     if(isEmissive(ia.mtl)) {
