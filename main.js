@@ -1,7 +1,11 @@
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 10.0;
+
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
+
+const BLUE_NOISE_WIDTH = 256;
+const BLUE_NOISE_HEIGHT = 256;
 
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
@@ -9,7 +13,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, TRI: 1, LTRI: 2, INDEX: 3, BVH_NODE: 4, TLAS_NODE: 5, INST: 6, MAT: 7, ACC: 8 };
+const bufType = { GLOB: 0, TRI: 1, LTRI: 2, INDEX: 3, BVH_NODE: 4, TLAS_NODE: 5, INST: 6, MAT: 7, TEX: 8, ACC: 9 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -57,7 +61,9 @@ function Wasm(module)
     atan2f: (y, x) => Math.atan2(y, x),
     powf: (b, e) => Math.pow(b, e),
     gpu_create_res: (g, t, lt, idx, bn, tn, i, m) => createGpuResources(g, t, lt, idx, bn, tn, i, m),
-    gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz)
+    gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
+    gpu_write_tex: (id, addr, w, h) => device.queue.writeTexture(
+      { texture: res.buf[id] }, wa.memUint8, { offset: addr, bytesPerRow: w * 4 }, { width: w, height: h })
   };
 
   this.instantiate = async function()
@@ -165,6 +171,12 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeS
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
+  res.buf[bufType.TEX] = device.createTexture({
+    size: [BLUE_NOISE_WIDTH, BLUE_NOISE_HEIGHT, 1],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+  });
+
   res.buf[bufType.ACC] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
@@ -196,6 +208,9 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeS
       { binding: bufType.MAT,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
+      { binding: bufType.TEX,
+        visibility: GPUShaderStage.COMPUTE,
+        texture: {}, /* resource: { type: "read-only-storage" } */ },
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
@@ -213,6 +228,7 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeS
       { binding: bufType.TLAS_NODE, resource: { buffer: res.buf[bufType.TLAS_NODE] } },
       { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
       { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },
+      { binding: bufType.TEX, resource: res.buf[bufType.TEX].createView() },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });

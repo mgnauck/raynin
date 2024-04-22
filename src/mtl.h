@@ -17,7 +17,7 @@ typedef struct mtl {
 
 bool  mtl_is_emissive(const mtl *mtl);
 
-mtl   mtl_init();
+mtl   mtl_init(vec3 col);
 
 // Generate random materials
 mtl   mtl_create_diffuse();

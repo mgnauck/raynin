@@ -201,7 +201,7 @@ void init(uint32_t width, uint32_t height)
 void update_scene(scene *s, float time)
 {
   // Set scene always dirty, i.e. do not converge
-  //scene_set_dirty(s, RT_CAM_VIEW);
+  scene_set_dirty(s, RT_CAM_VIEW);
 
   // Update camera
   if(orbit_cam) {

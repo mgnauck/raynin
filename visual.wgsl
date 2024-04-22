@@ -4,12 +4,12 @@ struct Global
   height:       u32,
   spp:          u32,
   maxBounces:   u32,
-  rngSeed:      f32,
+  rngSeed1:     f32,
+  rngSeed2:     f32,
   weight:       f32,
-  time:         f32,
-  pad1:         f32,
+  frame:        f32,
   bgColor:      vec3f,
-  pad2:         f32,
+  pad0:         f32,
   eye:          vec3f,
   vertFov:      f32,
   right:        vec3f,
@@ -17,11 +17,11 @@ struct Global
   up:           vec3f,
   focAngle:     f32,
   pixelDeltaX:  vec3f,
-  pad3:         f32,
+  pad1:         f32,
   pixelDeltaY:  vec3f,
-  pad4:         f32,
+  pad2:         f32,
   pixelTopLeft: vec3f,
-  pad5:         f32
+  pad3:         f32
 }
 
 struct Ray
@@ -160,11 +160,15 @@ const MAX_LTRIS           = 64;
 @group(0) @binding(5) var<storage, read> tlasNodes: array<TlasNode>;
 @group(0) @binding(6) var<storage, read> instances: array<Inst>;
 @group(0) @binding(7) var<storage, read> materials: array<Mtl>;
-@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(8) var blueNoise: texture_2d<f32>;
+@group(0) @binding(9) var<storage, read_write> buffer: array<vec4f>;
 
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
-var<private> rngState: u32;
+
+//var<private> rngState: u32;
+var<private> random: vec4f;
+var<private> ridx = 0u;
 
 fn minComp(v: vec3f) -> f32
 {
@@ -187,12 +191,19 @@ fn toMat4x4(m: ptr<storage, mat3x4f>) -> mat4x4f
 }
 
 // PCG from https://jcgt.org/published/0009/03/02/
-fn rand() -> f32
+/*fn rand() -> f32
 {
   rngState = rngState * 747796405u + 2891336453u;
   let word = ((rngState >> ((rngState >> 28u) + 4u)) ^ rngState) * 277803737u;
   //return f32((word >> 22u) ^ word) / f32(0xffffffffu);
   return ldexp(f32((word >> 22u) ^ word), -32);
+}*/
+
+fn rand() -> f32
+{
+  let r = random[ridx];
+  ridx = (ridx + 1) % 4;
+  return r;
 }
 
 // https://mathworld.wolfram.com/SpherePointPicking.html
@@ -772,14 +783,13 @@ fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> v
 }
 
 // https://mathworld.wolfram.com/TrianglePointPicking.html
-/*fn randBarycentric2(r0: f32, r1: f32) -> vec3f
+/*fn randBarycentric(r: vec2f) -> vec3f
 {
-  let rxSqrt = sqrt(r0);
-  let b = vec2f(1 - rxSqrt, r1 * rxSqrt);
+  let rxSqrt = sqrt(r.x);
+  let b = vec2f(1 - rxSqrt, r.y * rxSqrt);
   return vec3f(b, 1 - b.x - b.y);
 }*/
 
-// TODO Use together with blue noise
 // Basu/Owen "Low discrepancy constructions in the triangle"
 // Implementation copied from: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
 fn randBarycentric(u: f32) -> vec3f
@@ -1069,7 +1079,7 @@ fn render(initialRay: Ray) -> vec3f
       break;
     }
 
-    // Indicate backside hit
+    // Indicate backside hitfloat
     ia.faceDir = select(1.0, -1.0, dot(ia.outDir, ia.nrm) < EPSILON);
 
     // Flag reflection or refraction materials, to exclude from light sampling
@@ -1077,7 +1087,6 @@ fn render(initialRay: Ray) -> vec3f
                       (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.5) && ia.mtl.fuzz < 0.1);
 
     // Get some randomness
-    // TODO Blue noise
     let r1 = vec2f(rand(), rand());
     let r2 = vec4f(rand(), rand(), rand(), rand());
     let r3 = vec4f(rand(), rand(), rand(), rand());
@@ -1136,7 +1145,10 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let index = globals.width * globalId.y + globalId.x;
-  rngState = index ^ u32(globals.rngSeed * 0xffffffff);
+  rngState = index ^ u32(globals.rngSeed1 * 0xffffffff);
+  
+  random = textureLoad(blueNoise, vec2u((globalId.x + u32(globals.rngSeed1 * 255)) & 0xff, (globalId.y + u32(globals.rngSeed2 * 255)) & 0xff), 0);
+  random = fract(random + vec4f(0.61803398875 * f32(globals.frame)));
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {

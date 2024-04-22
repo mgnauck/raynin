@@ -9,6 +9,7 @@
 #include "sutil.h"
 #include "tlas.h"
 #include "tri.h"
+#include "data/blue_noise_256x256x4.h"
 #include "log.h"
 
 #ifdef NATIVE_BUILD
@@ -33,7 +34,8 @@ typedef enum buf_type {
   BT_BVH_NODE,
   BT_TLAS_NODE,
   BT_INST,
-  BT_MTL
+  BT_MTL,
+  BT_TEX
 } buf_type;
 
 typedef struct render_data {
@@ -43,6 +45,7 @@ typedef struct render_data {
   uint8_t   spp;
   uint8_t   bounces;
   uint32_t  gathered_spp;
+  uint32_t  frame;
   vec3      bg_col;
 } render_data;
 
@@ -54,6 +57,8 @@ extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz, uint32_t ltri_sz,
 
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
+
+extern void gpu_write_tex(buf_type type, const void *src, uint32_t w, uint32_t h);
 
 #else
 
@@ -81,6 +86,7 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
   rd->spp = spp;
   rd->bounces = 5;
   rd->gathered_spp = 0;
+  rd->frame = 0;
   rd->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
 
   return rd;
@@ -124,6 +130,9 @@ void renderer_update_static(render_data *rd)
   // Push part of globals
   uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
+
+  // Push blue noise texture
+  gpu_write_tex(BT_TEX, blue_noise_256x256x4, 256, 256);
 #endif
 
   if(s->dirty & RT_MESH) {
@@ -190,11 +199,12 @@ void renderer_update(render_data *rd, float time)
 
 #ifndef NATIVE_BUILD
   // Push frame data
-  float frame[8] = { pcg_randf(), rd->spp / (float)(rd->gathered_spp + rd->spp),
-    time, 0.0f, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, 0.0f };
+  float frame[8] = { pcg_randf(), pcg_randf(), rd->spp / (float)(rd->gathered_spp + rd->spp),
+    (float)rd->frame, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, /* pad */ 0.0f };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frame, sizeof(frame));
 #endif
 
+  rd->frame++;
   rd->gathered_spp += rd->spp;
 }
 
