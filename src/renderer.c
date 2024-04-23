@@ -265,7 +265,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
             }
             nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
             mtl *m = &rd->scene->mtls[mtl_id];
-            c = mtl_is_emissive(m) ? m->emission : m->color;
+            c = m->col;
             //c = vec3_mul(nrm, c); 
             //c = nrm;
           }
