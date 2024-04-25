@@ -60,6 +60,7 @@ function Wasm(module)
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
     powf: (b, e) => Math.pow(b, e),
+    fracf: (v) => v % 1,
     gpu_create_res: (g, t, lt, idx, bn, tn, i, m) => createGpuResources(g, t, lt, idx, bn, tn, i, m),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
     gpu_write_tex: (id, addr, w, h) => device.queue.writeTexture(

@@ -25,6 +25,9 @@
 #define GLOB_BUF_OFS_CAM    48
 #define GLOB_BUF_OFS_VIEW   96
 
+// Dimensionality of a path/sequence
+#define SEQ_DIM             16
+
 // GPU buffer types
 typedef enum buf_type {
   BT_GLOB = 0,
@@ -47,6 +50,9 @@ typedef struct render_data {
   uint32_t  gathered_spp;
   uint32_t  frame;
   vec3      bg_col;
+  float     *alpha;
+  float     *last;
+  float     *seq;
 } render_data;
 
 #ifndef NATIVE_BUILD
@@ -88,24 +94,38 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
   rd->gathered_spp = 0;
   rd->frame = 0;
   rd->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
+  rd->alpha = malloc(SEQ_DIM * sizeof(*rd->alpha));
+  rd->last = malloc(SEQ_DIM * sizeof(*rd->last));
+  rd->seq = malloc(SEQ_DIM * rd->spp * sizeof(*rd->seq));
+
+  // Initialize alphas for quasirandom sequence (low discrepancy series)
+  qrand_alpha(SEQ_DIM, rd->alpha);
 
   return rd;
 }
 
 void renderer_release(render_data *rd)
 {
+  free(rd->alpha);
+  free(rd->last);
+  free(rd->seq);
   free(rd);
 }
 
 void reset_samples(render_data *rd)
 {
+  // Initialize or reset quasi random sequence to first dim * spp values
+  qrand_init(SEQ_DIM, rd->spp, rd->alpha, rd->seq);
+  memcpy(rd->last, &rd->seq[SEQ_DIM * (rd->spp - 1)], SEQ_DIM * sizeof(*rd->last));
+
+  // Reset gathered samples
   rd->gathered_spp = TEMPORAL_WEIGHT * rd->gathered_spp;
 }
 
 void renderer_set_bg_col(render_data *rd, vec3 bg_col)
 {
   memcpy(&rd->bg_col, &bg_col, sizeof(rd->bg_col));
-  reset_samples(rd);
+  scene_set_dirty(rd->scene, RT_CAM_VIEW);
 }
 
 void push_mtls(render_data *rd)
@@ -204,6 +224,11 @@ void renderer_update(render_data *rd, float time)
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frame, sizeof(frame));
 #endif
 
+  // Calculate next values of our quasirandom sequence
+  qrand_get_next_n(SEQ_DIM, rd->spp, rd->alpha, rd->last, rd->seq);
+  memcpy(rd->last, &rd->seq[SEQ_DIM * (rd->spp - 1)], SEQ_DIM * sizeof(*rd->last));
+
+  // Update frame and sample counter
   rd->frame++;
   rd->gathered_spp += rd->spp;
 }

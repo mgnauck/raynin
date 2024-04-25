@@ -816,24 +816,24 @@ fn sampleMaterial(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 {
   // Flip the normal if we are inside or seeing a backface of not closed mesh
   let nrm = (*ia).faceDir * (*ia).nrm;
-  if(rand2().x < (*ia).mtl.refr) {
+  if(rand() < (*ia).mtl.refr) {
     // Specular refraction
-	  let iorRatio = select(1 /* air */ / (*ia).mtl.ior, (*ia).mtl.ior, (*ia).faceDir < 0);
-	  let cosTheta = min(dot((*ia).outDir, nrm), 1.0);
-	  (*ia).inDir = refract(-(*ia).outDir, nrm, iorRatio);
- 	  (*ia).flags |= IA_SPECULAR;
+    let iorRatio = select(1 /* air */ / (*ia).mtl.ior, (*ia).mtl.ior, (*ia).faceDir < 0);
+    let cosTheta = min(dot((*ia).outDir, nrm), 1.0);
+    (*ia).inDir = refract(-(*ia).outDir, nrm, iorRatio);
+    (*ia).flags |= IA_SPECULAR;
     *pdf = 1.0;
     // Apply fuzziness to reflection and refraction paths
-    if(rand2().x < schlickReflectance(cosTheta, iorRatio) || all((*ia).inDir == vec3f(0))) {
+    if(rand() < schlickReflectance(cosTheta, iorRatio) || all((*ia).inDir == vec3f(0))) {
       let reflDir = reflect(-(*ia).outDir, nrm);
-		  (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, rand2()));
+      (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, rand2()));
     } else {
       (*ia).inDir = normalize((*ia).inDir + (*ia).mtl.fuzz * rand3Hemi((*ia).inDir, rand2()));
     }
     let beer = exp(-(*ia).mtl.att * (*ia).dist) * step((*ia).faceDir, 0.0) + step(0.0, (*ia).faceDir);
     return (*ia).mtl.col * beer / abs(dot((*ia).inDir, nrm));
   } else {
-    if(rand2().x < (*ia).mtl.refl) {
+    if(rand() < (*ia).mtl.refl) {
       // Specular reflection
       let reflDir = reflect(-(*ia).outDir, nrm);
       (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, rand2()));
@@ -873,7 +873,7 @@ fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
 }
 
 // https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
-fn pickLTriRandomly(ia: ptr<function, IA>, bc: vec3f, ltriIdx: ptr<function, u32>, pdf: ptr<function, f32>)
+fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<function, u32>, pdf: ptr<function, f32>)
 {
   // Calculate picking probability with respect to ltri contributions
   var contributions: array<f32, MAX_LTRIS>;
@@ -894,7 +894,7 @@ fn pickLTriRandomly(ia: ptr<function, IA>, bc: vec3f, ltriIdx: ptr<function, u32
   }
 
   // Same as scaling contributions[i] by totalContrib
-  let rscaled = rand2().x * totalContrib;
+  let rscaled = r * totalContrib;
 
   // Randomly pick the ltri according to the CDF
   // CDF is pdf for value X or all smaller ones
@@ -987,7 +987,7 @@ fn sampleDirectLight(ia: ptr<function, IA>) -> vec3f
   // Pick ltri according to contribution and calc picking probability
   var pickPdf: f32;
   var ltriIdx: u32;
-  pickLTriRandomly(ia, bc, &ltriIdx, &pickPdf);
+  pickLTriRandomly(ia, rand(), bc, &ltriIdx, &pickPdf);
   if(pickPdf == 0) {
     return contribution;
   }
@@ -1106,7 +1106,7 @@ fn render(initialRay: Ray) -> vec3f
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
     //let p = select(maxComp(throughput), 1.0, bounces == 0 || (ia.flags & IA_SPECULAR) > 0);
     let p = maxComp(throughput);
-    if(rand2().x > p) {
+    if(rand() > p) {
       break;
     }
     // Account for bias introduced by path termination (pdf = p)
@@ -1136,14 +1136,6 @@ fn createPrimaryRay(pixelPos: vec2f) -> Ray
   return Ray(eyeSample, normalize(pixelSample - eyeSample));
 }
 
-fn _rand2() -> vec2f
-{
-  let g = 1.32471795724474602596;
-  let a = vec2f(1.0 / g, 1.0 / (g * g));
-  randValue = fract(vec2f(offset) + randValue + a);
-  return randValue;
-}
-
 @compute @workgroup_size(8,8)
 fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 {
@@ -1156,16 +1148,11 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   rngState = index ^ u32(globals.rngSeed1 * 0xffffffff);
   //noise = textureLoad(blueNoise, vec2u((globalId.x + u32(globals.rngSeed1 * 255)) & 0xff, (globalId.y + u32(globals.rngSeed2 * 255)) & 0xff), 0);
 
-  /*
-  let g = 1.32471795724474602596;
-  let a = vec2f(1.0 / g, 1.0 / (g * g));
-  */
   offset = fract(0.7548776662 * f32(globalId.x /*+ u32(globals.rngSeed1 * f32(globals.width))*/) + 0.56984029 * f32(globalId.y /*+ u32(globals.rngSeed2 * f32(globals.height))*/));
   offset = 2.0 * offset * step(offset, 0.5) + (2.0 - 2.0 * offset) * step(0.5, offset);
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    //let r = fract(offset + vec2f(0.5, 0.5) + a * f32(u32(globals.frame) * globals.spp + i));
     col += render(createPrimaryRay(vec2f(globalId.xy)));
   }
 
