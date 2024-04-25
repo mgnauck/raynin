@@ -166,7 +166,11 @@ const MAX_LTRIS           = 64;
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
-//var<private> rngState: u32;
+var<private> rngState: u32;
+
+var<private> offset: f32;
+var<private> randValue: vec2f = vec2f(0.5);
+
 var<private> noise: vec4f;
 
 fn minComp(v: vec3f) -> f32
@@ -190,13 +194,18 @@ fn toMat4x4(m: mat3x4f) -> mat4x4f
 }
 
 // PCG from https://jcgt.org/published/0009/03/02/
-/*fn rand() -> f32
+fn rand() -> f32
 {
   rngState = rngState * 747796405u + 2891336453u;
   let word = ((rngState >> ((rngState >> 28u) + 4u)) ^ rngState) * 277803737u;
   //return f32((word >> 22u) ^ word) / f32(0xffffffffu);
   return ldexp(f32((word >> 22u) ^ word), -32);
-}*/
+}
+
+fn rand2() -> vec2f
+{
+  return vec2f(rand(), rand());
+}
 
 // https://mathworld.wolfram.com/SpherePointPicking.html
 fn rand3UnitSphere(r: vec2f) -> vec3f
@@ -229,6 +238,66 @@ fn rand2Disk(r: vec2f) -> vec2f
   let theta = 2 * PI * r.y;
   return vec2f(radius * cos(theta), radius * sin(theta));
 }
+
+// https://mathworld.wolfram.com/TrianglePointPicking.html
+fn randBarycentric(r: vec2f) -> vec3f
+{
+  let rxSqrt = sqrt(r.x);
+  let b = vec2f(1 - rxSqrt, r.y * rxSqrt);
+  return vec3f(b, 1 - b.x - b.y);
+}
+
+// Basu/Owen "Low discrepancy constructions in the triangle"
+// Implementation copied from: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
+/*fn randBarycentric2(u: f32) -> vec3f
+{
+  // Convert to 0.32 fixed point base-2
+  let uf = u32(u * 4294967296);
+
+  // Barycentrics of 3 corners of the current subtriangle
+  var a = vec2f(1, 0);
+  var b = vec2f(0, 1);
+  var c = vec2f(0, 0);
+
+  // For each base 4-digit
+  for(var i=0u; i<16u; i++) {
+    // Get the digit
+    let d = (uf >> (2u * (15u - i))) & 0x3;
+  
+    var an: vec2f;
+    var bn: vec2f;
+    var cn: vec2f;
+    
+    switch(d) {
+      case 0u: {
+        an = (b + c) * 0.5;
+        bn = (a + c) * 0.5;
+        cn = (a + b) * 0.5;
+      }
+      case 1u: {
+        an = a;
+        bn = (a + b) * 0.5;
+        cn = (a + c) * 0.5;
+      }
+      case 2u: {
+        an = (b + a) * 0.5;
+        bn = b;
+        cn = (b + c) * 0.5;
+      }
+      case 3u, default: {
+        an = (c + a) * 0.5;
+        bn = (c + b) * 0.5;
+        cn = c;
+      }
+    }
+    a = an;
+    b = bn;
+    c = cn;
+  }
+
+  let r = (a + b + c) * 0.33333;
+  return vec3f(r.x, r.y, 1 - r.x - r.y);
+}*/
 
 fn clampIntensity(contribution: vec3f) -> vec3f
 {
@@ -743,11 +812,11 @@ fn schlickReflectance(cosTheta: f32, iorRatio: f32) -> f32
 }
 
 // https://computergraphics.stackexchange.com/questions/2482/choosing-reflection-or-refraction-in-path-tracing
-fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> vec3f
+fn sampleMaterial(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 {
   // Flip the normal if we are inside or seeing a backface of not closed mesh
-  let nrm = (*ia).faceDir * (*ia).nrm; 
-  if(r.x < (*ia).mtl.refr) {
+  let nrm = (*ia).faceDir * (*ia).nrm;
+  if(rand2().x < (*ia).mtl.refr) {
     // Specular refraction
 	  let iorRatio = select(1 /* air */ / (*ia).mtl.ior, (*ia).mtl.ior, (*ia).faceDir < 0);
 	  let cosTheta = min(dot((*ia).outDir, nrm), 1.0);
@@ -755,89 +824,29 @@ fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> v
  	  (*ia).flags |= IA_SPECULAR;
     *pdf = 1.0;
     // Apply fuzziness to reflection and refraction paths
-    if(r.y < schlickReflectance(cosTheta, iorRatio) || all((*ia).inDir == vec3f(0))) {
+    if(rand2().x < schlickReflectance(cosTheta, iorRatio) || all((*ia).inDir == vec3f(0))) {
       let reflDir = reflect(-(*ia).outDir, nrm);
-		  (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, r.zw));
+		  (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, rand2()));
     } else {
-      (*ia).inDir = normalize((*ia).inDir + (*ia).mtl.fuzz * rand3Hemi((*ia).inDir, r.zw));
+      (*ia).inDir = normalize((*ia).inDir + (*ia).mtl.fuzz * rand3Hemi((*ia).inDir, rand2()));
     }
     let beer = exp(-(*ia).mtl.att * (*ia).dist) * step((*ia).faceDir, 0.0) + step(0.0, (*ia).faceDir);
     return (*ia).mtl.col * beer / abs(dot((*ia).inDir, nrm));
   } else {
-    if(r.y < (*ia).mtl.refl) {
+    if(rand2().x < (*ia).mtl.refl) {
       // Specular reflection
       let reflDir = reflect(-(*ia).outDir, nrm);
-      (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, r.zw));
+      (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, rand2()));
  	    (*ia).flags |= IA_SPECULAR;
       *pdf = 1.0;
       return (*ia).mtl.col / abs(dot((*ia).inDir, nrm));
     } else {
       // Diffuse
-      (*ia).inDir = rand3HemiCosWeighted(nrm, r.zw);
+      (*ia).inDir = rand3HemiCosWeighted(nrm, rand2());
       *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI;
       return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
     }
   }
-}
-
-// https://mathworld.wolfram.com/TrianglePointPicking.html
-/*fn randBarycentric(r: vec2f) -> vec3f
-{
-  let rxSqrt = sqrt(r.x);
-  let b = vec2f(1 - rxSqrt, r.y * rxSqrt);
-  return vec3f(b, 1 - b.x - b.y);
-}*/
-
-// Basu/Owen "Low discrepancy constructions in the triangle"
-// Implementation copied from: https://pharr.org/matt/blog/2019/02/27/triangle-sampling-1
-fn randBarycentric(u: f32) -> vec3f
-{
-  // Convert to 0.32 fixed point base-2
-  let uf = u32(u * 4294967296);
-
-  // Barycentrics of 3 corners of the current subtriangle
-  var a = vec2f(1, 0);
-  var b = vec2f(0, 1);
-  var c = vec2f(0, 0);
-
-  // For each base 4-digit
-  for(var i=0u; i<16u; i++) {
-    // Get the digit
-    let d = (uf >> (2u * (15u - i))) & 0x3;
-  
-    var an: vec2f;
-    var bn: vec2f;
-    var cn: vec2f;
-    
-    switch(d) {
-      case 0u: {
-        an = (b + c) * 0.5;
-        bn = (a + c) * 0.5;
-        cn = (a + b) * 0.5;
-      }
-      case 1u: {
-        an = a;
-        bn = (a + b) * 0.5;
-        cn = (a + c) * 0.5;
-      }
-      case 2u: {
-        an = (b + a) * 0.5;
-        bn = b;
-        cn = (b + c) * 0.5;
-      }
-      case 3u, default: {
-        an = (c + a) * 0.5;
-        bn = (c + b) * 0.5;
-        cn = c;
-      }
-    }
-    a = an;
-    b = bn;
-    c = cn;
-  }
-
-  let r = (a + b + c) * 0.33333;
-  return vec3f(r.x, r.y, 1 - r.x - r.y);
 }
 
 fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
@@ -864,7 +873,7 @@ fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
 }
 
 // https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
-fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<function, u32>, pdf: ptr<function, f32>)
+fn pickLTriRandomly(ia: ptr<function, IA>, bc: vec3f, ltriIdx: ptr<function, u32>, pdf: ptr<function, f32>)
 {
   // Calculate picking probability with respect to ltri contributions
   var contributions: array<f32, MAX_LTRIS>;
@@ -885,7 +894,7 @@ fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<funct
   }
 
   // Same as scaling contributions[i] by totalContrib
-  let rscaled = r * totalContrib;
+  let rscaled = rand2().x * totalContrib;
 
   // Randomly pick the ltri according to the CDF
   // CDF is pdf for value X or all smaller ones
@@ -968,17 +977,17 @@ fn sampleLTri(ia: ptr<function, IA>, ltri: LTri, bc: vec3f, pdf: ptr<function, f
 
 // Apply MIS to direct light sampling. Choose light randomly based on picking prob.
 // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
-fn sampleDirectLight(ia: ptr<function, IA>, r1: vec2f, r2: vec4f) -> vec3f
+fn sampleDirectLight(ia: ptr<function, IA>) -> vec3f
 {
   // Prepare random barycentric coordinates
-  let bc = randBarycentric(r1.x);
+  let bc = randBarycentric(rand2());
 
   var contribution = vec3f(0);
 
   // Pick ltri according to contribution and calc picking probability
   var pickPdf: f32;
   var ltriIdx: u32;
-  pickLTriRandomly(ia, r1.y, bc, &ltriIdx, &pickPdf);
+  pickLTriRandomly(ia, bc, &ltriIdx, &pickPdf);
   if(pickPdf == 0) {
     return contribution;
   }
@@ -1009,7 +1018,7 @@ fn sampleDirectLight(ia: ptr<function, IA>, r1: vec2f, r2: vec4f) -> vec3f
 
   // Sample bsdf (sets direction according to material bsdf)
   var bsdfPdf: f32;
-  let bsdf = sampleMaterial(ia, r2, &bsdfPdf);
+  let bsdf = sampleMaterial(ia, &bsdfPdf);
   if(bsdfPdf > 0) {
     var ltriPdf: f32;
     let emission = evalLTri(ia, *ltri, &ltriPdf);
@@ -1081,12 +1090,12 @@ fn render(initialRay: Ray) -> vec3f
                       (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.5) && ia.mtl.fuzz < 0.1);
 
     // Sample direct light
-    col += clampIntensity(throughput * sampleDirectLight(&ia, noise.xy, noise.zwxy));
+    col += clampIntensity(throughput * sampleDirectLight(&ia));
     //col += throughput * sampleDirectLight(&ia);
 
     // Sample indirect light
     var bsdfPdf: f32;
-    let bsdf = sampleMaterial(&ia, noise, &bsdfPdf);
+    let bsdf = sampleMaterial(&ia, &bsdfPdf);
     if(bsdfPdf > EPSILON) {
       throughput *= bsdf / bsdfPdf;
     } else {
@@ -1097,7 +1106,7 @@ fn render(initialRay: Ray) -> vec3f
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
     //let p = select(maxComp(throughput), 1.0, bounces == 0 || (ia.flags & IA_SPECULAR) > 0);
     let p = maxComp(throughput);
-    if(noise.x > p) {
+    if(rand2().x > p) {
       break;
     }
     // Account for bias introduced by path termination (pdf = p)
@@ -1111,19 +1120,28 @@ fn render(initialRay: Ray) -> vec3f
   return col;
 }
 
-fn createPrimaryRay(pixelPos: vec2f, r: vec4f) -> Ray
+fn createPrimaryRay(pixelPos: vec2f) -> Ray
 {
+  let r = rand2();
   var pixelSample = globals.pixelTopLeft + globals.pixelDeltaX * pixelPos.x + globals.pixelDeltaY * pixelPos.y;
   pixelSample += (r.x - 0.5) * globals.pixelDeltaX + (r.y - 0.5) * globals.pixelDeltaY;
 
   var eyeSample = globals.eye;
   if(globals.focAngle > 0) {
     let focRadius = globals.focDist * tan(0.5 * radians(globals.focAngle));
-    let diskSample = rand2Disk(r.zw);
+    let diskSample = rand2Disk(rand2());
     eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
   }
 
   return Ray(eyeSample, normalize(pixelSample - eyeSample));
+}
+
+fn _rand2() -> vec2f
+{
+  let g = 1.32471795724474602596;
+  let a = vec2f(1.0 / g, 1.0 / (g * g));
+  randValue = fract(vec2f(offset) + randValue + a);
+  return randValue;
 }
 
 @compute @workgroup_size(8,8)
@@ -1135,12 +1153,20 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 
   let index = globals.width * globalId.y + globalId.x;
 
-  //rngState = index ^ u32(globals.rngSeed1 * 0xffffffff);
-  noise = textureLoad(blueNoise, vec2u((globalId.x + u32(globals.rngSeed1 * 255)) & 0xff, (globalId.y + u32(globals.rngSeed2 * 255)) & 0xff), 0);
+  rngState = index ^ u32(globals.rngSeed1 * 0xffffffff);
+  //noise = textureLoad(blueNoise, vec2u((globalId.x + u32(globals.rngSeed1 * 255)) & 0xff, (globalId.y + u32(globals.rngSeed2 * 255)) & 0xff), 0);
+
+  /*
+  let g = 1.32471795724474602596;
+  let a = vec2f(1.0 / g, 1.0 / (g * g));
+  */
+  offset = fract(0.7548776662 * f32(globalId.x /*+ u32(globals.rngSeed1 * f32(globals.width))*/) + 0.56984029 * f32(globalId.y /*+ u32(globals.rngSeed2 * f32(globals.height))*/));
+  offset = 2.0 * offset * step(offset, 0.5) + (2.0 - 2.0 * offset) * step(0.5, offset);
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    col += render(createPrimaryRay(vec2f(globalId.xy), noise));
+    //let r = fract(offset + vec2f(0.5, 0.5) + a * f32(u32(globals.frame) * globals.spp + i));
+    col += render(createPrimaryRay(vec2f(globalId.xy)));
   }
 
   buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);
