@@ -123,6 +123,13 @@ void reset_samples(render_data *rd)
   qrand_init(SEQ_DIM, rd->spp, rd->alpha, rd->seq);
   memcpy(rd->last, &rd->seq[SEQ_DIM * (rd->spp - 1)], SEQ_DIM * sizeof(*rd->last));
 
+  /*for(uint8_t i=0; i<rd->spp; i++)
+    logc("%f, %f %f %f %f, %f %f %f %f, %f %f %f %f, %f %f %f ", 
+        rd->seq[SEQ_DIM * i], rd->seq[SEQ_DIM * i + 1],  rd->seq[SEQ_DIM * i + 2],  rd->seq[SEQ_DIM * i + 3],
+        rd->seq[SEQ_DIM * i + 4], rd->seq[SEQ_DIM * i + 5],  rd->seq[SEQ_DIM * i + 6],  rd->seq[SEQ_DIM * i + 7],
+        rd->seq[SEQ_DIM * i + 8], rd->seq[SEQ_DIM * i + 9],  rd->seq[SEQ_DIM * i + 10],  rd->seq[SEQ_DIM * i + 11],
+        rd->seq[SEQ_DIM * i + 12], rd->seq[SEQ_DIM * i + 13],  rd->seq[SEQ_DIM * i + 14],  rd->seq[SEQ_DIM * i + 15]);*/
+
   // Reset gathered samples
   rd->gathered_spp = TEMPORAL_WEIGHT * rd->gathered_spp;
 }
@@ -236,6 +243,13 @@ void renderer_update(render_data *rd, float time)
   // Push new sequence data into globals buffer
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_SEQ, rd->seq, SEQ_DIM * rd->spp * sizeof(*rd->seq));
 #endif
+
+  /*for(uint8_t i=0; i<rd->spp; i++)
+    logc("%f, %f %f %f %f, %f %f %f %f, %f %f %f %f, %f %f %f ", 
+        rd->seq[SEQ_DIM * i], rd->seq[SEQ_DIM * i + 1],  rd->seq[SEQ_DIM * i + 2],  rd->seq[SEQ_DIM * i + 3],
+        rd->seq[SEQ_DIM * i + 4], rd->seq[SEQ_DIM * i + 5],  rd->seq[SEQ_DIM * i + 6],  rd->seq[SEQ_DIM * i + 7],
+        rd->seq[SEQ_DIM * i + 8], rd->seq[SEQ_DIM * i + 9],  rd->seq[SEQ_DIM * i + 10],  rd->seq[SEQ_DIM * i + 11],
+        rd->seq[SEQ_DIM * i + 12], rd->seq[SEQ_DIM * i + 13],  rd->seq[SEQ_DIM * i + 14],  rd->seq[SEQ_DIM * i + 15]);*/
 
   // Update frame and sample counter
   rd->frame++;
