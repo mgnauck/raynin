@@ -21,7 +21,11 @@ struct Global
   pixelDeltaY:  vec3f,
   pad2:         f32,
   pixelTopLeft: vec3f,
-  pad3:         f32
+  pad3:         f32,
+  // Use vec4 to adhere to stride requirement of 16 for arrays
+  // Size of quasirandom sequence is: dimension * SPP (as vec4f, so div by 4)
+  // TODO This should be possible as runtime sized array (not on Firefox yet?)
+  randSeq:      array<vec4f, 8>
 }
 
 struct Ray

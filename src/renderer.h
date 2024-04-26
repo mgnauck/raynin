@@ -12,8 +12,9 @@ typedef struct render_data render_data;
 typedef struct SDL_Surface SDL_Surface;
 #endif
 
-void          renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
-                                  uint32_t total_mtl_cnt, uint32_t total_inst_cnt);
+void          renderer_gpu_alloc(uint8_t max_spp, uint32_t max_tri_cnt,
+                                  uint32_t max_ltri_cnt, uint32_t max_mtl_cnt,
+                                  uint32_t max_inst_cnt);
 
 render_data   *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t spp);
 void          renderer_release(render_data *rd);

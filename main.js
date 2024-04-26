@@ -211,7 +211,7 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeS
         buffer: { type: "read-only-storage" } },
       { binding: bufType.TEX,
         visibility: GPUShaderStage.COMPUTE,
-        texture: {}, /* resource: { type: "read-only-storage" } */ },
+        texture: {} },
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },

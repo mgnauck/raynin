@@ -18,12 +18,12 @@
 #include "intersect.h"
 #endif
 
-// Global buffer size and offsets
-#define GLOB_BUF_SZ         144
+// Global buffer offsets
 #define GLOB_BUF_OFS_CFG    0
 #define GLOB_BUF_OFS_FRAME  16
 #define GLOB_BUF_OFS_CAM    48
 #define GLOB_BUF_OFS_VIEW   96
+#define GLOB_BUF_OFS_SEQ    144
 
 // Dimensionality of a path/sequence
 #define SEQ_DIM             16
@@ -73,13 +73,18 @@ extern void gpu_write_tex(buf_type type, const void *src, uint32_t w, uint32_t h
 
 #endif
 
-void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
+void renderer_gpu_alloc(uint8_t max_spp, uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
     uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
-  gpu_create_res(GLOB_BUF_SZ, total_tri_cnt * sizeof(tri), total_ltri_cnt * sizeof(ltri),
-      total_tri_cnt * sizeof(uint32_t), 2 * total_tri_cnt * sizeof(bvh_node),
-      2 * total_inst_cnt * sizeof(tlas_node), total_inst_cnt * sizeof(inst),
-      total_mtl_cnt * sizeof(mtl));
+  gpu_create_res(
+      GLOB_BUF_OFS_SEQ + SEQ_DIM * max_spp * sizeof(float), // Globals + quasirandom sequence (uniform buf))
+      total_tri_cnt * sizeof(tri), // Tris
+      total_ltri_cnt * sizeof(ltri), // LTris
+      total_tri_cnt * sizeof(uint32_t), // Indices
+      2 * total_tri_cnt * sizeof(bvh_node), // BVH nodes
+      2 * total_inst_cnt * sizeof(tlas_node), // TLAS nodes
+      total_inst_cnt * sizeof(inst), // Instances
+      total_mtl_cnt * sizeof(mtl)); // Materials
 }
 
 render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t spp)
@@ -227,6 +232,10 @@ void renderer_update(render_data *rd, float time)
   // Calculate next values of our quasirandom sequence
   qrand_get_next_n(SEQ_DIM, rd->spp, rd->alpha, rd->last, rd->seq);
   memcpy(rd->last, &rd->seq[SEQ_DIM * (rd->spp - 1)], SEQ_DIM * sizeof(*rd->last));
+#ifndef NATIVE_BUILD
+  // Push new sequence data into globals buffer
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_SEQ, rd->seq, SEQ_DIM * rd->spp * sizeof(*rd->seq));
+#endif
 
   // Update frame and sample counter
   rd->frame++;

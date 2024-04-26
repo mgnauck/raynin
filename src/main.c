@@ -18,6 +18,8 @@
 #define HEIGHT      600
 #endif
 
+#define SPP         2
+
 #define RIOW_SIZE   22
 #define TRI_CNT     1280 + 600
 #define LTRI_CNT    2 * 3
@@ -189,9 +191,9 @@ void init(uint32_t width, uint32_t height)
 
   init_scene_riow(cs);
 
-  renderer_gpu_alloc(TRI_CNT, LTRI_CNT, MTL_CNT, INST_CNT);
+  renderer_gpu_alloc(SPP, TRI_CNT, LTRI_CNT, MTL_CNT, INST_CNT);
 
-  rd = renderer_init(cs, width, height, 2);
+  rd = renderer_init(cs, width, height, SPP);
   renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
   //renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
   //renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
