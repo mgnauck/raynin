@@ -174,7 +174,7 @@ var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 // PRNG state
 var<private> rngState: u32;
 
-// Quasi random sequence + state
+// Quasi random sequence and state
 var<private> randSeq: array<vec4f, 4u>; // = SEQ_DIM / 4u
 var<private> randIdx: u32;
 
@@ -212,6 +212,7 @@ fn rand() -> f32
   return vec4f(rand(), rand(), rand(), rand());
 }*/
 
+// https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/ 
 fn initRandSeq(n: f32, seed: f32)
 {
   // Reset sequence index
