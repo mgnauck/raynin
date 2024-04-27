@@ -1,3 +1,6 @@
+// Dimension of quasi random sequence. Expected to be multiple of 4.
+const SEQ_DIM = 16u;
+
 struct Global
 {
   width:        u32,
@@ -7,7 +10,7 @@ struct Global
   rngSeed1:     f32,
   rngSeed2:     f32,
   weight:       f32,
-  frame:        f32,
+  gatheredSpp:  f32,
   bgColor:      vec3f,
   pad0:         f32,
   eye:          vec3f,
@@ -23,9 +26,8 @@ struct Global
   pixelTopLeft: vec3f,
   pad3:         f32,
   // Use vec4 to adhere to stride requirement of 16 for arrays
-  // Size of quasirandom sequence is: dimension * SPP (as vec4f, so div by 4)
   // TODO This should be possible as runtime sized array (not on Firefox yet?)
-  randSeq:      array<vec4f, 8>
+  randAlpha:    array<vec4f, 4u> // = SEQ_DIM / 4u
 }
 
 struct Ray
@@ -164,18 +166,17 @@ const MAX_LTRIS           = 64;
 @group(0) @binding(5) var<storage, read> tlasNodes: array<TlasNode>;
 @group(0) @binding(6) var<storage, read> instances: array<Inst>;
 @group(0) @binding(7) var<storage, read> materials: array<Mtl>;
-@group(0) @binding(8) var blueNoise: texture_2d<f32>;
-@group(0) @binding(9) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
+// PRNG state
 var<private> rngState: u32;
 
-var<private> noise: vec4f;
-
-var<private> randSeqIdx: u32 = 0u;
-var<private> randSeqOfs: f32;
+// Quasi random sequence + state
+var<private> randSeq: array<vec4f, 4u>; // = SEQ_DIM / 4u
+var<private> randIdx: u32;
 
 fn minComp(v: vec3f) -> f32
 {
@@ -211,15 +212,21 @@ fn rand() -> f32
   return vec4f(rand(), rand(), rand(), rand());
 }*/
 
-/*fn rand4() -> vec4f
+fn initRandSeq(n: f32, seed: f32)
 {
-  return noise;
-}*/
+  // Reset sequence index
+  randIdx = 0u;
+
+  // Expects dim to be multiple of 4, because of alphas being a vec4f
+  for(var i=0u; i<SEQ_DIM / 4u; i++) {
+    randSeq[i] = fract(vec4f(seed) + (n + 1.0) * globals.randAlpha[i]);
+  }
+}
 
 fn rand4() -> vec4f
 {
-  let r = fract(randSeqOfs + globals.randSeq[randSeqIdx]);
-  randSeqIdx++;
+  let r = randSeq[randIdx];
+  randIdx++;
   return r;
 }
 
@@ -255,13 +262,24 @@ fn rand2Disk(r: vec2f) -> vec2f
   return vec2f(radius * cos(theta), radius * sin(theta));
 }
 
+// Parallelogram
 // https://mathworld.wolfram.com/TrianglePointPicking.html
 fn randBarycentric(r: vec2f) -> vec3f
+{
+  if(r.x + r.y > 1.0) {
+    return vec3f(1.0 - r.x, 1.0 - r.y, -1.0 + r.x + r.y);
+  }
+
+  return vec3f(r, 1 - r.x - r.y);
+}
+
+// Fibonacci
+/*fn randBarycentric(r: vec2f) -> vec3f
 {
   let rxSqrt = sqrt(r.x);
   let b = vec2f(1 - rxSqrt, r.y * rxSqrt);
   return vec3f(b, 1 - b.x - b.y);
-}
+}*/
 
 fn clampIntensity(contribution: vec3f) -> vec3f
 {
@@ -1115,15 +1133,13 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   // White noise
   rngState = index ^ u32(globals.rngSeed1 * 0xffffffff);
 
-  // Blue noise
-  noise = textureLoad(blueNoise, vec2u((globalId.x + u32(globals.rngSeed1 * 255)) & 0xff, (globalId.y + u32(globals.rngSeed2 * 255)) & 0xff), 0);
-
-  // Quasirandom/LDS
-  randSeqOfs = fract(dot(vec2f(0.754877669, 0.569840296), vec2f(globalId.xy)));
-  randSeqOfs = 2.0 * randSeqOfs * step(randSeqOfs, 0.5) + (2.0 - 2.0 * randSeqOfs) * step(0.5, randSeqOfs);
+  // Pixel offset into quasirandom sequence
+  var randOfs = fract(dot(vec2f(0.754877669, 0.569840296), vec2f(globalId.xy)));
+  randOfs = 2.0 * randOfs * step(randOfs, 0.5) + (2.0 - 2.0 * randOfs) * step(0.5, randOfs);
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
+    initRandSeq(globals.gatheredSpp + f32(i), randOfs);
     col += render(createPrimaryRay(vec2f(globalId.xy), rand4()));
   }
 

@@ -191,7 +191,7 @@ void init(uint32_t width, uint32_t height)
 
   init_scene_riow(cs);
 
-  renderer_gpu_alloc(SPP, TRI_CNT, LTRI_CNT, MTL_CNT, INST_CNT);
+  renderer_gpu_alloc(TRI_CNT, LTRI_CNT, MTL_CNT, INST_CNT);
 
   rd = renderer_init(cs, width, height, SPP);
   renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
@@ -203,7 +203,7 @@ void init(uint32_t width, uint32_t height)
 void update_scene(scene *s, float time)
 {
   // Set scene always dirty, i.e. do not converge
-  scene_set_dirty(s, RT_CAM_VIEW);
+  //scene_set_dirty(s, RT_CAM_VIEW);
 
   // Update camera
   if(orbit_cam) {

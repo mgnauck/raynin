@@ -9,8 +9,6 @@
 #include "sutil.h"
 #include "tlas.h"
 #include "tri.h"
-#include "data/blue_noise_256x256x4.h"
-#include "log.h"
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
@@ -38,7 +36,6 @@ typedef enum buf_type {
   BT_TLAS_NODE,
   BT_INST,
   BT_MTL,
-  BT_TEX
 } buf_type;
 
 typedef struct render_data {
@@ -48,11 +45,8 @@ typedef struct render_data {
   uint8_t   spp;
   uint8_t   bounces;
   uint32_t  gathered_spp;
-  uint32_t  frame;
   vec3      bg_col;
   float     *alpha;
-  float     *last;
-  float     *seq;
 } render_data;
 
 #ifndef NATIVE_BUILD
@@ -64,8 +58,6 @@ extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz, uint32_t ltri_sz,
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
 
-extern void gpu_write_tex(buf_type type, const void *src, uint32_t w, uint32_t h);
-
 #else
 
 #define gpu_create_res(...) ((void)0)
@@ -73,11 +65,11 @@ extern void gpu_write_tex(buf_type type, const void *src, uint32_t w, uint32_t h
 
 #endif
 
-void renderer_gpu_alloc(uint8_t max_spp, uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
+void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
     uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
   gpu_create_res(
-      GLOB_BUF_OFS_SEQ + SEQ_DIM * max_spp * sizeof(float), // Globals + quasirandom sequence (uniform buf))
+      GLOB_BUF_OFS_SEQ + SEQ_DIM * sizeof(float), // Globals + quasirandom sequence (uniform buf))
       total_tri_cnt * sizeof(tri), // Tris
       total_ltri_cnt * sizeof(ltri), // LTris
       total_tri_cnt * sizeof(uint32_t), // Indices
@@ -97,11 +89,8 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
   rd->spp = spp;
   rd->bounces = 5;
   rd->gathered_spp = 0;
-  rd->frame = 0;
   rd->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
   rd->alpha = malloc(SEQ_DIM * sizeof(*rd->alpha));
-  rd->last = malloc(SEQ_DIM * sizeof(*rd->last));
-  rd->seq = malloc(SEQ_DIM * rd->spp * sizeof(*rd->seq));
 
   // Initialize alphas for quasirandom sequence (low discrepancy series)
   qrand_alpha(SEQ_DIM, rd->alpha);
@@ -112,24 +101,11 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
 void renderer_release(render_data *rd)
 {
   free(rd->alpha);
-  free(rd->last);
-  free(rd->seq);
   free(rd);
 }
 
 void reset_samples(render_data *rd)
 {
-  // Initialize or reset quasi random sequence to first dim * spp values
-  qrand_init(SEQ_DIM, rd->spp, rd->alpha, rd->seq);
-  memcpy(rd->last, &rd->seq[SEQ_DIM * (rd->spp - 1)], SEQ_DIM * sizeof(*rd->last));
-
-  /*for(uint8_t i=0; i<rd->spp; i++)
-    logc("%f, %f %f %f %f, %f %f %f %f, %f %f %f %f, %f %f %f ", 
-        rd->seq[SEQ_DIM * i], rd->seq[SEQ_DIM * i + 1],  rd->seq[SEQ_DIM * i + 2],  rd->seq[SEQ_DIM * i + 3],
-        rd->seq[SEQ_DIM * i + 4], rd->seq[SEQ_DIM * i + 5],  rd->seq[SEQ_DIM * i + 6],  rd->seq[SEQ_DIM * i + 7],
-        rd->seq[SEQ_DIM * i + 8], rd->seq[SEQ_DIM * i + 9],  rd->seq[SEQ_DIM * i + 10],  rd->seq[SEQ_DIM * i + 11],
-        rd->seq[SEQ_DIM * i + 12], rd->seq[SEQ_DIM * i + 13],  rd->seq[SEQ_DIM * i + 14],  rd->seq[SEQ_DIM * i + 15]);*/
-
   // Reset gathered samples
   rd->gathered_spp = TEMPORAL_WEIGHT * rd->gathered_spp;
 }
@@ -163,8 +139,8 @@ void renderer_update_static(render_data *rd)
   uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
 
-  // Push blue noise texture
-  gpu_write_tex(BT_TEX, blue_noise_256x256x4, 256, 256);
+  // Push alphas of quasi random sequence
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_SEQ, rd->alpha, SEQ_DIM * sizeof(*rd->alpha));
 #endif
 
   if(s->dirty & RT_MESH) {
@@ -232,27 +208,11 @@ void renderer_update(render_data *rd, float time)
 #ifndef NATIVE_BUILD
   // Push frame data
   float frame[8] = { pcg_randf(), pcg_randf(), rd->spp / (float)(rd->gathered_spp + rd->spp),
-    (float)rd->frame, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, /* pad */ 0.0f };
+    (float)rd->gathered_spp, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, /* pad */ 0.0f };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frame, sizeof(frame));
 #endif
 
-  // Calculate next values of our quasirandom sequence
-  qrand_get_next_n(SEQ_DIM, rd->spp, rd->alpha, rd->last, rd->seq);
-  memcpy(rd->last, &rd->seq[SEQ_DIM * (rd->spp - 1)], SEQ_DIM * sizeof(*rd->last));
-#ifndef NATIVE_BUILD
-  // Push new sequence data into globals buffer
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_SEQ, rd->seq, SEQ_DIM * rd->spp * sizeof(*rd->seq));
-#endif
-
-  /*for(uint8_t i=0; i<rd->spp; i++)
-    logc("%f, %f %f %f %f, %f %f %f %f, %f %f %f %f, %f %f %f ", 
-        rd->seq[SEQ_DIM * i], rd->seq[SEQ_DIM * i + 1],  rd->seq[SEQ_DIM * i + 2],  rd->seq[SEQ_DIM * i + 3],
-        rd->seq[SEQ_DIM * i + 4], rd->seq[SEQ_DIM * i + 5],  rd->seq[SEQ_DIM * i + 6],  rd->seq[SEQ_DIM * i + 7],
-        rd->seq[SEQ_DIM * i + 8], rd->seq[SEQ_DIM * i + 9],  rd->seq[SEQ_DIM * i + 10],  rd->seq[SEQ_DIM * i + 11],
-        rd->seq[SEQ_DIM * i + 12], rd->seq[SEQ_DIM * i + 13],  rd->seq[SEQ_DIM * i + 14],  rd->seq[SEQ_DIM * i + 15]);*/
-
-  // Update frame and sample counter
-  rd->frame++;
+  // Update sample counter
   rd->gathered_spp += rd->spp;
 }
 
