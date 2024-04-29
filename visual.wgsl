@@ -1100,6 +1100,10 @@ fn render(initialRay: Ray) -> vec3f
     // Boost surviving paths by their probability to be terminated
     throughput *= 1.0 / p;
 
+    // Reset quasi random sequence index
+    // TODO Higher dimension sequence to server bounces?
+    randIdx = 0u;
+
     // Next ray to trace
     ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
   }
