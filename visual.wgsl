@@ -9,10 +9,10 @@ struct Global
   maxBounces:   u32,
   rngSeed1:     f32,
   rngSeed2:     f32,
-  weight:       f32,
   gatheredSpp:  f32,
+  weight:       f32,
   bgColor:      vec3f,
-  pad0:         f32,
+  frame:        f32,
   eye:          vec3f,
   vertFov:      f32,
   right:        vec3f,
@@ -1101,7 +1101,7 @@ fn render(initialRay: Ray) -> vec3f
     throughput *= 1.0 / p;
 
     // Reset quasi random sequence index
-    // TODO Higher dimension sequence to server bounces?
+    // TODO Higher dimension sequence to serve bounces?
     randIdx = 0u;
 
     // Next ray to trace
@@ -1141,6 +1141,9 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   // Pixel offset into quasirandom sequence
   var randOfs = fract(dot(vec2f(0.754877669, 0.569840296), vec2f(globalId.xy)));
   randOfs = 2.0 * randOfs * step(randOfs, 0.5) + (2.0 - 2.0 * randOfs) * step(0.5, randOfs);
+
+  // Pixel offset via interleaved gradient noise
+  //randOfs = fract(52.9829189 * fract(0.06711056 * f32(globalId.x) + 0.00583715 * f32(globalId.y))); 
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {

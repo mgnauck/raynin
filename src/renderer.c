@@ -44,6 +44,7 @@ typedef struct render_data {
   uint16_t  height;
   uint8_t   spp;
   uint8_t   bounces;
+  uint32_t  frame;
   uint32_t  gathered_spp;
   vec3      bg_col;
   float     *alpha;
@@ -88,6 +89,7 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
   rd->height = height;
   rd->spp = spp;
   rd->bounces = 5;
+  rd->frame = 0;
   rd->gathered_spp = 0;
   rd->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
   rd->alpha = malloc(SEQ_DIM * sizeof(*rd->alpha));
@@ -207,12 +209,14 @@ void renderer_update(render_data *rd, float time)
 
 #ifndef NATIVE_BUILD
   // Push frame data
-  float frame[8] = { pcg_randf(), pcg_randf(), rd->spp / (float)(rd->gathered_spp + rd->spp),
-    (float)rd->gathered_spp, rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, /* pad */ 0.0f };
+  float frame[8] = { pcg_randf(), pcg_randf(),
+    (float)rd->gathered_spp, rd->spp / (float)(rd->gathered_spp + rd->spp),
+    rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, (float)rd->frame };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frame, sizeof(frame));
 #endif
 
-  // Update sample counter
+  // Update frame and sample counter
+  rd->frame++;
   rd->gathered_spp += rd->spp;
 }
 
