@@ -155,7 +155,7 @@ const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
 const MAX_DISTANCE        = 3.402823466e+38;
 const MAX_NODE_CNT        = 32;
-const MAX_INTENSITY       = 2.5;  // Value for intensity clamping, will need trial and error
+const MAX_INTENSITY       = 1.7;  // Value for intensity clamping, will need trial and error
 const MAX_LTRIS           = 64;
 
 @group(0) @binding(0) var<uniform> globals: Global;
@@ -263,7 +263,7 @@ fn rand2Disk(r: vec2f) -> vec2f
   return vec2f(radius * cos(theta), radius * sin(theta));
 }
 
-// Parallelogram
+// Parallelogram method
 // https://mathworld.wolfram.com/TrianglePointPicking.html
 fn randBarycentric(r: vec2f) -> vec3f
 {
@@ -280,6 +280,11 @@ fn randBarycentric(r: vec2f) -> vec3f
   let rxSqrt = sqrt(r.x);
   let b = vec2f(1 - rxSqrt, r.y * rxSqrt);
   return vec3f(b, 1 - b.x - b.y);
+}*/
+
+/*fn clampIntensity(contribution: vec3f) -> vec3f
+{
+  return min(contribution, vec3f(1.0));
 }*/
 
 fn clampIntensity(contribution: vec3f) -> vec3f
@@ -958,7 +963,7 @@ fn sampleLTri(ia: ptr<function, IA>, ltri: LTri, bc: vec3f, pdf: ptr<function, f
   return ltri.emission;
 }
 
-// Direct light sampling: Choose light randomly based on picking prob. Apply MIS.
+// Direct light sampling: Choose light randomly based on picking prob. Sample light. Apply MIS.
 // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
 fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
 {
@@ -1021,6 +1026,7 @@ fn render(initialRay: Ray) -> vec3f
   var ray = initialRay;
   var col = vec3f(0);
   var throughput = vec3f(1);
+  var reflBias = 0.0;
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
     // Intersect with scene
@@ -1068,17 +1074,21 @@ fn render(initialRay: Ray) -> vec3f
     // Indicate backside hitfloat
     ia.faceDir = select(1.0, -1.0, dot(ia.outDir, ia.nrm) < EPSILON);
 
+    // Low budget path regularization. Breaks reflections in reflections.
+    // Kaplanyan + Frenetic/CubicTeami&$een: Path Space Regularization
+    ia.mtl.refl = select(ia.mtl.refl, 0.0, bounces > 0);
+
     // Flag reflection or refraction materials, to exclude from light sampling
     ia.flags = select(ia.flags & ~IA_SPECULAR, ia.flags | IA_SPECULAR,
-                      (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.5) && ia.mtl.fuzz < 0.1);
+                      (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.1));
 
     let r0 = rand4();
     let r1 = rand4();
     let r2 = rand4();
 
     // Sample direct light
-    col += clampIntensity(throughput * sampleDirectLight(&ia, r0.xyz, r1));
-    //col += throughput * sampleDirectLight(&ia);
+    //col += clampIntensity(throughput * sampleDirectLight(&ia, r0.xyz, r1));
+    col += throughput * sampleDirectLight(&ia, r0.xyz, r1);
 
     // Sample indirect light
     var bsdfPdf: f32;
