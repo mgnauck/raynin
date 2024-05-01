@@ -1,5 +1,7 @@
 // Dimension of quasi random sequence. Expected to be multiple of 4.
 const SEQ_DIM = 16u;
+const MAX_BOUNCES = 5u;
+const SEQ_LEN = MAX_BOUNCES * SEQ_DIM;
 
 struct Global
 {
@@ -27,7 +29,7 @@ struct Global
   pad3:         f32,
   // Use vec4 to adhere to stride requirement of 16 for arrays
   // TODO This should be possible as runtime sized array (not on Firefox yet?)
-  randAlpha:    array<vec4f, 4u> // = SEQ_DIM / 4u
+  randAlpha:    array<vec4f, 20u> // = SEQ_LEN / 4u
 }
 
 struct Ray
@@ -175,8 +177,11 @@ var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> rngState: u32;
 
 // Quasi random sequence and state
-var<private> randSeq: array<vec4f, 4u>; // = SEQ_DIM / 4u
-var<private> randIdx: u32;
+var<private> randSeq: array<vec4f, 20u>; // = SEQ_LEN / 4u
+var<private> randIdx: u32 = 0;
+
+// Global so we can assign some error color from everywhere
+var<private> throughput: vec3f;
 
 fn minComp(v: vec3f) -> f32
 {
@@ -207,24 +212,23 @@ fn rand() -> f32
   return ldexp(f32((word >> 22u) ^ word), -32);
 }
 
-/*fn rand4() -> vec4f
+fn rand4() -> vec4f
 {
   return vec4f(rand(), rand(), rand(), rand());
-}*/
+}
 
-// https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/ 
-fn initRandSeq(n: f32, seed: f32)
+// Martin Roberts, https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/ 
+fn initQRandSeq(n: f32, seed: f32)
 {
-  // Reset sequence index
   randIdx = 0u;
 
   // Expects dim to be multiple of 4, because of alphas being a vec4f
-  for(var i=0u; i<SEQ_DIM / 4u; i++) {
+  for(var i=0u; i<SEQ_LEN / 4u; i++) {
     randSeq[i] = fract(vec4f(seed) + (n + 1.0) * globals.randAlpha[i]);
   }
 }
 
-fn rand4() -> vec4f
+fn qrand4() -> vec4f
 {
   let r = randSeq[randIdx];
   randIdx++;
@@ -967,10 +971,15 @@ fn sampleLTri(ia: ptr<function, IA>, ltri: LTri, bc: vec3f, pdf: ptr<function, f
 // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
 fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
 {
+  var contribution = vec3f(0);
+
+  // Sample the light only if current bsdf is not specular
+  if(((*ia).flags & IA_SPECULAR) > 0) {
+    return contribution;
+  }
+
   // Prepare random barycentric coordinates
   let bc = randBarycentric(r0.xy);
-
-  var contribution = vec3f(0);
 
   // Pick ltri according to contribution and calc picking probability
   var pickPdf: f32;
@@ -982,33 +991,27 @@ fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
   
   let ltri = &ltris[ltriIdx];
 
-  // Sample the light only if current bsdf is not specular
-  if(((*ia).flags & IA_SPECULAR) == 0) {
+  // Sample light tri (sets direction to random point on ltri)
+  var ltriPdf: f32;
+  let emission = sampleLTri(ia, *ltri, bc, &ltriPdf);
+  if(ltriPdf < EPSILON) {
+    return contribution;
+  }
+  ltriPdf *= pickPdf;
 
-    // Sample light tri (sets direction to random point on ltri)
-    var ltriPdf: f32;
-    let emission = sampleLTri(ia, *ltri, bc, &ltriPdf);
-    if(ltriPdf < EPSILON) {
-      return contribution;
-    }
-    ltriPdf *= pickPdf;
-
-    // Scale by the probability of the mtl producing a diffuse bounce
-    // because the bsdf can produce specular reflection/refraction
-    var bsdfPdf: f32;
-    let bsdf = evalMaterial(ia, &bsdfPdf) * (1 - (*ia).mtl.refl - (*ia).mtl.refr);
-    if(bsdfPdf > 0) {
-      // Power heuristic with beta = 2
-      let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
-      contribution += emission * bsdf * weight / ltriPdf;
-    }
+  // Scale by the probability of the mtl producing a diffuse bounce
+  // because the bsdf can produce specular reflection/refraction
+  var bsdfPdf: f32;
+  var bsdf = evalMaterial(ia, &bsdfPdf) * (1 - (*ia).mtl.refl - (*ia).mtl.refr);
+  if(bsdfPdf > 0) {
+    // Power heuristic with beta = 2
+    let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
+    contribution += emission * bsdf * weight / ltriPdf;
   }
 
   // Sample bsdf (sets direction according to material bsdf)
-  var bsdfPdf: f32;
-  let bsdf = sampleMaterial(ia, r1, &bsdfPdf);
+  bsdf = sampleMaterial(ia, r1, &bsdfPdf);
   if(bsdfPdf > 0) {
-    var ltriPdf: f32;
     let emission = evalLTri(ia, *ltri, &ltriPdf);
     if(ltriPdf > 0) {
       ltriPdf *= pickPdf;
@@ -1025,8 +1028,9 @@ fn render(initialRay: Ray) -> vec3f
   var ia: IA;
   var ray = initialRay;
   var col = vec3f(0);
-  var throughput = vec3f(1);
-  var reflBias = 0.0;
+  //var throughput = vec3f(1);
+
+  throughput = vec3f(1);
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
     // Intersect with scene
@@ -1074,17 +1078,17 @@ fn render(initialRay: Ray) -> vec3f
     // Indicate backside hitfloat
     ia.faceDir = select(1.0, -1.0, dot(ia.outDir, ia.nrm) < EPSILON);
 
-    // Low budget path regularization. Breaks reflections in reflections.
+    // Low budget path regularization. Breaks recursive things but prevents some numerical instabilities/fireflies.
     // Kaplanyan + Frenetic/CubicTeami&$een: Path Space Regularization
     ia.mtl.refl = select(ia.mtl.refl, 0.0, bounces > 0);
 
     // Flag reflection or refraction materials, to exclude from light sampling
     ia.flags = select(ia.flags & ~IA_SPECULAR, ia.flags | IA_SPECULAR,
-                      (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.1));
+                      (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.01));
 
-    let r0 = rand4();
-    let r1 = rand4();
-    let r2 = rand4();
+    let r0 = qrand4();
+    let r1 = qrand4();
+    let r2 = qrand4();
 
     // Sample direct light
     //col += clampIntensity(throughput * sampleDirectLight(&ia, r0.xyz, r1));
@@ -1109,10 +1113,6 @@ fn render(initialRay: Ray) -> vec3f
     // Account for bias introduced by path termination (pdf = p)
     // Boost surviving paths by their probability to be terminated
     throughput *= 1.0 / p;
-
-    // Reset quasi random sequence index
-    // TODO Higher dimension sequence to serve bounces?
-    randIdx = 0u;
 
     // Next ray to trace
     ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
@@ -1149,6 +1149,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   rngState = index ^ u32(globals.rngSeed1 * 0xffffffff);
 
   // Pixel offset into quasirandom sequence
+  // Martin Roberts, https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/ 
   var randOfs = fract(dot(vec2f(0.754877669, 0.569840296), vec2f(globalId.xy)));
   randOfs = 2.0 * randOfs * step(randOfs, 0.5) + (2.0 - 2.0 * randOfs) * step(0.5, randOfs);
 
@@ -1157,8 +1158,8 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    initRandSeq(globals.gatheredSpp + f32(i), randOfs);
-    col += render(createPrimaryRay(vec2f(globalId.xy), rand4()));
+    initQRandSeq(globals.gatheredSpp + f32(i), randOfs);
+    col += render(createPrimaryRay(vec2f(globalId.xy), qrand4()));
   }
 
   buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);

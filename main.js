@@ -4,9 +4,6 @@ const ASPECT = 16.0 / 10.0;
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
-const BLUE_NOISE_WIDTH = 256;
-const BLUE_NOISE_HEIGHT = 256;
-
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
 
