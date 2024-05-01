@@ -224,7 +224,8 @@ fn initQRandSeq(n: f32, seed: f32)
 
   // Expects dim to be multiple of 4, because of alphas being a vec4f
   for(var i=0u; i<SEQ_LEN / 4u; i++) {
-    randSeq[i] = fract(vec4f(seed) + (n + 1.0) * globals.randAlpha[i]);
+    //randSeq[i] = fract(vec4f(seed) + (n + 1.0) * globals.randAlpha[i]);
+    randSeq[i] = fract(vec4f(seed) + vec4f(u32(n + 1.0) * vec4u(globals.randAlpha[i] * 33554431)) / exp2(24.0));
   }
 }
 
@@ -1151,7 +1152,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   // Pixel offset into quasirandom sequence
   // Martin Roberts, https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/ 
   var randOfs = fract(dot(vec2f(0.754877669, 0.569840296), vec2f(globalId.xy)));
-  randOfs = 2.0 * randOfs * step(randOfs, 0.5) + (2.0 - 2.0 * randOfs) * step(0.5, randOfs);
+  //randOfs = 2.0 * randOfs * step(randOfs, 0.5) + (2.0 - 2.0 * randOfs) * step(0.5, randOfs);
 
   // Pixel offset via interleaved gradient noise
   //randOfs = fract(52.9829189 * fract(0.06711056 * f32(globalId.x) + 0.00583715 * f32(globalId.y))); 
