@@ -1152,7 +1152,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   // Pixel offset into quasirandom sequence
   // Martin Roberts, https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/ 
   var randOfs = fract(dot(vec2f(0.754877669, 0.569840296), vec2f(globalId.xy)));
-  //randOfs = 2.0 * randOfs * step(randOfs, 0.5) + (2.0 - 2.0 * randOfs) * step(0.5, randOfs);
+  randOfs = mix(2.0 * randOfs, 2.0 - 2.0 * randOfs, step(0.5, randOfs));
 
   // Pixel offset via interleaved gradient noise
   //randOfs = fract(52.9829189 * fract(0.06711056 * f32(globalId.x) + 0.00583715 * f32(globalId.y))); 
