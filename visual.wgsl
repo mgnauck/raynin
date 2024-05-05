@@ -1,8 +1,3 @@
-// Dimension of quasi random sequence. Expected to be multiple of 4.
-const SEQ_DIM = 16u;
-const MAX_BOUNCES = 5u;
-const SEQ_LEN = MAX_BOUNCES * SEQ_DIM;
-
 struct Global
 {
   width:        u32,
@@ -29,7 +24,7 @@ struct Global
   pad3:         f32,
   // Use vec4 to adhere to stride requirement of 16 for arrays
   // TODO This should be possible as runtime sized array (not on Firefox yet?)
-  randAlpha:    array<vec4f, 20u> // = SEQ_LEN / 4u
+  randAlpha:    array<vec4f, 20u>
 }
 
 struct Ray
@@ -176,10 +171,6 @@ var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 // PRNG state
 var<private> rngState: u32;
 
-// Quasi random sequence and state
-var<private> randSeq: array<vec4f, 20u>; // = SEQ_LEN / 4u
-var<private> randIdx: u32 = 0;
-
 // Global so we can assign some error color from everywhere
 var<private> throughput: vec3f;
 
@@ -212,28 +203,14 @@ fn rand() -> f32
   return ldexp(f32((word >> 22u) ^ word), -32);
 }
 
+fn rand2() -> vec2f
+{
+  return vec2f(rand(), rand());
+}
+
 fn rand4() -> vec4f
 {
   return vec4f(rand(), rand(), rand(), rand());
-}
-
-// Martin Roberts, https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/ 
-fn initQRandSeq(n: f32, seed: f32)
-{
-  randIdx = 0u;
-
-  // Expects dim to be multiple of 4, because of alphas being a vec4f
-  for(var i=0u; i<SEQ_LEN / 4u; i++) {
-    //randSeq[i] = fract(vec4f(seed) + (n + 1.0) * globals.randAlpha[i]);
-    randSeq[i] = fract(vec4f(seed) + vec4f(u32(n + 1.0) * vec4u(globals.randAlpha[i] * 33554431)) / exp2(24.0));
-  }
-}
-
-fn qrand4() -> vec4f
-{
-  let r = randSeq[randIdx];
-  randIdx++;
-  return r;
 }
 
 // https://mathworld.wolfram.com/SpherePointPicking.html
@@ -836,10 +813,20 @@ fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> v
     } else {
       // Diffuse
       (*ia).inDir = rand3HemiCosWeighted(nrm, r.zw);
+ 	    (*ia).flags &= ~IA_SPECULAR;
       *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI;
       return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
     }
   }
+}
+
+fn sampleMaterialDiff(ia: ptr<function, IA>, r: vec2f, pdf: ptr<function, f32>) -> vec3f
+{
+  let nrm = (*ia).faceDir * (*ia).nrm;
+  (*ia).inDir = rand3HemiCosWeighted(nrm, r);
+ 	(*ia).flags &= ~IA_SPECULAR;
+  *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI;
+  return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
 }
 
 fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
@@ -998,6 +985,7 @@ fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
   if(ltriPdf < EPSILON) {
     return contribution;
   }
+
   ltriPdf *= pickPdf;
 
   // Scale by the probability of the mtl producing a diffuse bounce
@@ -1010,6 +998,7 @@ fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
     contribution += emission * bsdf * weight / ltriPdf;
   }
 
+/*
   // Sample bsdf (sets direction according to material bsdf)
   bsdf = sampleMaterial(ia, r1, &bsdfPdf);
   if(bsdfPdf > 0) {
@@ -1020,93 +1009,125 @@ fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
       contribution += emission * bsdf * weight / bsdfPdf;
     }
   }
-
+*/
   return contribution;
+}
+
+fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>)
+{
+  let inst = instances[hit.e & INST_ID_MASK];
+
+  (*ia).dist = hit.t;
+  (*ia).pos = ray.ori + hit.t * ray.dir;
+  (*ia).outDir = -ray.dir;
+ 
+  if((inst.data & SHAPE_TYPE_BIT) > 0) {
+    // Shape
+    (*ia).mtl = materials[(inst.id >> 16) & MTL_ID_MASK];
+    (*ia).nrm = calcShapeNormal(inst, (*ia).pos);
+  } else {
+    // Mesh
+    let ofs = inst.data & MESH_SHAPE_MASK;
+    let tri = tris[ofs + (hit.e >> 16)];
+    // Either use the material id from the triangle or the material override from the instance
+    (*ia).mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
+    (*ia).nrm = calcTriNormal(hit, inst, tri);
+  }
+
+  // Indicate backside hit
+  (*ia).faceDir = select(1.0, -1.0, dot((*ia).outDir, (*ia).nrm) < EPSILON);
 }
 
 fn render(initialRay: Ray) -> vec3f
 {
-  var ia: IA;
   var ray = initialRay;
+  var hit: Hit;
+
+  // Intersect with scene
+  hit = intersectTlas(ray, MAX_DISTANCE);
+  if(hit.t == MAX_DISTANCE) {
+    return globals.bgColor;
+  }
+
+  var ia: IA;
+  finalizeHit(ray, hit, &ia);
+
+  // Primary ray hit light
+  if(isEmissive(ia.mtl) && ia.faceDir > 0) {
+    return ia.mtl.col;
+  }
+
   var col = vec3f(0);
-  //var throughput = vec3f(1);
-
   throughput = vec3f(1);
-
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
-    // Intersect with scene
-    let hit = intersectTlas(ray, MAX_DISTANCE);
 
-    // No hit
-    if(hit.t == MAX_DISTANCE) {
-      //col += clampIntensity(throughput * globals.bgColor);
-      col += throughput * globals.bgColor;
-      break;
-    }
+    let r0 = rand4();
+    let r1 = rand4();
+    let r2 = rand4();
 
-    // Finalize hit data
-    let inst = instances[hit.e & INST_ID_MASK];
-
-    ia.dist = hit.t;
-    ia.pos = ray.ori + hit.t * ray.dir;
-    ia.outDir = -ray.dir;
- 
-    if((inst.data & SHAPE_TYPE_BIT) > 0) {
-      // Shape
-      ia.mtl = materials[(inst.id >> 16) & MTL_ID_MASK];
-      ia.nrm = calcShapeNormal(inst, ia.pos);
-    } else {
-      // Mesh
-      let ofs = inst.data & MESH_SHAPE_MASK;
-      let tri = tris[ofs + (hit.e >> 16)];
-      // Either use the material id from the triangle or the material override from the instance
-      ia.mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
-      ia.nrm = calcTriNormal(hit, inst, tri);
-    }
-
-    // Hit a light
-    if(isEmissive(ia.mtl)) {
-      // Only consider if a primary ray or last bounce was specular
-      if((bounces == 0u || ((ia.flags & IA_SPECULAR) > 0u)) &&
-        // Lights have no back side
-        (dot(ia.outDir, ia.nrm) > EPSILON)) {
-        //col += clampIntensity(throughput * ia.mtl.col);
-        col += throughput * ia.mtl.col;
-      }
-      break;
-    }
-
-    // Indicate backside hitfloat
-    ia.faceDir = select(1.0, -1.0, dot(ia.outDir, ia.nrm) < EPSILON);
-
-    // Low budget path regularization. Breaks recursive things but prevents some numerical instabilities/fireflies.
-    // Kaplanyan + Frenetic/CubicTeami&$een: Path Space Regularization
-    ia.mtl.refl = select(ia.mtl.refl, 0.0, bounces > 0);
-
-    // Flag reflection or refraction materials, to exclude from light sampling
     ia.flags = select(ia.flags & ~IA_SPECULAR, ia.flags | IA_SPECULAR,
                       (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.01));
 
-    let r0 = qrand4();
-    let r1 = qrand4();
-    let r2 = qrand4();
+    // Direct light sampling / NEE
+    // Sample the light only if current bsdf is not specular
+    if((ia.flags & IA_SPECULAR) == 0) {
 
-    // Sample direct light
-    //col += clampIntensity(throughput * sampleDirectLight(&ia, r0.xyz, r1));
-    col += throughput * sampleDirectLight(&ia, r0.xyz, r1);
+      // Prepare random barycentric coordinates
+      let bc = randBarycentric(r0.xy);
+
+      // Pick ltri according to contribution and calc picking probability
+      var pickPdf: f32;
+      var ltriIdx: u32;
+      pickLTriRandomly(&ia, r0.z, bc, &ltriIdx, &pickPdf);
+      if(pickPdf > 0) {
+
+        let ltri = &ltris[ltriIdx];
+
+        // Find random point on light surface and calc light dir
+        var lightDir = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z - ia.pos;
+
+        let dist = length(lightDir);
+        lightDir *= 1.0 / dist;
+
+        // Account for single ray in direction of light. Check if we are facing the light and the light is facing us.
+        let G = max(0.0, dot(ia.faceDir * ia.nrm, lightDir)) * max(0.0, dot(-lightDir, (*ltri).nrm)) / (dist * dist);
+        if(G > 0.0) {
+
+          // Finalize pdf for chosen light tri
+          // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
+          var ltriPdf = 1.0 / ((*ltri).area * G);
+          ltriPdf *= pickPdf;
+
+          // Light dir is input dir to sampling material
+          ia.inDir = lightDir;
+
+          // Scale by the probability of the mtl producing a diffuse bounce
+          // because the bsdf can produce specular reflection/refraction
+          var bsdfPdf: f32;
+          var bsdf = evalMaterial(&ia, &bsdfPdf) * (1 - ia.mtl.refl - ia.mtl.refr);
+
+          if(bsdfPdf > 0) {
+
+            // Power heuristic with beta = 2
+            let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
+
+            if(!intersectTlasAnyHit(Ray(ia.pos, ia.inDir), dist)) {
+              col += throughput * ((*ltri).emission * bsdf * weight) / ltriPdf;
+            }
+          }
+        }
+      }
+    }
 
     // Sample indirect light
     var bsdfPdf: f32;
     let bsdf = sampleMaterial(&ia, r2, &bsdfPdf);
-    if(bsdfPdf > EPSILON) {
-      throughput *= bsdf / bsdfPdf;
-    } else {
+    if(bsdfPdf < EPSILON) {
       break;
     }
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
-    //let p = select(maxComp(throughput), 1.0, bounces == 0 || (ia.flags & IA_SPECULAR) > 0);
     let p = maxComp(throughput);
     if(r0.w > p) {
       break;
@@ -1117,6 +1138,31 @@ fn render(initialRay: Ray) -> vec3f
 
     // Next ray to trace
     ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
+
+    // Intersect with scene
+    let hit = intersectTlas(ray, MAX_DISTANCE);
+    if(hit.t == MAX_DISTANCE) {
+      break;
+    }
+    
+    finalizeHit(ray, hit, &ia);
+
+    // Hit a light
+    if(isEmissive(ia.mtl)) {
+      // Light is front facing
+      if(ia.faceDir > 0) {
+        // Specular bounce
+        if((ia.flags & IA_SPECULAR) > 0) {
+          col += clampIntensity(throughput * ia.mtl.col);
+          break;
+        } else {
+          // Apply MIS
+          // ..
+        }
+      }
+    }
+
+    throughput *= bsdf / bsdfPdf;
   }
 
   return col;
@@ -1145,22 +1191,11 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let index = globals.width * globalId.y + globalId.x;
-
-  // White noise
   rngState = index ^ u32(globals.rngSeed1 * 0xffffffff);
-
-  // Pixel offset into quasirandom sequence
-  // Martin Roberts, https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/ 
-  var randOfs = fract(dot(vec2f(0.754877669, 0.569840296), vec2f(globalId.xy)));
-  randOfs = mix(2.0 * randOfs, 2.0 - 2.0 * randOfs, step(0.5, randOfs));
-
-  // Pixel offset via interleaved gradient noise
-  //randOfs = fract(52.9829189 * fract(0.06711056 * f32(globalId.x) + 0.00583715 * f32(globalId.y))); 
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    initQRandSeq(globals.gatheredSpp + f32(i), randOfs);
-    col += render(createPrimaryRay(vec2f(globalId.xy), qrand4()));
+    col += render(createPrimaryRay(vec2f(globalId.xy), rand4()));
   }
 
   buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);

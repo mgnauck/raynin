@@ -151,7 +151,7 @@ void init_scene_riow(scene *s)
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   m = mtl_create_diffuse();
   m.col = (vec3){ 0.1f, 0.2f, 0.4f };
-  m.refl = 0.1f;
+  //m.refl = 0.1f;
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
@@ -203,7 +203,7 @@ void init(uint32_t width, uint32_t height)
 void update_scene(scene *s, float time)
 {
   // Set scene always dirty, i.e. do not converge
-  scene_set_dirty(s, RT_CAM_VIEW);
+  //scene_set_dirty(s, RT_CAM_VIEW);
 
   // Update camera
   if(orbit_cam) {
