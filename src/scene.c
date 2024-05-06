@@ -76,21 +76,28 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
   uint32_t ltri_cnt = 0;
 
   if(inst->data & MTL_OVERRIDE_BIT) {
-    // Material override applys for all tris, create ltri for each of them
+    // Material override applies to all tris, create ltri for each of them
     for(uint32_t i=0; i<tri_cnt; i++) {
       tri *t = &tris[i];
-      tri_build_ltri(&s->ltris[ltri_ofs + ltri_cnt++], &tris[i],
+      uint32_t ltri_id = ltri_ofs + ltri_cnt++;
+      tri_build_ltri(&s->ltris[ltri_id], &tris[i],
           inst->id & 0xffff, i, inst->transform,
           s->mtls[t->mtl & 0xffff].col);
+      // A tri links its ltri: Tris that emit light need to be unique, i.e.
+      // multiple instances of the same light mesh/tri are not allowed :(
+      t->ltri_id = ltri_id;
     }
   } else {
-    // Create ltris for emissive tris of the mesh
+    // Create ltris for emissive tris of the mesh only
     for(uint32_t i=0; i<tri_cnt; i++) {
       tri *t = &tris[i];
       mtl *mtl = &s->mtls[t->mtl & 0xffff];
-      if(mtl_is_emissive(mtl))
-        tri_build_ltri(&s->ltris[ltri_ofs + ltri_cnt++], t,
+      if(mtl_is_emissive(mtl)) {
+        uint32_t ltri_id = ltri_ofs + ltri_cnt++;
+        tri_build_ltri(&s->ltris[ltri_id], t,
             inst->id & 0xffff, i, inst->transform, mtl->col);
+        t->ltri_id = ltri_id;
+      }
     }
   }
 

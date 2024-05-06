@@ -22,8 +22,9 @@
 
 #define RIOW_SIZE   22
 #define TRI_CNT     1280 + 600
-#define LTRI_CNT    2 * 3
-#define MESH_CNT    3
+#define LIGHT_CNT   3
+#define LTRI_CNT    LIGHT_CNT * 2
+#define MESH_CNT    2 + LIGHT_CNT
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 3)
 #define MTL_CNT     INST_CNT
 
@@ -101,10 +102,13 @@ void init_scene_riow(scene *s)
   uint16_t mtl_id;
   mat4 transform, translation, rotation, scale;
 
-  // Light mesh
+  // Light meshes (need to be unique!)
   mtl m = mtl_create_emissive();
   mtl_id = scene_add_mtl(s, &m);
   uint16_t lid = scene_add_quad(s, 1, 1, mtl_id);
+  for(uint8_t i=1; i<LIGHT_CNT; i++) { 
+    scene_add_quad(s, 1, 1, mtl_id);
+  }
 
   // Sphere mesh
   uint16_t sid = scene_add_uvsphere(s, 1.0f, 20, 20, mtl_id, false);
@@ -118,14 +122,14 @@ void init_scene_riow(scene *s)
   mtl_id = scene_add_mtl(s, &m);
   uint16_t fid = scene_add_quad(s, 10, 10, mtl_id);
  
-  // Light instance
-  for(uint8_t i=0; i<LTRI_CNT / 2; i++) { 
+  // Light instances
+  for(uint8_t i=0; i<LIGHT_CNT; i++) { 
     mat4_scale(scale, 0.5f);
     mat4_rot_x(rotation, PI);
     mat4_mul(transform, scale, rotation);
     mat4_trans(translation, (vec3){ 0.0f, 5.0f, -10.0f + (i * 10.0f) });
     mat4_mul(transform, translation, transform);
-    scene_add_inst_mesh(s, lid, -1, transform);
+    scene_add_inst_mesh(s, lid + i, -1, transform);
   }
   
   // Floor instance

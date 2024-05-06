@@ -77,30 +77,31 @@ struct IA
   outDir:   vec3f,
   inDir:    vec3f,
   mtl:      Mtl,
+  ltriId:   u32,
   flags:    u32,
   faceDir:  f32
 }
 
 struct Tri
 {
-  v0:   vec3f,
-  mtl:  u32,              // (mtl id & 0xffff)
-  v1:   vec3f,
-  pad1: f32,
-  v2:   vec3f,
-  pad2: f32,
-  n0:   vec3f,
-  pad3: f32,
-  n1:   vec3f,
-  pad4: f32,
-  n2:   vec3f,
-  pad5: f32,
+  v0:     vec3f,
+  mtl:    u32,            // (mtl id & 0xffff)
+  v1:     vec3f,
+  ltriId: u32,            // Set only if tri has light emitting material
+  v2:     vec3f,
+  pad0:   f32,
+  n0:     vec3f,
+  pad1:   f32,
+  n1:     vec3f,
+  pad2:   f32,
+  n2:     vec3f,
+  pad3:   f32,
 //#ifdef TEXTURE_SUPPORT
-/*uv0:  vec2f,
-  uv1:  vec2f,
-  uv2:  vec2f,
-  pad6: f32,
-  pad7: f32*/
+/*uv0:    vec2f,
+  uv1:    vec2f,
+  uv2:    vec2f,
+  pad4    f32,
+  pad5:   f32*/
 //#endif
 }
 
@@ -820,15 +821,6 @@ fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> v
   }
 }
 
-fn sampleMaterialDiff(ia: ptr<function, IA>, r: vec2f, pdf: ptr<function, f32>) -> vec3f
-{
-  let nrm = (*ia).faceDir * (*ia).nrm;
-  (*ia).inDir = rand3HemiCosWeighted(nrm, r);
- 	(*ia).flags &= ~IA_SPECULAR;
-  *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI;
-  return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
-}
-
 fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
 {
   // Uniform
@@ -998,7 +990,7 @@ fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
     contribution += emission * bsdf * weight / ltriPdf;
   }
 
-/*
+
   // Sample bsdf (sets direction according to material bsdf)
   bsdf = sampleMaterial(ia, r1, &bsdfPdf);
   if(bsdfPdf > 0) {
@@ -1009,7 +1001,7 @@ fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
       contribution += emission * bsdf * weight / bsdfPdf;
     }
   }
-*/
+
   return contribution;
 }
 
@@ -1032,6 +1024,7 @@ fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>)
     // Either use the material id from the triangle or the material override from the instance
     (*ia).mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
     (*ia).nrm = calcTriNormal(hit, inst, tri);
+    (*ia).ltriId = tri.ltriId;
   }
 
   // Indicate backside hit
@@ -1052,9 +1045,9 @@ fn render(initialRay: Ray) -> vec3f
   var ia: IA;
   finalizeHit(ray, hit, &ia);
 
-  // Primary ray hit light
-  if(isEmissive(ia.mtl) && ia.faceDir > 0) {
-    return ia.mtl.col;
+  // Primary ray hit a light
+  if(isEmissive(ia.mtl)) {
+    return select(ia.mtl.col, vec3f(0), ia.faceDir > 0);
   }
 
   var col = vec3f(0);
@@ -1077,11 +1070,11 @@ fn render(initialRay: Ray) -> vec3f
 
       // Pick ltri according to contribution and calc picking probability
       var pickPdf: f32;
-      var ltriIdx: u32;
-      pickLTriRandomly(&ia, r0.z, bc, &ltriIdx, &pickPdf);
+      var ltriId: u32;
+      pickLTriRandomly(&ia, r0.z, bc, &ltriId, &pickPdf);
       if(pickPdf > 0) {
 
-        let ltri = &ltris[ltriIdx];
+        let ltri = &ltris[ltriId];
 
         // Find random point on light surface and calc light dir
         var lightDir = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z - ia.pos;
@@ -1126,6 +1119,9 @@ fn render(initialRay: Ray) -> vec3f
       break;
     }
 
+    // Apply indirect light contribution (material bsdf) but postpone bsdf pdf
+    throughput *= bsdf;
+
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
     let p = maxComp(throughput);
@@ -1135,6 +1131,9 @@ fn render(initialRay: Ray) -> vec3f
     // Account for bias introduced by path termination (pdf = p)
     // Boost surviving paths by their probability to be terminated
     throughput *= 1.0 / p;
+
+    // Save normal of current interaction
+    let lastNrm = ia.nrm;
 
     // Next ray to trace
     ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
@@ -1149,20 +1148,37 @@ fn render(initialRay: Ray) -> vec3f
 
     // Hit a light
     if(isEmissive(ia.mtl)) {
-      // Light is front facing
+      // Consider front side of light only
       if(ia.faceDir > 0) {
-        // Specular bounce
         if((ia.flags & IA_SPECULAR) > 0) {
+          // Specular bounce, apply light contribution directly
           col += clampIntensity(throughput * ia.mtl.col);
-          break;
         } else {
-          // Apply MIS
-          // ..
+          // Diffuse bounce, apply MIS
+          let ltri = &ltris[ia.ltriId];
+
+          // TODO Calculate picking prob for the light we hit
+          let pickPdf = 1.0 / 6.0;
+          let G = max(0.0, dot(-ia.outDir, lastNrm)) / (ia.dist * ia.dist);
+          if(G > 0.0) {
+
+            // Finalize pdf for chosen light tri
+            // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
+            var ltriPdf = 1.0 / ((*ltri).area * G);
+            ltriPdf *= pickPdf;
+
+            // Power heuristic with beta = 2
+            let weight = bsdfPdf * bsdfPdf / (ltriPdf * ltriPdf + bsdfPdf * bsdfPdf);
+            // Material bsdf was already applied
+            col += throughput * ((*ltri).emission * weight) / bsdfPdf;
+          }
         }
       }
+      break;
     }
 
-    throughput *= bsdf / bsdfPdf;
+    // Apply material contribution
+    throughput *= 1.0 / bsdfPdf;
   }
 
   return col;
