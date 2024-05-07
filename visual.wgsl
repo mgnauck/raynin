@@ -760,16 +760,14 @@ fn isEmissive(mtl: Mtl) -> bool
   return any(mtl.col > vec3f(1.0));
 }
 
+fn isSpecular(mtl: Mtl) -> bool
+{
+  return mtl.refl > 0.01 || mtl.refr > 0.5;
+}
+
 fn evalMaterial(ia: ptr<function, IA>, pdf: ptr<function, f32>) -> vec3f
 {
-  // This is called for light sampling only, which is not executed for
-  // specular. Thus eval only the diffuse term here.
-  if(((*ia).flags & IA_SPECULAR) > 0) {
-    // Error
-    *pdf = 1.0;
-    return vec3f(0, 0, 1000);
-  }
-
+  // This is called for light sampling only which is limited to diffuse
   let lDotN = max(0.0, dot((*ia).inDir, (*ia).faceDir * (*ia).nrm));
   *pdf = lDotN * INV_PI;
   return (*ia).mtl.col * INV_PI * lDotN;
@@ -840,7 +838,7 @@ fn calcLTriContribution(pos: vec3f, nrm: vec3f, lightPos: vec3f, lightNrm: vec3f
   return lnDotL * nDotL * lightPower * invDist * invDist;
 }
 
-fn getLTriPickProb(pos: vec3f, nrm: vec3f, lightPos: vec3f, ltriId: u32) -> f32
+fn calcLTriPickProb(pos: vec3f, nrm: vec3f, lightPos: vec3f, ltriId: u32) -> f32
 {
   // Calculate picking probability with respect to ltri contributions
   var contributions: array<f32, MAX_LTRIS>;
@@ -856,7 +854,7 @@ fn getLTriPickProb(pos: vec3f, nrm: vec3f, lightPos: vec3f, ltriId: u32) -> f32
   }
 
   // Scale contribution by total, so that our picking pdf integrates to 1
-  return select(contributions[ltriId] / totalContrib, 0.0, totalContrib > EPSILON);
+  return select(0.0, contributions[ltriId] / totalContrib, totalContrib > EPSILON);
 }
 
 // https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
@@ -902,194 +900,6 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
   return ltriId;
 }
 
-/*
-fn calcLTriContribution(ia: ptr<function, IA>, ltriIdx: u32, bc: vec3f) -> f32
-{
-  // Uniform
-  //return 1.0 / f32(arrayLength(&ltris));
-
-  let ltri = &ltris[ltriIdx];
-  var lightDir = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z - (*ia).pos;
-
-  let invDist = 1.0 / length(lightDir);
-  lightDir *= invDist;
-
-  // Inclination between light normal and light dir
-  // (how much the light faces the light dir)
-  let lnDotL = max(0.0, -dot((*ltri).nrm, lightDir));
-
-  // Inclination between surface normal and light dir
-  // (how much the surface aligns with the light dir)
-  let nDotL = max(0.0, dot((*ia).faceDir * (*ia).nrm, lightDir));
-
-  // Inclination angles scale our measure of light power / dist^2
-  return lnDotL * nDotL * (*ltri).power * invDist * invDist;
-}
-
-// https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
-fn pickLTriRandomly(ia: ptr<function, IA>, r: f32, bc: vec3f, ltriIdx: ptr<function, u32>, pdf: ptr<function, f32>)
-{
-  // Calculate picking probability with respect to ltri contributions
-  var contributions: array<f32, MAX_LTRIS>;
-  var totalContrib = 0.0;
-  let ltriCnt = arrayLength(&ltris);
-
-  // Calc contribution of each ltri and total of all contributions
-  for(var i=0u; i<ltriCnt; i++) {
-    let curr = calcLTriContribution(ia, i, bc);
-    contributions[i] = curr;
-    totalContrib += curr;
-  }
-
-  // No ltri can be picked, i.e. each ltri faces away
-  if(totalContrib < EPSILON) {
-    *pdf = 0.0;
-    return;
-  }
-
-  // Same as scaling contributions[i] by totalContrib
-  let rScaled = r * totalContrib;
-
-  // Randomly pick the ltri according to the CDF
-  // CDF is pdf for value X or all smaller ones
-  var cumulative = 0.0;
-  for(var i=0u; i<ltriCnt; i++) {
-    cumulative += contributions[i];
-    if(rScaled <= cumulative) {
-      *ltriIdx = i;
-      break;
-    }
-  }
-
-  // Scale contributions by total, so that our picking pdf integrates to 1
-  *pdf = contributions[*ltriIdx] / totalContrib;
-}
-*/
-
-/*
-fn pdfLTri(ia: ptr<function, IA>, ltri: LTri, dist: f32) -> f32
-{
-  // Account for single ray in direction of light
-  // pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
-  return (dist * dist) / (ltri.area * dot(-(*ia).inDir, ltri.nrm));
-}
-
-fn evalLTri(ia: ptr<function, IA>, ltri: LTri, pdf: ptr<function, f32>) -> vec3f
-{
-  if(dot((*ia).inDir, ltri.nrm) > 0.0) {
-    // Light is facing away (lights are not double sided)
-    *pdf = 0.0;
-    return vec3f(0);
-  }
-
-  // Get us the distance to the light if we actually intersect it
-  var u: f32;
-  var v: f32;
-  let dist = intersectTri((*ia).pos, (*ia).inDir, ltri.v0, ltri.v1, ltri.v2, &v, &u);
-  if(dist == MAX_DISTANCE) {
-    // Not hitting the light tri
-    *pdf = 0.0;
-    return vec3f(0);
-  }
-
-  // Check if light is obstructed
-  if(intersectTlasAnyHit(Ray((*ia).pos, (*ia).inDir), dist - EPSILON)) {
-    *pdf = 0.0;
-    return vec3f(0);
-  }
-
-  // Visible, calc pdf for current direction
-  *pdf = pdfLTri(ia, ltri, dist);
-  return ltri.emission;
-}
-
-fn sampleLTri(ia: ptr<function, IA>, ltri: LTri, bc: vec3f, pdf: ptr<function, f32>) -> vec3f
-{
-  // Find random point on light surface and calc light dir
-  var lightDir = ltri.v0 * bc.x + ltri.v1 * bc.y + ltri.v2 * bc.z - (*ia).pos;
-
-  if(dot(lightDir, ltri.nrm) > 0) {
-    // Light is facing away (lights are not double sided)
-    *pdf = 0.0;
-    return vec3f(0);
-  }
-
-  let dist = length(lightDir);
-  lightDir *= 1.0 / dist;
-
-  // Light dir is input dir to sampling material
-  (*ia).inDir = lightDir;
-
-  // Check if light is obstructed
-  if(intersectTlasAnyHit(Ray((*ia).pos, (*ia).inDir), dist - EPSILON)) {
-    *pdf = 0.0;
-    return vec3f(0);
-  }
-
-  // Visible, calc pdf for current direction
-  *pdf = pdfLTri(ia, ltri, dist);
-  return ltri.emission;
-}
-
-// Direct light sampling: Choose light randomly based on picking prob. Sample light. Apply MIS.
-// Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
-fn sampleDirectLight(ia: ptr<function, IA>, r0: vec3f, r1: vec4f) -> vec3f
-{
-  var contribution = vec3f(0);
-
-  // Sample the light only if current bsdf is not specular
-  if(((*ia).flags & IA_SPECULAR) > 0) {
-    return contribution;
-  }
-
-  // Prepare random barycentric coordinates
-  let bc = randBarycentric(r0.xy);
-
-  // Pick ltri according to contribution and calc picking probability
-  var pickPdf: f32;
-  var ltriIdx: u32;
-  pickLTriRandomly(ia, r0.z, bc, &ltriIdx, &pickPdf);
-  if(pickPdf == 0) {
-    return contribution;
-  }
-  
-  let ltri = &ltris[ltriIdx];
-
-  // Sample light tri (sets direction to random point on ltri)
-  var ltriPdf: f32;
-  let emission = sampleLTri(ia, *ltri, bc, &ltriPdf);
-  if(ltriPdf < EPSILON) {
-    return contribution;
-  }
-
-  ltriPdf *= pickPdf;
-
-  // Scale by the probability of the mtl producing a diffuse bounce
-  // because the bsdf can produce specular reflection/refraction
-  var bsdfPdf: f32;
-  var bsdf = evalMaterial(ia, &bsdfPdf) * (1 - (*ia).mtl.refl - (*ia).mtl.refr);
-  if(bsdfPdf > 0) {
-    // Power heuristic with beta = 2
-    let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
-    contribution += emission * bsdf * weight / ltriPdf;
-  }
-
-
-  // Sample bsdf (sets direction according to material bsdf)
-  bsdf = sampleMaterial(ia, r1, &bsdfPdf);
-  if(bsdfPdf > 0) {
-    let emission = evalLTri(ia, *ltri, &ltriPdf);
-    if(ltriPdf > 0) {
-      ltriPdf *= pickPdf;
-      let weight = bsdfPdf * bsdfPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
-      contribution += emission * bsdf * weight / bsdfPdf;
-    }
-  }
-
-  return contribution;
-}
-*/
-
 fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>)
 {
   let inst = instances[hit.e & INST_ID_MASK];
@@ -1116,6 +926,150 @@ fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>)
   (*ia).faceDir = select(1.0, -1.0, dot((*ia).outDir, (*ia).nrm) < EPSILON);
 }
 
+fn renderNaive(initialRay: Ray) -> vec3f
+{
+  var ray = initialRay;
+  var col = vec3f(0);
+
+  throughput = vec3f(1);
+
+  for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
+
+    var hit = intersectTlas(ray, MAX_DISTANCE);
+    if(hit.t == MAX_DISTANCE) {
+      col += clampIntensity(throughput * globals.bgColor);
+      break;
+    }
+
+    var ia: IA;
+    finalizeHit(ray, hit, &ia);
+
+    if(isEmissive(ia.mtl)) {
+      if(dot(ray.dir, ia.nrm) < 0) {
+        col += clampIntensity(throughput * ia.mtl.col);
+      }
+      break;
+    }
+
+    var bsdfPdf: f32;
+    let bsdf = sampleMaterial(&ia, rand4(), &bsdfPdf);
+    if(bsdfPdf < EPSILON) {
+      break;
+    }
+
+    throughput *= bsdf / bsdfPdf;
+
+    let p = maxComp(throughput);
+    if(rand() > p) {
+      break;
+    }
+    throughput *= 1.0 / p;
+
+    ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
+  }
+
+  return col;
+}
+
+fn renderNEE(initialRay: Ray) -> vec3f
+{
+  var ray = initialRay;
+  var col = vec3f(0);
+
+  throughput = vec3f(1);
+
+  for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
+
+    var hit = intersectTlas(ray, MAX_DISTANCE);
+    if(hit.t == MAX_DISTANCE) {
+      col += clampIntensity(throughput * globals.bgColor);
+      break;
+    }
+
+    var ia: IA;
+    finalizeHit(ray, hit, &ia);
+
+    // Hit a light
+    if(isEmissive(ia.mtl)) {
+      // Lights emit from front side only
+      if(dot(ray.dir, ia.nrm) < 0) {
+        // Primary ray hit or last bounce was specular
+        if(bounces == 0 || (ia.flags & IA_SPECULAR) > 0) {
+          col += clampIntensity(throughput * ia.mtl.col);
+        }
+      }
+      break;
+    }
+
+    // Direct light sampling (diffuse only)
+    if(!isSpecular(ia.mtl)) {
+
+      // Prepare random barycentric coordinates
+      let bc = randBarycentric(rand2());
+
+      // Pick ltri with uniform distribution
+      let ltriCnt = arrayLength(&ltris);
+      let pickPdf = 1.0 / f32(ltriCnt);
+      let ltriId = min(u32(rand() * f32(ltriCnt)), ltriCnt - 1);
+      if(pickPdf > 0.0) {
+
+        let ltri = &ltris[ltriId];
+
+        // Find random point on light surface and calc light dir
+        var lightDir = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z - ia.pos;
+
+        let dist = length(lightDir);
+        lightDir *= 1.0 / dist;
+
+        // Account for single ray in direction of light. Check if we are facing the light and the light is facing us.
+        let nDotL = max(0.0, dot(ia.faceDir * ia.nrm, lightDir));
+        let sa = ((*ltri).area * nDotL * max(0.0, dot(-lightDir, (*ltri).nrm))) / (dist * dist);
+        if(sa > EPSILON) {
+
+          // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
+          var ltriPdf = 1.0 / sa;
+          ltriPdf *= pickPdf;
+
+          // Light dir is input dir to sampling material
+          ia.inDir = lightDir;
+
+          // Scale by the probability of the mtl producing a diffuse bounce
+          // because the bsdf can produce specular reflection/refraction
+          var bsdfPdf: f32;
+          var bsdf = evalMaterial(&ia, &bsdfPdf) * (1 - ia.mtl.refl - ia.mtl.refr);
+
+          if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPSILON)) {
+            col += clampIntensity(throughput * (*ltri).emission * bsdf / (ltriPdf * nDotL));
+          }
+        }
+      }
+    }
+
+    // Sample indirect light contribution
+    var bsdfPdf: f32;
+    let bsdf = sampleMaterial(&ia, rand4(), &bsdfPdf);
+    if(bsdfPdf < EPSILON) {
+      break;
+    }
+    throughput *= bsdf / bsdfPdf;
+
+    // Russian roulette
+    // Terminate with prob inverse to throughput, except for primary ray or specular interaction
+    let p = maxComp(throughput);
+    if(rand() > p) {
+      break;
+    }
+    // Account for bias introduced by path termination (pdf = p)
+    // Boost surviving paths by their probability to be terminated
+    throughput *= 1.0 / p;
+
+    // Next ray
+    ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
+  }
+
+  return col;
+}
+
 fn render(initialRay: Ray) -> vec3f
 {
   var ray = initialRay;
@@ -1130,25 +1084,54 @@ fn render(initialRay: Ray) -> vec3f
   var ia: IA;
   finalizeHit(ray, hit, &ia);
 
-  // Primary ray hit a light
-  if(isEmissive(ia.mtl)) {
-    return select(ia.mtl.col, vec3f(0), dot(ray.dir, ia.nrm) > 0);
-  }
-
   var col = vec3f(0);
   throughput = vec3f(1);
+
+  var lastPos: vec3f;
+  var lastNrm: vec3f;
+  var lastFaceDir: f32;
+  var bsdfPdfNext = 1.0;
+
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
+
+    // Hit a light
+    if(isEmissive(ia.mtl)) {
+      // Lights emit from front side only
+      if(dot(ray.dir, ia.nrm) < 0) {
+        // Primary ray hit or last bounce was specular
+        if(bounces == 0 || (ia.flags & IA_SPECULAR) > 0) {
+          // Last hit was specular, apply light contribution directly
+          col += clampIntensity(throughput * ia.mtl.col);
+        } else {
+          // Last hit was diffuse, apply MIS
+          // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
+          let ltri = &ltris[ia.ltriId];
+
+          // Calculate picking prob for the light we hit
+          var pickPdf = calcLTriPickProb(lastPos, lastFaceDir * lastNrm, ia.pos, ia.ltriId);
+          let sa = (*ltri).area * max(0.0, dot(ray.dir, lastFaceDir * lastNrm)) * max(0.0, dot(-ray.dir, ia.nrm)) / (ia.dist * ia.dist);
+          if(sa > 0.0) {
+
+            // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
+            var ltriPdf = 1.0 / sa;
+            ltriPdf *= pickPdf;
+
+            // Power heuristic with beta = 2
+            let weight = bsdfPdfNext * bsdfPdfNext / (ltriPdf * ltriPdf + bsdfPdfNext * bsdfPdfNext);
+
+            col += clampIntensity(throughput * (*ltri).emission * weight / bsdfPdfNext);
+          }
+        }
+      }
+      break;
+    }
 
     let r0 = rand4();
     let r1 = rand4();
-    let r2 = rand4();
 
-    ia.flags = select(ia.flags & ~IA_SPECULAR, ia.flags | IA_SPECULAR,
-                      (ia.mtl.refr > 0.5 || ia.mtl.refl > 0.01));
-
-    // Direct light sampling / NEE
-    // Sample the light only if current bsdf is not specular
-    if((ia.flags & IA_SPECULAR) == 0) {
+    // Direct light sampling (diffuse only)
+    // Choose one light randomly based on picking prob and sample. Apply MIS.
+    if(!isSpecular(ia.mtl)) {
 
       // Prepare random barycentric coordinates
       let bc = randBarycentric(r0.xy);
@@ -1156,7 +1139,7 @@ fn render(initialRay: Ray) -> vec3f
       // Pick ltri according to contribution and calc picking probability
       var pickPdf: f32;
       let ltriId = pickLTriRandomly(ia.pos, ia.faceDir * ia.nrm, r0.z, bc, &pickPdf);
-      if(pickPdf > 0) {
+      if(pickPdf > 0.0) {
 
         let ltri = &ltris[ltriId];
 
@@ -1167,44 +1150,38 @@ fn render(initialRay: Ray) -> vec3f
         lightDir *= 1.0 / dist;
 
         // Account for single ray in direction of light. Check if we are facing the light and the light is facing us.
-        let g = max(0.0, dot(ia.faceDir * ia.nrm, lightDir)) * max(0.0, -dot(lightDir, (*ltri).nrm)) / (dist * dist);
-        if(g > 0.0) {
+        let nDotL = max(0.0, dot(ia.faceDir * ia.nrm, lightDir));
+        let sa = ((*ltri).area * nDotL * max(0.0, dot(-lightDir, (*ltri).nrm))) / (dist * dist);
+        if(sa > EPSILON) {
 
-          // Finalize pdf for chosen light tri
           // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
-          var ltriPdf = 1.0 / ((*ltri).area * g);
+          var ltriPdf = 1.0 / sa;
           ltriPdf *= pickPdf;
 
           // Light dir is input dir to sampling material
           ia.inDir = lightDir;
 
           // Scale by the probability of the mtl producing a diffuse bounce
-          // because the bsdf can produce specular reflection/refraction
+          // because the bsdf can also produce specular reflection/refraction
           var bsdfPdf: f32;
           var bsdf = evalMaterial(&ia, &bsdfPdf) * (1 - ia.mtl.refl - ia.mtl.refr);
 
-          if(bsdfPdf > 0) {
+          // Power heuristic with beta = 2
+          let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
 
-            // Power heuristic with beta = 2
-            let weight = ltriPdf * ltriPdf / (bsdfPdf * bsdfPdf + ltriPdf * ltriPdf);
-
-            if(!intersectTlasAnyHit(Ray(ia.pos, ia.inDir), dist)) {
-              col += clampIntensity(throughput * ((*ltri).emission * bsdf * weight) / ltriPdf);
-            }
+          if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPSILON)) {
+            col += clampIntensity(throughput * (*ltri).emission * bsdf * weight / (ltriPdf * nDotL));
           }
         }
       }
     }
 
-    // Sample indirect light
-    var bsdfPdf: f32;
-    let bsdf = sampleMaterial(&ia, r2, &bsdfPdf);
-    if(bsdfPdf < EPSILON) {
+    // Sample indirect light contribution
+    let bsdf = sampleMaterial(&ia, r1, &bsdfPdfNext);
+    if(bsdfPdfNext < EPSILON) {
       break;
     }
-
-    // Apply indirect light contribution ('material bsdf') but postpone pdf
-    throughput *= bsdf;
+    throughput *= bsdf / bsdfPdfNext;
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
@@ -1217,55 +1194,21 @@ fn render(initialRay: Ray) -> vec3f
     throughput *= 1.0 / p;
 
     // Save normal of current interaction
-    let lastPos = ia.pos;
-    let lastNrm = ia.faceDir * ia.nrm;
+    lastPos = ia.pos;
+    lastNrm = ia.nrm;
+    lastFaceDir = ia.faceDir;
 
-    // Next ray to trace
+    // Next ray
     ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
 
     // Intersect with scene
     let hit = intersectTlas(ray, MAX_DISTANCE);
     if(hit.t == MAX_DISTANCE) {
-      col += clampIntensity(throughput * globals.bgColor);
+      col += clampIntensity(throughput * globals.bgColor / bsdfPdfNext);
       break;
     }
     
     finalizeHit(ray, hit, &ia);
-
-    // Hit a light
-    if(isEmissive(ia.mtl)) {
-      // Consider front side of light only
-      if(dot(ray.dir, ia.nrm) < 0) {
-        if((ia.flags & IA_SPECULAR) > 0) {
-          // Specular bounce, apply light contribution directly
-          col += clampIntensity(throughput * ia.mtl.col); // / bsdfPdf
-        } else {
-          // Diffuse bounce, apply MIS
-          let ltri = &ltris[ia.ltriId];
-
-          // Calculate picking prob for the light we hit
-          let pickPdf = getLTriPickProb(lastPos, lastNrm, ia.pos, ia.ltriId);
-          let g = max(0.0, dot(ray.dir, lastNrm)) / (ia.dist * ia.dist);
-          if(g > 0.0) {
-
-            // Finalize pdf for chosen light tri
-            // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
-            var ltriPdf = 1.0 / ((*ltri).area * g);
-            ltriPdf *= pickPdf;
-
-            // Power heuristic with beta = 2
-            let weight = bsdfPdf * bsdfPdf / (ltriPdf * ltriPdf + bsdfPdf * bsdfPdf);
-
-            // Material bsdf was already applied
-            col += clampIntensity(throughput * ((*ltri).emission * weight) / bsdfPdf);
-          }
-        }
-      }
-      break;
-    }
-
-    // Apply postponed pdf of indirect light contribution
-    throughput *= 1.0 / bsdfPdf;
   }
 
   return col;

@@ -128,6 +128,7 @@ void init_scene_riow(scene *s)
     mat4_rot_x(rotation, PI);
     mat4_mul(transform, scale, rotation);
     mat4_trans(translation, (vec3){ 0.0f, 5.0f, -10.0f + (i * 10.0f) });
+    //mat4_trans(translation, (vec3){ 0.0f, 5.0f, (i * 10.0f) });
     mat4_mul(transform, translation, transform);
     scene_add_inst_mesh(s, lid + i, -1, transform);
   }
