@@ -1081,15 +1081,18 @@ fn render(initialRay: Ray) -> vec3f
   throughput = vec3f(1);
 
   var ia: IA;
+  var bsdf = vec3f(1.0);
   var bsdfPdf = 1.0;
   var lastPos: vec3f;
   var lastNrm: vec3f;
+  var ltriId: u32;
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
     // Intersect with scene
     let hit = intersectTlas(ray, MAX_DISTANCE);
     if(hit.t == MAX_DISTANCE) {
+      throughput *= bsdf / bsdfPdf;
       col += clampIntensity(throughput * globals.bgColor);
       break;
     }
@@ -1102,16 +1105,22 @@ fn render(initialRay: Ray) -> vec3f
         // Primary ray hit or last bounce was specular
         if(bounces == 0 || (ia.flags & IA_SPECULAR) > 0) {
           // Last hit was specular, apply light contribution directly
+          throughput *= bsdf / bsdfPdf;
           col += clampIntensity(throughput * ia.mtl.col);
         } else {
           // Last hit was diffuse, apply MIS
           // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
           let ltri = &ltris[ia.ltriId];
 
+          /*if(ia.ltriId == 2) {
+            throughput *= vec3f(0.0, 10, 0);
+          }*/
+
           // Calculate picking prob for the light we hit (uniform distribution)
           //let pickPdf = 1.0 / f32(arrayLength(&ltris));
 
           // Calculate picking prob for the light we hit
+          //let pickPdf = select(0.0, calcLTriPickProb(lastPos, lastNrm, ia.pos, ia.ltriId), ltriId == ia.ltriId);
           let pickPdf = calcLTriPickProb(lastPos, lastNrm, ia.pos, ia.ltriId);
 
           // Solid angle subtended by light tri (area projected on unit hemisphere)
@@ -1122,15 +1131,15 @@ fn render(initialRay: Ray) -> vec3f
             var ltriPdf = 1.0 / sa;
             ltriPdf *= pickPdf;
 
-            // Power heuristic with beta = 2
-            let weight = bsdfPdf * bsdfPdf / (ltriPdf * ltriPdf + bsdfPdf * bsdfPdf);
-
-            col += clampIntensity(throughput * (*ltri).emission * weight); // Did already divide by the bsdf PDF
+            col += clampIntensity(throughput * (*ltri).emission * bsdf / (ltriPdf + bsdfPdf));
           }
         }
       }
       break;
     }
+
+    // Now we know that we do not MIS, apply postponed result from indirect light sampling
+    throughput *= bsdf / bsdfPdf;
 
     let r0 = rand4();
     let r1 = rand4();
@@ -1175,26 +1184,24 @@ fn render(initialRay: Ray) -> vec3f
           var bsdfPdfNEE: f32;
           var bsdfNEE = evalMaterial(lightDir, ia.faceDir * ia.nrm, ia.mtl, &bsdfPdf) * (1 - ia.mtl.refl - ia.mtl.refr);
 
-          // Power heuristic with beta = 2
-          let weight = ltriPdf * ltriPdf / (bsdfPdfNEE * bsdfPdfNEE + ltriPdf * ltriPdf);
-
           if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPSILON)) {
-            col += clampIntensity(throughput * (*ltri).emission * bsdfNEE * weight / (ltriPdf * nDotL));
+            col += clampIntensity(throughput * (*ltri).emission * (bsdfNEE / nDotL) / (ltriPdf + bsdfPdfNEE));
           }
         }
       }
     }
 
     // Sample indirect light contribution
-    let bsdf = sampleMaterial(&ia, r1, &bsdfPdf);
+    bsdf = sampleMaterial(&ia, r1, &bsdfPdf);
     if(bsdfPdf < EPSILON) {
       break;
     }
-    throughput *= bsdf / bsdfPdf;
+    //throughput *= bsdf / bsdfPdf;
+    //throughput *= bsdf;
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
-    let p = maxComp(throughput);
+    let p = maxComp(throughput * bsdf / bsdfPdf);
     if(r0.w > p) {
       break;
     }

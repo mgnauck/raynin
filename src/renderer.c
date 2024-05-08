@@ -130,6 +130,15 @@ void push_ltris(render_data *rd)
 {
   scene *s = rd->scene;
   gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
+
+  // Push tris because ltri id might have changed
+  uint32_t cnt = 0;
+  for(uint32_t i=0; i<s->mesh_cnt; i++) {    
+    mesh *m = &s->meshes[i];
+    gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
+    cnt += m->tri_cnt;
+  }
+
   scene_clr_dirty(s, RT_LTRI);
 }
 
