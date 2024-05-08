@@ -1000,16 +1000,24 @@ fn renderNEE(initialRay: Ray) -> vec3f
       break;
     }
 
+    let r0 = rand4();
+    let r1 = rand4();
+
     // Direct light sampling (diffuse only)
     if(!isSpecular(ia.mtl)) {
 
       // Prepare random barycentric coordinates
-      let bc = randBarycentric(rand2());
+      let bc = randBarycentric(r0.xy);
 
       // Pick ltri with uniform distribution
-      let ltriCnt = arrayLength(&ltris);
-      let pickPdf = 1.0 / f32(ltriCnt);
-      let ltriId = min(u32(rand() * f32(ltriCnt)), ltriCnt - 1);
+      //let ltriCnt = arrayLength(&ltris);
+      //let pickPdf = 1.0 / f32(ltriCnt);
+      //let ltriId = min(u32(rand() * f32(ltriCnt)), ltriCnt - 1);
+
+      // Pick ltri according to its contribution and calc picking probability
+      var pickPdf: f32;
+      let ltriId = pickLTriRandomly(ia.pos, ia.faceDir * ia.nrm, r0.z, bc, &pickPdf);
+
       if(pickPdf > 0.0) {
 
         let ltri = &ltris[ltriId];
@@ -1043,7 +1051,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
 
     // Sample indirect light contribution
     var bsdfPdf: f32;
-    let bsdf = sampleMaterial(&ia, rand4(), &bsdfPdf);
+    let bsdf = sampleMaterial(&ia, r1, &bsdfPdf);
     if(bsdfPdf < EPSILON) {
       break;
     }
@@ -1052,7 +1060,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
     let p = maxComp(throughput);
-    if(rand() > p) {
+    if(r0.w > p) {
       break;
     }
     // Account for bias introduced by path termination (pdf = p)
@@ -1101,8 +1109,12 @@ fn render(initialRay: Ray) -> vec3f
           // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
           let ltri = &ltris[ia.ltriId];
 
+          // Calculate picking prob for the light we hit (uniform distribution)
+          //let pickPdf = 1.0 / f32(arrayLength(&ltris));
+
           // Calculate picking prob for the light we hit
-          var pickPdf = calcLTriPickProb(lastPos, lastNrm, ia.pos, ia.ltriId);
+          let pickPdf = calcLTriPickProb(lastPos, lastNrm, ia.pos, ia.ltriId);
+
           let sa = (*ltri).area * max(0.0, dot(ray.dir, lastNrm)) * max(0.0, dot(-ray.dir, ia.nrm)) / (ia.dist * ia.dist);
           if(sa > 0.0) {
 
@@ -1130,9 +1142,15 @@ fn render(initialRay: Ray) -> vec3f
       // Prepare random barycentric coordinates
       let bc = randBarycentric(r0.xy);
 
-      // Pick ltri according to contribution and calc picking probability
+      // Pick ltri with uniform distribution
+      //let ltriCnt = arrayLength(&ltris);
+      //let pickPdf = 1.0 / f32(ltriCnt);
+      //let ltriId = min(u32(rand() * f32(ltriCnt)), ltriCnt - 1);
+
+      // Pick ltri according to its contribution and calc picking probability
       var pickPdf: f32;
       let ltriId = pickLTriRandomly(ia.pos, ia.faceDir * ia.nrm, r0.z, bc, &pickPdf);
+
       if(pickPdf > 0.0) {
 
         let ltri = &ltris[ltriId];
@@ -1222,7 +1240,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    col += render(createPrimaryRay(vec2f(globalId.xy), rand4()));
+    col += renderNEE(createPrimaryRay(vec2f(globalId.xy), rand4()));
   }
 
   buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);
