@@ -153,7 +153,7 @@ const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
 const MAX_DISTANCE        = 3.402823466e+38;
 const MAX_NODE_CNT        = 32;
-const MAX_INTENSITY       = 1.7;  // Value for intensity clamping, will need trial and error
+const MAX_INTENSITY       = 1.2;  // Value for intensity clamping, will need trial and error
 const MAX_LTRIS           = 64;
 
 @group(0) @binding(0) var<uniform> globals: Global;
@@ -936,7 +936,7 @@ fn renderNaive(initialRay: Ray) -> vec3f
 
     var hit = intersectTlas(ray, MAX_DISTANCE);
     if(hit.t == MAX_DISTANCE) {
-      col += clampIntensity(throughput * globals.bgColor);
+      col += throughput * globals.bgColor;
       break;
     }
 
@@ -945,7 +945,7 @@ fn renderNaive(initialRay: Ray) -> vec3f
 
     if(isEmissive(ia.mtl)) {
       if(dot(ray.dir, ia.nrm) < 0) {
-        col += clampIntensity(throughput * ia.mtl.col);
+        col += throughput * ia.mtl.col;
       }
       break;
     }
@@ -955,7 +955,6 @@ fn renderNaive(initialRay: Ray) -> vec3f
     if(bsdfPdf < EPSILON) {
       break;
     }
-
     throughput *= bsdf / bsdfPdf;
 
     let p = maxComp(throughput);
@@ -1028,7 +1027,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
         let dist = length(lightDir);
         lightDir *= 1.0 / dist;
 
-        // Account for single ray in direction of light. Check if we are facing the light and the light is facing us.
+        // Solid angle subtended by light tri (area projected on unit hemisphere)
         let nDotL = max(0.0, dot(ia.faceDir * ia.nrm, lightDir));
         let sa = ((*ltri).area * nDotL * max(0.0, dot(-lightDir, (*ltri).nrm))) / (dist * dist);
         if(sa > EPSILON) {
@@ -1115,17 +1114,18 @@ fn render(initialRay: Ray) -> vec3f
           // Calculate picking prob for the light we hit
           let pickPdf = calcLTriPickProb(lastPos, lastNrm, ia.pos, ia.ltriId);
 
+          // Solid angle subtended by light tri (area projected on unit hemisphere)
           let sa = (*ltri).area * max(0.0, dot(ray.dir, lastNrm)) * max(0.0, dot(-ray.dir, ia.nrm)) / (ia.dist * ia.dist);
           if(sa > 0.0) {
 
-            // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
+            // Pdf is 1 / solid angle
             var ltriPdf = 1.0 / sa;
             ltriPdf *= pickPdf;
 
             // Power heuristic with beta = 2
             let weight = bsdfPdf * bsdfPdf / (ltriPdf * ltriPdf + bsdfPdf * bsdfPdf);
 
-            col += clampIntensity(throughput * (*ltri).emission * weight / bsdfPdf);
+            col += clampIntensity(throughput * (*ltri).emission * weight); // Did already divide by the bsdf PDF
           }
         }
       }
@@ -1136,7 +1136,7 @@ fn render(initialRay: Ray) -> vec3f
     let r1 = rand4();
 
     // Direct light sampling (diffuse only)
-    // Choose one light randomly based on picking prob and sample. Apply MIS.
+    // Choose one light randomly based on picking prob, sample point on light and apply MIS.
     if(!isSpecular(ia.mtl)) {
 
       // Prepare random barycentric coordinates
@@ -1161,17 +1161,17 @@ fn render(initialRay: Ray) -> vec3f
         let dist = length(lightDir);
         lightDir *= 1.0 / dist;
 
-        // Account for single ray in direction of light. Check if we are facing the light and the light is facing us.
+        // Account for single ray in direction of light.
+        // Solid angle subtended by light tri (area projected on unit hemisphere)
         let nDotL = max(0.0, dot(ia.faceDir * ia.nrm, lightDir));
         let sa = ((*ltri).area * nDotL * max(0.0, dot(-lightDir, (*ltri).nrm))) / (dist * dist);
         if(sa > EPSILON) {
 
-          // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
+          // Pdf is 1 / solid angle
           var ltriPdf = 1.0 / sa;
           ltriPdf *= pickPdf;
 
-          // Scale by the probability of the mtl producing a diffuse bounce
-          // because the bsdf can also produce specular reflection/refraction
+          // Scale by the probability of mtl producing a diff bounce because bsdf also produces spec reflection/refraction
           var bsdfPdfNEE: f32;
           var bsdfNEE = evalMaterial(lightDir, ia.faceDir * ia.nrm, ia.mtl, &bsdfPdf) * (1 - ia.mtl.refl - ia.mtl.refr);
 
@@ -1240,7 +1240,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    col += renderNEE(createPrimaryRay(vec2f(globalId.xy), rand4()));
+    col += render(createPrimaryRay(vec2f(globalId.xy), rand4()));
   }
 
   buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);
