@@ -21,6 +21,7 @@ mtl   mtl_init(vec3 col);
 
 // Generate random materials
 mtl   mtl_create_diffuse();
+mtl   mtl_create_diffuse_white();
 mtl   mtl_create_mirror();
 mtl   mtl_create_glass();
 mtl   mtl_create_emissive();

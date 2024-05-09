@@ -17,6 +17,11 @@ mtl mtl_create_diffuse()
   return mtl_init(vec3_mul(vec3_rand(), vec3_rand()));
 }
 
+mtl mtl_create_diffuse_white()
+{
+  return mtl_init((vec3){ 1.0, 1.0, 1.0 });
+}
+
 mtl mtl_create_mirror()
 {
   mtl m = mtl_init(vec3_rand_rng(0.5f, 1.0f));

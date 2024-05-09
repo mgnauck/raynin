@@ -756,7 +756,7 @@ fn evalMaterial(dir: vec3f, nrm: vec3f, mtl: Mtl, pdf: ptr<function, f32>) -> ve
 {
   // This is called for light sampling only which is limited to diffuse
   let lDotN = max(0.0, dot(dir, nrm));
-  *pdf = lDotN * INV_PI;
+  *pdf = lDotN * INV_PI * (1.0 - mtl.refl - mtl.refr);
   return mtl.col * INV_PI * lDotN;
 }
 
@@ -772,13 +772,14 @@ fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> v
 {
   // Flip the normal if we are inside or seeing a backface of not closed mesh
   let nrm = (*ia).faceDir * (*ia).nrm;
+
   if(r.x < (*ia).mtl.refr) {
     // Specular refraction
     let iorRatio = select(1 /* air */ / (*ia).mtl.ior, (*ia).mtl.ior, (*ia).faceDir < 0);
     let cosTheta = min(dot((*ia).outDir, nrm), 1.0);
     (*ia).inDir = refract(-(*ia).outDir, nrm, iorRatio);
     (*ia).flags |= IA_SPECULAR;
-    *pdf = 1.0;
+    *pdf = (*ia).mtl.refr;
     // Apply fuzziness to reflection and refraction paths
     if(r.y < schlickReflectance(cosTheta, iorRatio) || all((*ia).inDir == vec3f(0))) {
       let reflDir = reflect(-(*ia).outDir, nrm);
@@ -794,13 +795,13 @@ fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> v
       let reflDir = reflect(-(*ia).outDir, nrm);
       (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, r.zw));
  	    (*ia).flags |= IA_SPECULAR;
-      *pdf = 1.0;
+      *pdf = (*ia).mtl.refl;
       return (*ia).mtl.col / abs(dot((*ia).inDir, nrm));
     } else {
       // Diffuse
       (*ia).inDir = rand3HemiCosWeighted(nrm, r.zw);
  	    (*ia).flags &= ~IA_SPECULAR;
-      *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI;
+      *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI * (1.0 - (*ia).mtl.refl - (*ia).mtl.refr);
       return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
     }
   }
@@ -1023,10 +1024,9 @@ fn renderNEE(initialRay: Ray) -> vec3f
           var ltriPdf = 1.0 / sa;
           ltriPdf *= pickPdf;
 
-          // Scale by the probability of the mtl producing a diffuse bounce
-          // because the bsdf can produce specular reflection/refraction
+          // Eval brdf in direction of light
           var bsdfPdf: f32;
-          var bsdf = evalMaterial(lightDir, ia.faceDir * ia.nrm, ia.mtl, &bsdfPdf) * (1 - ia.mtl.refl - ia.mtl.refr);
+          var bsdf = evalMaterial(lightDir, ia.faceDir * ia.nrm, ia.mtl, &bsdfPdf);
 
           if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPSILON)) {
             col += clampIntensity(throughput * (*ltri).emission * bsdf / (ltriPdf * nDotL));
@@ -1152,9 +1152,9 @@ fn render(initialRay: Ray) -> vec3f
           var ltriPdf = 1.0 / (sa * (*ltri).area);
           ltriPdf *= pickPdf;
 
-          // Scale by the probability of mtl producing a diff bounce because bsdf also produces spec reflection/refraction
+          // Eval brdf in direction of light
           var bsdfPdfNEE: f32;
-          var bsdfNEE = evalMaterial(lightDir, ia.faceDir * ia.nrm, ia.mtl, &bsdfPdfNEE) * (1 - ia.mtl.refl - ia.mtl.refr);
+          var bsdfNEE = evalMaterial(lightDir, ia.faceDir * ia.nrm, ia.mtl, &bsdfPdfNEE);
 
           if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPSILON)) {
             //col += clampIntensity(throughput * (*ltri).emission * (bsdfNEE / nDotL) / (ltriPdf + bsdfPdfNEE));

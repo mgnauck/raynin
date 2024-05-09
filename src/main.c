@@ -99,11 +99,12 @@ void init_scene_riow(scene *s)
   s->cam = (cam){ .vert_fov = 20.0f, .foc_dist = 11.0f, .foc_angle = 0.5f };
   cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
-  uint16_t mtl_id;
+  uint16_t mtl_id = 0;
+  mtl m;
   mat4 transform, translation, rotation, scale;
 
   // Light meshes (need to be unique!)
-  mtl m = mtl_create_emissive();
+  m = mtl_create_emissive();
   mtl_id = scene_add_mtl(s, &m);
   uint16_t lid = scene_add_quad(s, 1, 1, mtl_id);
   for(uint8_t i=1; i<LIGHT_CNT; i++) { 
@@ -132,7 +133,7 @@ void init_scene_riow(scene *s)
     mat4_mul(transform, translation, transform);
     scene_add_inst_mesh(s, lid + i, -1, transform);
   }
-  
+
   // Floor instance
   mat4_scale(scale, 2.4f);
   //scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
@@ -200,6 +201,7 @@ void init(uint32_t width, uint32_t height)
 
   rd = renderer_init(cs, width, height, SPP);
   renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
+  //renderer_set_bg_col(rd, (vec3){ 1.0f, 1.0f, 1.0f });
   //renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
   //renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
   renderer_update_static(rd);
