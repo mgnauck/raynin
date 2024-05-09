@@ -257,19 +257,6 @@ fn randBarycentric(r: vec2f) -> vec3f
   return vec3f(r, 1 - r.x - r.y);
 }
 
-// Fibonacci
-/*fn randBarycentric(r: vec2f) -> vec3f
-{
-  let rxSqrt = sqrt(r.x);
-  let b = vec2f(1 - rxSqrt, r.y * rxSqrt);
-  return vec3f(b, 1 - b.x - b.y);
-}*/
-
-/*fn clampIntensity(contribution: vec3f) -> vec3f
-{
-  return min(contribution, vec3f(1.0));
-}*/
-
 fn clampIntensity(contribution: vec3f) -> vec3f
 {
   let val = maxComp(contribution);
@@ -1130,14 +1117,14 @@ fn render(initialRay: Ray) -> vec3f
       break;
     }
 
-    // No MIS, apply postponed pdf from indirect light sampling
+    // No MIS, apply postponed pdf from indirect contribution
     throughput /= bsdfPdf;
 
     let r0 = rand4();
     let r1 = rand4();
 
     // Direct light sampling (diffuse only)
-    // Choose one light randomly based on picking prob, sample point on light and apply MIS.
+    // Choose one light randomly based on picking prob, sample point on light and apply MIS
     if(!isSpecular(ia.mtl)) {
 
       // Prepare random barycentric coordinates

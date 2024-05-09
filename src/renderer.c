@@ -141,8 +141,6 @@ void push_ltris(render_data *rd)
   }
 
   scene_clr_dirty(s, RT_LTRI);
-
-  logc("Pushed ltris");
 }
 
 void renderer_update_static(render_data *rd)
@@ -158,8 +156,12 @@ void renderer_update_static(render_data *rd)
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_SEQ, rd->alpha, SEQ_LEN * sizeof(*rd->alpha));
 #endif
 
+  // Prepare bvhs
   if(s->dirty & RT_MESH) {
     scene_build_bvhs(s);
+
+  // Prepare ltris, instances and tlas
+  scene_prepare_render(s);
 
 #ifndef NATIVE_BUILD
     // Push tris, indices and bvh nodes
@@ -190,7 +192,7 @@ void renderer_update(render_data *rd, float time)
 {
   scene *s = rd->scene;
 
-  // Finalize instances and TLAS
+  // In case something changed, revisit instances, ltris and tlas
   scene_prepare_render(s);
 
   // Invalidate previous samples
