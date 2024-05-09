@@ -561,7 +561,7 @@ fn intersectBvhAnyHit(ray: Ray, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
     }
   }
 
-  return false;
+  return false; // Required by firefox
 }
 
 fn intersectInst(ray: Ray, inst: Inst, hit: ptr<function, Hit>)
@@ -674,7 +674,7 @@ fn intersectTlas(ray: Ray, tfar: f32) -> Hit
     }
   }
 
-  return hit;
+  return hit; // Required by firefox
 }
 
 fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> bool
@@ -711,7 +711,7 @@ fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> bool
     }
   }
 
-  return false;
+  return false; // Required by firefox
 }
 
 fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
