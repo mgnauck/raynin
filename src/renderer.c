@@ -9,6 +9,7 @@
 #include "sutil.h"
 #include "tlas.h"
 #include "tri.h"
+#include "log.h"
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
@@ -140,6 +141,8 @@ void push_ltris(render_data *rd)
   }
 
   scene_clr_dirty(s, RT_LTRI);
+
+  logc("Pushed ltris");
 }
 
 void renderer_update_static(render_data *rd)

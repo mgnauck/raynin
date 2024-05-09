@@ -217,6 +217,8 @@ void scene_prepare_render(scene *s)
   ///logc("Inst update took: %ld", inst_upd_end - start);
   ///logc("Tlas update took: %ld", tlas_upd_end - inst_upd_end);
   ///logc("Full update took: %ld", tlas_upd_end - start);
+
+  logc("Scene prepare");
 }
 
 uint32_t scene_add_mtl(scene *s, mtl *mtl)
