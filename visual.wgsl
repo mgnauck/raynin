@@ -1016,7 +1016,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
 
         // Solid angle subtended by light tri (area projected on unit hemisphere)
         let nDotL = max(0.0, dot(ia.faceDir * ia.nrm, lightDir));
-        let sa = ((*ltri).area * nDotL * max(0.0, dot(-lightDir, (*ltri).nrm))) / (dist * dist);
+        let sa = ((*ltri).area * nDotL * max(0.0, -dot(lightDir, (*ltri).nrm))) / (dist * dist);
         if(sa > EPS) {
 
           // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
@@ -1100,7 +1100,7 @@ fn render(initialRay: Ray) -> vec3f
           let pickPdf = calcLTriPickProb(lastPos, lastNrm, ia.pos, ia.ltriId);
 
           // Solid angle subtended by light tri (area projected on unit hemisphere)
-          let sa = max(0.0, dot(ray.dir, lastNrm)) * max(0.0, dot(-ray.dir, ia.nrm)) / (ia.dist * ia.dist);
+          let sa = max(0.0, dot(ray.dir, lastNrm)) * max(0.0, -dot(ray.dir, ia.nrm)) / (ia.dist * ia.dist);
           if(sa > 0.0) {
 
             // Pdf is 1 / solid angle
@@ -1142,7 +1142,7 @@ fn render(initialRay: Ray) -> vec3f
 
         // Solid angle subtended by light tri (area projected on unit hemisphere)
         let nDotL = max(0.0, dot(ia.faceDir * ia.nrm, lightDir));
-        let sa = nDotL * max(0.0, dot(-lightDir, (*ltri).nrm)) / (dist * dist);
+        let sa = nDotL * max(0.0, -dot(lightDir, (*ltri).nrm)) / (dist * dist);
         if(sa > EPS) {
 
           // Pdf is 1 / solid angle
