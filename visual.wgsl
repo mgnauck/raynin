@@ -175,14 +175,24 @@ var<private> rngState: u32;
 // Global so we can assign some error color from everywhere
 var<private> throughput: vec3f;
 
-fn minComp(v: vec3f) -> f32
+fn minComp3(v: vec3f) -> f32
 {
   return min(v.x, min(v.y, v.z));
 }
 
-fn maxComp(v: vec3f) -> f32
+fn minComp4(v: vec4f) -> f32
+{
+  return min(v.x, min(v.y, min(v.z, v.w)));
+}
+
+fn maxComp3(v: vec3f) -> f32
 {
   return max(v.x, max(v.y, v.z));
+}
+
+fn maxComp4(v: vec4f) -> f32
+{
+  return max(v.x, max(v.y, max(v.z, v.w)));
 }
 
 fn toMat3x3(m: mat3x4f) -> mat3x3f
@@ -259,7 +269,7 @@ fn randBarycentric(r: vec2f) -> vec3f
 
 fn clampIntensity(contribution: vec3f) -> vec3f
 {
-  let val = maxComp(contribution);
+  let val = maxComp3(contribution);
   return select(contribution, contribution * (MAX_INTENSITY / val), val > MAX_INTENSITY);
 }
 
@@ -279,17 +289,17 @@ fn transformRay(ray: Ray, m: mat4x4f) -> Ray
   return Ray((vec4f(ray.ori, 1.0) * m).xyz, ray.dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz));
 }
 
-// GPU efficient slabs test [Laine et al. 2013; Afra et al. 2016]
-// https://www.jcgt.org/published/0007/03/04/paper-lowres.pdf
+// Laine et al. 2013; Afra et al. 2016: GPU efficient slabs test
+// McGuire et al: A ray-box intersection algorithm and efficient dynamic voxel rendering
 fn intersectAabb(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxExt: vec3f) -> f32
 {
   let t0 = (minExt - ori) * invDir;
   let t1 = (maxExt - ori) * invDir;
 
-  let tmin = maxComp(min(t0, t1));
-  let tmax = minComp(max(t1, t0));
+  let tmin = maxComp4(vec4f(min(t0, t1), EPSILON));
+  let tmax = minComp4(vec4f(max(t1, t0), tfar));
   
-  return select(MAX_DISTANCE, tmin, tmin <= tmax && tmin < tfar && tmax > EPSILON);
+  return select(MAX_DISTANCE, tmin, tmin <= tmax);
 }
 
 fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxExt: vec3f) -> bool
@@ -297,10 +307,7 @@ fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxE
   let t0 = (minExt - ori) * invDir;
   let t1 = (maxExt - ori) * invDir;
 
-  let tmin = maxComp(min(t0, t1));
-  let tmax = minComp(max(t1, t0));
-  
-  return tmin <= tmax && tmin < tfar && tmax > EPSILON;
+  return maxComp4(vec4f(min(t0, t1), EPSILON)) <= minComp4(vec4f(max(t0, t1), tfar));
 }
 
 fn intersectPlane(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
@@ -332,8 +339,8 @@ fn intersectUnitBox(ori: vec3f, invDir: vec3f, instId: u32, h: ptr<function, Hit
   let t0 = (vec3f(-1.0) - ori) * invDir;
   let t1 = (vec3f( 1.0) - ori) * invDir;
 
-  let tmin = maxComp(min(t0, t1));
-  let tmax = minComp(max(t0, t1));
+  let tmin = maxComp3(min(t0, t1));
+  let tmax = minComp3(max(t0, t1));
  
   if(tmin <= tmax) {
     if(tmin < (*h).t && tmin > EPSILON) {
@@ -945,7 +952,7 @@ fn renderNaive(initialRay: Ray) -> vec3f
     }
     throughput *= bsdf / bsdfPdf;
 
-    let p = maxComp(throughput);
+    let p = maxComp3(throughput);
     if(rand() > p) {
       break;
     }
@@ -1045,7 +1052,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
-    let p = maxComp(throughput);
+    let p = maxComp3(throughput);
     if(r0.w > p) {
       break;
     }
@@ -1173,7 +1180,7 @@ fn render(initialRay: Ray) -> vec3f
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
-    let p = maxComp(throughput / bsdfPdf);
+    let p = maxComp3(throughput / bsdfPdf);
     if(r0.w > p) {
       break;
     }
