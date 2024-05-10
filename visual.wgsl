@@ -753,6 +753,7 @@ fn schlickReflectance(cosTheta: f32, iorRatio: f32) -> f32
 fn evalMaterial(wi: vec3f, nrm: vec3f, mtl: Mtl, pdf: ptr<function, f32>) -> vec3f
 {
   let lDotN = max(0.0, dot(wi, nrm));
+  // Scale by probability of diffuse reflection (since mtl can also produce specular refl/refr)
   *pdf = lDotN * INV_PI * (1.0 - mtl.refl - mtl.refr);
   return mtl.col * INV_PI * lDotN;
 }
@@ -766,7 +767,7 @@ fn sampleMaterial(wo: vec3f, dist: f32, nrm: vec3f, faceDir: f32, mtl: Mtl, r: v
     let cosTheta = min(dot(wo, nrm), 1.0);
     *wi = refract(-wo, nrm, iorRatio);
     *isSpecular = true;
-    *pdf = mtl.refr;
+    *pdf = max(mtl.refr, 0.1); // Keep values in check
     // Apply fuzziness to reflection and refraction paths
     if(r.y < schlickReflectance(cosTheta, iorRatio) || all(*wi == vec3f(0))) {
       let reflDir = reflect(-wo, nrm);
@@ -774,16 +775,16 @@ fn sampleMaterial(wo: vec3f, dist: f32, nrm: vec3f, faceDir: f32, mtl: Mtl, r: v
     } else {
       *wi = normalize(*wi + mtl.fuzz * rand3Hemi(*wi, r.zw));
     }
-    let beer = exp(-mtl.att * dist) * step(faceDir, 0.0) + step(0.0, faceDir);
-    return mtl.col * beer / abs(dot(*wi, nrm));
+    let beer = exp(-dist * mtl.att) * step(faceDir, 0.0) + step(0.0, faceDir);
+    return mtl.col * beer;
   } else {
     if(r.y < mtl.refl) {
       // Specular reflection
       let reflDir = reflect(-wo, nrm);
       *wi = normalize(reflDir + mtl.fuzz * rand3Hemi(reflDir, r.zw));
  	    *isSpecular = true;
-      *pdf = mtl.refl;
-      return mtl.col / abs(dot(*wi, nrm));
+      *pdf = max(mtl.refl, 0.1); // Keep values in check
+      return mtl.col;
     } else {
       // Diffuse
       *wi = rand3HemiCosWeighted(nrm, r.zw);
@@ -895,7 +896,7 @@ fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>, mtl: ptr<function, Mtl
     (*ia).ltriId = tri.ltriId;
   }
 
-  // Indicate backside hit
+  // Backside hit
   (*ia).faceDir = select(1.0, -1.0, dot((*ia).wo, (*ia).nrm) < EPS);
 }
 
@@ -940,7 +941,7 @@ fn renderNaive(initialRay: Ray) -> vec3f
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
-    let p = maxComp3(throughput);
+    let p = min(0.95, maxComp3(throughput));
     if(rand4().x > p) {
       break;
     }
@@ -1045,7 +1046,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
-    let p = maxComp3(throughput);
+    let p = min(0.95, maxComp3(throughput / bsdfPdf));
     if(r0.w > p) {
       break;
     }
@@ -1170,7 +1171,7 @@ fn render(initialRay: Ray) -> vec3f
 
     // Russian roulette
     // Terminate with prob inverse to throughput, except for primary ray or specular interaction
-    let p = maxComp3(throughput / bsdfPdf);
+    let p = min(0.95, maxComp3(throughput / bsdfPdf));
     if(r0.w > p) {
       break;
     }
