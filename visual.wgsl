@@ -71,15 +71,12 @@ struct Mtl
 
 struct IA
 {
-  dist:     f32,
   pos:      vec3f,
+  dist:     f32,
   nrm:      vec3f,
-  outDir:   vec3f,        // Ray dir of current hit reversed
-  inDir:    vec3f,
-  mtl:      Mtl,
-  ltriId:   u32,
-  flags:    u32,
-  faceDir:  f32
+  faceDir:  f32,
+  wo:       vec3f,
+  ltriId:   u32
 }
 
 struct Tri
@@ -144,17 +141,11 @@ const ST_PLANE            = 0u;
 const ST_BOX              = 1u;
 const ST_SPHERE           = 2u;
 
-// Interaction flags
-const IA_SPECULAR         = 1u;
-
 // Math constants
-const EPSILON             = 0.0001;
+const EPS                 = 0.0001;
+const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
-const MAX_DISTANCE        = 3.402823466e+38;
-const MAX_NODE_CNT        = 32;
-const MAX_INTENSITY       = 1.2;  // Value for intensity clamping, will need trial and error
-const MAX_LTRIS           = 64;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -166,14 +157,14 @@ const MAX_LTRIS           = 64;
 @group(0) @binding(7) var<storage, read> materials: array<Mtl>;
 @group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
+const MAX_LTRIS     = 64;
+const MAX_NODE_CNT  = 32;
+
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
 // State of prng
 var<private> rng: vec4u;
-
-// Global so we can assign some error color from everywhere
-var<private> throughput: vec3f;
 
 fn minComp3(v: vec3f) -> f32
 {
@@ -245,7 +236,7 @@ fn rand3HemiCosWeighted(nrm: vec3f, r: vec2f) -> vec3f
 {
   // Expects nrm to be unit vector
   let dir = nrm + rand3UnitSphere(r);
-  return select(normalize(dir), nrm, all(abs(dir) < vec3f(EPSILON)));
+  return select(normalize(dir), nrm, all(abs(dir) < vec3f(EPS)));
 }
 
 // https://mathworld.wolfram.com/DiskPointPicking.html
@@ -264,12 +255,6 @@ fn randBarycentric(r: vec2f) -> vec3f
   }
 
   return vec3f(r, 1 - r.x - r.y);
-}
-
-fn clampIntensity(contribution: vec3f) -> vec3f
-{
-  let val = maxComp3(contribution);
-  return select(contribution, contribution * (MAX_INTENSITY / val), val > MAX_INTENSITY);
 }
 
 fn isNan(v: f32) -> bool
@@ -295,10 +280,10 @@ fn intersectAabb(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxExt: ve
   let t0 = (minExt - ori) * invDir;
   let t1 = (maxExt - ori) * invDir;
 
-  let tmin = maxComp4(vec4f(min(t0, t1), EPSILON));
+  let tmin = maxComp4(vec4f(min(t0, t1), EPS));
   let tmax = minComp4(vec4f(max(t1, t0), tfar));
   
-  return select(MAX_DISTANCE, tmin, tmin <= tmax);
+  return select(INF, tmin, tmin <= tmax);
 }
 
 fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxExt: vec3f) -> bool
@@ -306,15 +291,15 @@ fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxE
   let t0 = (minExt - ori) * invDir;
   let t1 = (maxExt - ori) * invDir;
 
-  return maxComp4(vec4f(min(t0, t1), EPSILON)) <= minComp4(vec4f(max(t0, t1), tfar));
+  return maxComp4(vec4f(min(t0, t1), EPS)) <= minComp4(vec4f(max(t0, t1), tfar));
 }
 
 fn intersectPlane(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
 {
   let d = ray.dir.y;
-  if(abs(d) > EPSILON) {
+  if(abs(d) > EPS) {
     let t = -ray.ori.y / d;
-    if(t < (*h).t && t > EPSILON) {
+    if(t < (*h).t && t > EPS) {
       (*h).t = t;
       (*h).e = (ST_PLANE << 16) | (instId & INST_ID_MASK);
       return true;
@@ -326,9 +311,9 @@ fn intersectPlane(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
 fn intersectPlaneAnyHit(ray: Ray, tfar: f32) -> bool
 {
   let d = ray.dir.y;
-  if(abs(d) > EPSILON) {
+  if(abs(d) > EPS) {
     let t = -ray.ori.y / d;
-    return t < tfar && t > EPSILON;
+    return t < tfar && t > EPS;
   }
   return false;
 }
@@ -342,12 +327,12 @@ fn intersectUnitBox(ori: vec3f, invDir: vec3f, instId: u32, h: ptr<function, Hit
   let tmax = minComp3(max(t0, t1));
  
   if(tmin <= tmax) {
-    if(tmin < (*h).t && tmin > EPSILON) {
+    if(tmin < (*h).t && tmin > EPS) {
       (*h).t = tmin;
       (*h).e = (ST_BOX << 16) | (instId & INST_ID_MASK);
       return true;
     }
-    if(tmax < (*h).t && tmax > EPSILON) {
+    if(tmax < (*h).t && tmax > EPS) {
       (*h).t = tmax;
       (*h).e = (ST_BOX << 16) | (instId & INST_ID_MASK);
       return true;
@@ -369,9 +354,9 @@ fn intersectUnitSphere(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
 
   d = sqrt(d);
   var t = (-b - d) / a;
-  if(t <= EPSILON || (*h).t <= t) {
+  if(t <= EPS || (*h).t <= t) {
     t = (-b + d) / a;
-    if(t <= EPSILON || (*h).t <= t) {
+    if(t <= EPS || (*h).t <= t) {
       return false;
     }
   }
@@ -394,9 +379,9 @@ fn intersectUnitSphereAnyHit(ray: Ray, tfar: f32) -> bool
 
   d = sqrt(d);
   var t = (-b - d) / a;
-  if(t <= EPSILON || tfar <= t) {
+  if(t <= EPS || tfar <= t) {
     t = (-b + d) / a;
-    return t > EPSILON && t < tfar;
+    return t > EPS && t < tfar;
   }
 
   return true;
@@ -414,9 +399,9 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<
   let pvec = cross(dir, edge2);
   let det = dot(edge1, pvec);
 
-  if(abs(det) < EPSILON) {
+  if(abs(det) < EPS) {
     // Ray in plane of triangle
-    return MAX_DISTANCE;
+    return INF;
   }
 
   let invDet = 1 / det;
@@ -427,7 +412,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<
   // Calculate parameter u and test bounds
   *u = dot(tvec, pvec) * invDet;
   if(*u < 0 || *u > 1) {
-    return MAX_DISTANCE;
+    return INF;
   }
 
   // Prepare to test for v
@@ -436,7 +421,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<
   // Calculate parameter u and test bounds
   *v = dot(dir, qvec) * invDet;
   if(*v < 0 || *u + *v > 1) {
-    return MAX_DISTANCE;
+    return INF;
   }
 
   // Calc distance
@@ -448,7 +433,7 @@ fn intersectTriClosest(ray: Ray, tri: Tri, instTriId: u32, h: ptr<function, Hit>
   var u: f32;
   var v: f32;
   let dist = intersectTri(ray.ori, ray.dir, tri.v0, tri.v1, tri.v2, &u, &v);
-  if(dist > EPSILON && dist < (*h).t) {
+  if(dist > EPS && dist < (*h).t) {
     (*h).t = dist;
     (*h).u = u;
     (*h).v = v;
@@ -464,7 +449,7 @@ fn intersectTriAnyHit(ray: Ray, tfar: f32, tri: Tri) -> bool
   var u: f32;
   var v: f32;
   let dist = intersectTri(ray.ori, ray.dir, tri.v0, tri.v1, tri.v2, &u, &v);
-  return dist > EPSILON && dist < tfar;
+  return dist > EPS && dist < tfar;
 }
 
 fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
@@ -507,10 +492,10 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
         rightChildIndex -= 1u;
       }
 
-      if(leftDist < MAX_DISTANCE) {
+      if(leftDist < INF) {
         // Continue with nearer child node
         nodeIndex = leftChildIndex;
-        if(rightDist < MAX_DISTANCE) {
+        if(rightDist < INF) {
           // Push farther child on stack if also a hit
           bvhNodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
@@ -659,10 +644,10 @@ fn intersectTlas(ray: Ray, tfar: f32) -> Hit
         leftChildIndex = ti;
       }
 
-      if(leftDist < MAX_DISTANCE) {
+      if(leftDist < INF) {
         // Continue with nearer child node
         nodeIndex = leftChildIndex;
-        if(rightDist < MAX_DISTANCE) {
+        if(rightDist < INF) {
           // Push farther child on stack if also a hit
           tlasNodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
@@ -725,7 +710,7 @@ fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
   switch(inst.data & MESH_SHAPE_MASK) {
     case ST_BOX: {
       let pos = (vec4f(hitPos, 1.0) * toMat4x4(inst.invTransform)).xyz;
-      var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPSILON));
+      var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPS));
       return normalize(nrm * toMat3x3(inst.transform));
     }
     case ST_PLANE: {
@@ -758,14 +743,6 @@ fn isSpecular(mtl: Mtl) -> bool
   return mtl.refl > 0.01 || mtl.refr > 0.5;
 }
 
-fn evalMaterial(dir: vec3f, nrm: vec3f, mtl: Mtl, pdf: ptr<function, f32>) -> vec3f
-{
-  // This is called for light sampling only which is limited to diffuse
-  let lDotN = max(0.0, dot(dir, nrm));
-  *pdf = lDotN * INV_PI * (1.0 - mtl.refl - mtl.refr);
-  return mtl.col * INV_PI * lDotN;
-}
-
 fn schlickReflectance(cosTheta: f32, iorRatio: f32) -> f32
 {
   var r0 = (1.0 - iorRatio) / (1.0 + iorRatio);
@@ -773,42 +750,45 @@ fn schlickReflectance(cosTheta: f32, iorRatio: f32) -> f32
   return r0 + (1.0 - r0) * pow(1.0 - cosTheta, 5.0);
 }
 
-// https://computergraphics.stackexchange.com/questions/2482/choosing-reflection-or-refraction-in-path-tracing
-fn sampleMaterial(ia: ptr<function, IA>, r: vec4f, pdf: ptr<function, f32>) -> vec3f
+fn evalMaterial(wi: vec3f, nrm: vec3f, mtl: Mtl, pdf: ptr<function, f32>) -> vec3f
 {
-  // Flip the normal if we are inside or seeing a backface of not closed mesh
-  let nrm = (*ia).faceDir * (*ia).nrm;
+  let lDotN = max(0.0, dot(wi, nrm));
+  *pdf = lDotN * INV_PI * (1.0 - mtl.refl - mtl.refr);
+  return mtl.col * INV_PI * lDotN;
+}
 
-  if(r.x < (*ia).mtl.refr) {
+// https://computergraphics.stackexchange.com/questions/2482/choosing-reflection-or-refraction-in-path-tracing
+fn sampleMaterial(wo: vec3f, dist: f32, nrm: vec3f, faceDir: f32, mtl: Mtl, r: vec4f, wi: ptr<function, vec3f>, isSpecular: ptr<function, bool>, pdf: ptr<function, f32>) -> vec3f
+{
+  if(r.x < mtl.refr) {
     // Specular refraction
-    let iorRatio = select(1 /* air */ / (*ia).mtl.ior, (*ia).mtl.ior, (*ia).faceDir < 0);
-    let cosTheta = min(dot((*ia).outDir, nrm), 1.0);
-    (*ia).inDir = refract(-(*ia).outDir, nrm, iorRatio);
-    (*ia).flags |= IA_SPECULAR;
-    *pdf = (*ia).mtl.refr;
+    let iorRatio = select(1 /* air */ / mtl.ior, mtl.ior, faceDir < 0);
+    let cosTheta = min(dot(wo, nrm), 1.0);
+    *wi = refract(-wo, nrm, iorRatio);
+    *isSpecular = true;
+    *pdf = mtl.refr;
     // Apply fuzziness to reflection and refraction paths
-    if(r.y < schlickReflectance(cosTheta, iorRatio) || all((*ia).inDir == vec3f(0))) {
-      let reflDir = reflect(-(*ia).outDir, nrm);
-      (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, r.zw));
+    if(r.y < schlickReflectance(cosTheta, iorRatio) || all(*wi == vec3f(0))) {
+      let reflDir = reflect(-wo, nrm);
+      *wi = normalize(reflDir + mtl.fuzz * rand3Hemi(reflDir, r.zw));
     } else {
-      (*ia).inDir = normalize((*ia).inDir + (*ia).mtl.fuzz * rand3Hemi((*ia).inDir, r.zw));
+      *wi = normalize(*wi + mtl.fuzz * rand3Hemi(*wi, r.zw));
     }
-    let beer = exp(-(*ia).mtl.att * (*ia).dist) * step((*ia).faceDir, 0.0) + step(0.0, (*ia).faceDir);
-    return (*ia).mtl.col * beer / abs(dot((*ia).inDir, nrm));
+    let beer = exp(-mtl.att * dist) * step(faceDir, 0.0) + step(0.0, faceDir);
+    return mtl.col * beer / abs(dot(*wi, nrm));
   } else {
-    if(r.y < (*ia).mtl.refl) {
+    if(r.y < mtl.refl) {
       // Specular reflection
-      let reflDir = reflect(-(*ia).outDir, nrm);
-      (*ia).inDir = normalize(reflDir + (*ia).mtl.fuzz * rand3Hemi(reflDir, r.zw));
- 	    (*ia).flags |= IA_SPECULAR;
-      *pdf = (*ia).mtl.refl;
-      return (*ia).mtl.col / abs(dot((*ia).inDir, nrm));
+      let reflDir = reflect(-wo, nrm);
+      *wi = normalize(reflDir + mtl.fuzz * rand3Hemi(reflDir, r.zw));
+ 	    *isSpecular = true;
+      *pdf = mtl.refl;
+      return mtl.col / abs(dot(*wi, nrm));
     } else {
       // Diffuse
-      (*ia).inDir = rand3HemiCosWeighted(nrm, r.zw);
- 	    (*ia).flags &= ~IA_SPECULAR;
-      *pdf = max(0.0, dot((*ia).inDir, nrm)) * INV_PI * (1.0 - (*ia).mtl.refl - (*ia).mtl.refr);
-      return (*ia).mtl.col * INV_PI * abs(dot((*ia).inDir, nrm));
+      *wi = rand3HemiCosWeighted(nrm, r.zw);
+ 	    *isSpecular = false;
+      return evalMaterial(*wi, nrm, mtl, pdf);
     }
   }
 }
@@ -847,7 +827,7 @@ fn calcLTriPickProb(pos: vec3f, nrm: vec3f, ltriPoint: vec3f, ltriId: u32) -> f3
   }
 
   // Scale contribution by total, so that our picking pdf integrates to 1
-  return select(0.0, contributions[ltriId] / totalContrib, totalContrib > EPSILON);
+  return select(0.0, contributions[ltriId] / totalContrib, totalContrib > EPS);
 }
 
 // https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
@@ -868,7 +848,7 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
   }
 
   // No ltri can be picked, i.e. each ltri faces away
-  if(totalContrib < EPSILON) {
+  if(totalContrib < EPS) {
     *pdf = 0.0;
     return 0u;
   }
@@ -893,54 +873,55 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
   return ltriId;
 }
 
-fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>)
+fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>, mtl: ptr<function, Mtl>)
 {
   let inst = instances[hit.e & INST_ID_MASK];
 
   (*ia).dist = hit.t;
   (*ia).pos = ray.ori + hit.t * ray.dir;
-  (*ia).outDir = -ray.dir;
+  (*ia).wo = -ray.dir;
  
   if((inst.data & SHAPE_TYPE_BIT) > 0) {
     // Shape
-    (*ia).mtl = materials[(inst.id >> 16) & MTL_ID_MASK];
+    *mtl = materials[(inst.id >> 16) & MTL_ID_MASK];
     (*ia).nrm = calcShapeNormal(inst, (*ia).pos);
   } else {
     // Mesh
     let ofs = inst.data & MESH_SHAPE_MASK;
     let tri = tris[ofs + (hit.e >> 16)];
     // Either use the material id from the triangle or the material override from the instance
-    (*ia).mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
+    *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
     (*ia).nrm = calcTriNormal(hit, inst, tri);
     (*ia).ltriId = tri.ltriId;
   }
 
   // Indicate backside hit
-  (*ia).faceDir = select(1.0, -1.0, dot((*ia).outDir, (*ia).nrm) < EPSILON);
+  (*ia).faceDir = select(1.0, -1.0, dot((*ia).wo, (*ia).nrm) < EPS);
 }
 
 fn renderNaive(initialRay: Ray) -> vec3f
 {
   var ray = initialRay;
   var col = vec3f(0);
-
-  throughput = vec3f(1);
+  var throughput = vec3f(1);
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
-    var hit = intersectTlas(ray, MAX_DISTANCE);
-    if(hit.t == MAX_DISTANCE) {
+    var hit = intersectTlas(ray, INF);
+    if(hit.t == INF) {
       col += throughput * globals.bgColor;
       break;
     }
 
     var ia: IA;
-    finalizeHit(ray, hit, &ia);
+    var mtl: Mtl;
+    finalizeHit(ray, hit, &ia, &mtl);
 
     // Hit a light
-    if(isEmissive(ia.mtl)) {
+    if(isEmissive(mtl)) {
+      // Lights emit from front side only
       if(dot(ray.dir, ia.nrm) < 0) {
-        col += throughput * ia.mtl.col;
+        col += throughput * mtl.col;
       }
       break;
     }
@@ -948,9 +929,11 @@ fn renderNaive(initialRay: Ray) -> vec3f
     let r0 = rand4();
 
     // Sample new ray direction from material
+    var wi: vec3f;
+    var wasSpecular: bool;
     var bsdfPdf: f32;
-    let bsdf = sampleMaterial(&ia, r0, &bsdfPdf);
-    if(bsdfPdf < EPSILON) {
+    let bsdf = sampleMaterial(ia.wo, ia.dist, ia.faceDir * ia.nrm, ia.faceDir, mtl, r0, &wi, &wasSpecular, &bsdfPdf);
+    if(bsdfPdf < EPS) {
       break;
     }
     throughput *= bsdf / bsdfPdf;
@@ -966,7 +949,7 @@ fn renderNaive(initialRay: Ray) -> vec3f
     throughput *= 1.0 / p;
 
     // Next ray
-    ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
+    ray = Ray(ia.pos + wi * EPS, wi);
   }
 
   return col;
@@ -976,27 +959,28 @@ fn renderNEE(initialRay: Ray) -> vec3f
 {
   var ray = initialRay;
   var col = vec3f(0);
-
-  throughput = vec3f(1);
-
-  var ia: IA;
+  var throughput = vec3f(1);
+  var wasSpecular = false;
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
-    var hit = intersectTlas(ray, MAX_DISTANCE);
-    if(hit.t == MAX_DISTANCE) {
-      col += clampIntensity(throughput * globals.bgColor);
+    var hit = intersectTlas(ray, INF);
+    if(hit.t == INF) {
+      col += throughput * globals.bgColor;
       break;
     }
-    finalizeHit(ray, hit, &ia);
+  
+    var ia: IA;
+    var mtl: Mtl;
+    finalizeHit(ray, hit, &ia, &mtl);
 
     // Hit a light
-    if(isEmissive(ia.mtl)) {
+    if(isEmissive(mtl)) {
       // Lights emit from front side only
       if(dot(ray.dir, ia.nrm) < 0) {
         // Primary ray hit or last bounce was specular
-        if(bounces == 0 || (ia.flags & IA_SPECULAR) > 0) {
-          col += clampIntensity(throughput * ia.mtl.col);
+        if(bounces == 0 || wasSpecular) {
+          col += throughput * mtl.col;
         }
       }
       break;
@@ -1006,7 +990,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
     let r1 = rand4();
 
     // Direct light sampling (diffuse only)
-    if(!isSpecular(ia.mtl)) {
+    if(!isSpecular(mtl)) {
 
       // Prepare random barycentric coordinates
       let bc = randBarycentric(r0.xy);
@@ -1033,27 +1017,28 @@ fn renderNEE(initialRay: Ray) -> vec3f
         // Solid angle subtended by light tri (area projected on unit hemisphere)
         let nDotL = max(0.0, dot(ia.faceDir * ia.nrm, lightDir));
         let sa = ((*ltri).area * nDotL * max(0.0, dot(-lightDir, (*ltri).nrm))) / (dist * dist);
-        if(sa > EPSILON) {
+        if(sa > EPS) {
 
           // Pdf is 1 / solid angle subtended by the light tri (area projected on unit hemisphere)
           var ltriPdf = 1.0 / sa;
           ltriPdf *= pickPdf;
 
           // Eval brdf in direction of light
-          var bsdfPdf: f32;
-          var bsdf = evalMaterial(lightDir, ia.faceDir * ia.nrm, ia.mtl, &bsdfPdf);
+          var bsdfPdfNEE: f32;
+          let bsdfNEE = evalMaterial(lightDir, ia.faceDir * ia.nrm, mtl, &bsdfPdfNEE);
 
-          if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPSILON)) {
-            col += clampIntensity(throughput * (*ltri).emission * bsdf / (ltriPdf * nDotL));
+          if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPS)) {
+            col += throughput * (*ltri).emission * (bsdfNEE / nDotL) / ltriPdf;
           }
         }
       }
     }
 
     // Sample indirect light contribution
+    var wi: vec3f;
     var bsdfPdf: f32;
-    let bsdf = sampleMaterial(&ia, r1, &bsdfPdf);
-    if(bsdfPdf < EPSILON) {
+    let bsdf = sampleMaterial(ia.wo, ia.dist, ia.faceDir * ia.nrm, ia.faceDir, mtl, r1, &wi, &wasSpecular, &bsdfPdf);
+    if(bsdfPdf < EPS) {
       break;
     }
     throughput *= bsdf / bsdfPdf;
@@ -1069,7 +1054,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
     throughput *= 1.0 / p;
 
     // Next ray
-    ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
+    ray = Ray(ia.pos + wi * EPS, wi);
   }
 
   return col;
@@ -1079,10 +1064,8 @@ fn render(initialRay: Ray) -> vec3f
 {
   var ray = initialRay;
   var col = vec3f(0);
-  
-  throughput = vec3f(1);
-
-  var ia: IA;
+  var throughput = vec3f(1);
+  var wasSpecular = false;
   var bsdfPdf = 1.0;
   var lastPos: vec3f;
   var lastNrm: vec3f;
@@ -1091,40 +1074,39 @@ fn render(initialRay: Ray) -> vec3f
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
     // Intersect with scene
-    let hit = intersectTlas(ray, MAX_DISTANCE);
-    if(hit.t == MAX_DISTANCE) {
-      //col += clampIntensity(throughput * globals.bgColor / bsdfPdf);
+    let hit = intersectTlas(ray, INF);
+    if(hit.t == INF) {
       col += throughput * globals.bgColor / bsdfPdf;
       break;
     }
-    finalizeHit(ray, hit, &ia);
+ 
+    var ia: IA;
+    var mtl: Mtl;
+    finalizeHit(ray, hit, &ia, &mtl);
 
     // Hit a light
-    if(isEmissive(ia.mtl)) {
+    if(isEmissive(mtl)) {
       // Lights emit from front side only
       if(dot(ray.dir, ia.nrm) < 0) {
         // Primary ray hit or last bounce was specular
-        if(bounces == 0 || (ia.flags & IA_SPECULAR) > 0) {
-          // Last hit was specular, apply light contribution directly
-          //col += clampIntensity(throughput * ia.mtl.col / bsdfPdf);
-          col += throughput * ia.mtl.col / bsdfPdf;
+        if(bounces == 0 || wasSpecular) {
+          col += throughput * mtl.col / bsdfPdf;
         } else if(ia.ltriId == ltriId) {
           // Last hit was diffuse, apply MIS
           // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
           let ltri = &ltris[ia.ltriId];
 
           // Calculate picking prob for the light we hit
-          let pickPdf = calcLTriPickProb(lastPos, lastNrm, ia.pos, ltriId);
+          let pickPdf = calcLTriPickProb(lastPos, lastNrm, ia.pos, ia.ltriId);
 
           // Solid angle subtended by light tri (area projected on unit hemisphere)
-          let sa = max(0.0, dot(ray.dir, lastNrm)) * max(0.0, -dot(ray.dir, ia.nrm)) / (ia.dist * ia.dist);
+          let sa = max(0.0, dot(ray.dir, lastNrm)) * max(0.0, dot(-ray.dir, ia.nrm)) / (ia.dist * ia.dist);
           if(sa > 0.0) {
 
             // Pdf is 1 / solid angle
             var ltriPdf = 1.0 / (sa * (*ltri).area);
             ltriPdf *= pickPdf;
 
-            //col += clampIntensity(throughput * (*ltri).emission / (ltriPdf + bsdfPdf));
             col += throughput * (*ltri).emission / (ltriPdf + bsdfPdf);
           }
         }
@@ -1140,7 +1122,7 @@ fn render(initialRay: Ray) -> vec3f
 
     // Direct light sampling (diffuse only)
     // Choose one light randomly based on picking prob, sample point on light and apply MIS
-    if(!isSpecular(ia.mtl)) {
+    if(!isSpecular(mtl)) {
 
       // Prepare random barycentric coordinates
       let bc = randBarycentric(r0.xy);
@@ -1160,19 +1142,18 @@ fn render(initialRay: Ray) -> vec3f
 
         // Solid angle subtended by light tri (area projected on unit hemisphere)
         let nDotL = max(0.0, dot(ia.faceDir * ia.nrm, lightDir));
-        let sa = nDotL * max(0.0, -dot(lightDir, (*ltri).nrm)) / (dist * dist);
-        if(sa > EPSILON) {
+        let sa = nDotL * max(0.0, dot(-lightDir, (*ltri).nrm)) / (dist * dist);
+        if(sa > EPS) {
 
           // Pdf is 1 / solid angle
           var ltriPdf = 1.0 / (sa * (*ltri).area);
           ltriPdf *= pickPdf;
 
-          // Eval brdf in direction of light
+          // Eval brdf in direction of light (diffuse only)
           var bsdfPdfNEE: f32;
-          var bsdfNEE = evalMaterial(lightDir, ia.faceDir * ia.nrm, ia.mtl, &bsdfPdfNEE);
+          let bsdfNEE = evalMaterial(lightDir, ia.faceDir * ia.nrm, mtl, &bsdfPdfNEE);
 
-          if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPSILON)) {
-            //col += clampIntensity(throughput * (*ltri).emission * (bsdfNEE / nDotL) / (ltriPdf + bsdfPdfNEE));
+          if(!intersectTlasAnyHit(Ray(ia.pos, lightDir), dist - EPS)) {
             col += throughput * (*ltri).emission * (bsdfNEE / nDotL) / (ltriPdf + bsdfPdfNEE);
           }
         }
@@ -1180,8 +1161,9 @@ fn render(initialRay: Ray) -> vec3f
     }
 
     // Sample indirect light contribution
-    let bsdf = sampleMaterial(&ia, r1, &bsdfPdf);
-    if(bsdfPdf < EPSILON) {
+    var wi: vec3f;
+    let bsdf = sampleMaterial(ia.wo, ia.dist, ia.faceDir * ia.nrm, ia.faceDir, mtl, r1, &wi, &wasSpecular, &bsdfPdf);
+    if(bsdfPdf < EPS) {
       break;
     }
     throughput *= bsdf;
@@ -1201,7 +1183,7 @@ fn render(initialRay: Ray) -> vec3f
     lastNrm = ia.faceDir * ia.nrm;
 
     // Next ray
-    ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
+    ray = Ray(ia.pos + wi * EPS, wi);
   }
 
   return col;
@@ -1232,7 +1214,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
     rng = vec4u(globalId.xy, u32(globals.frame), i);
-    col += renderNaive(createPrimaryRay(vec2f(globalId.xy), rand4()));
+    col += render(createPrimaryRay(vec2f(globalId.xy), rand4()));
   }
 
   let index = globals.width * globalId.y + globalId.x;
