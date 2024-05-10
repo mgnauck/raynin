@@ -4,12 +4,12 @@ struct Global
   height:       u32,
   spp:          u32,
   maxBounces:   u32,
-  rngSeed1:     f32,
-  rngSeed2:     f32,
-  gatheredSpp:  f32,
+  rngSeed1:     f32, // TODO Remove
+  rngSeed2:     f32, // TODO Remove
+  gatheredSpp:  f32, // TODO Make u32
   weight:       f32,
   bgColor:      vec3f,
-  frame:        f32,
+  frame:        f32, // TODO Make u32
   eye:          vec3f,
   vertFov:      f32,
   right:        vec3f,
@@ -169,8 +169,8 @@ const MAX_LTRIS           = 64;
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
-// PRNG state
-var<private> rngState: u32;
+// State of prng
+var<private> rng: vec4u;
 
 // Global so we can assign some error color from everywhere
 var<private> throughput: vec3f;
@@ -205,23 +205,23 @@ fn toMat4x4(m: mat3x4f) -> mat4x4f
   return mat4x4f(m[0], m[1], m[2], vec4f(0, 0, 0, 1));
 }
 
-// PCG from https://jcgt.org/published/0009/03/02/
-fn rand() -> f32
-{
-  rngState = rngState * 747796405u + 2891336453u;
-  let word = ((rngState >> ((rngState >> 28u) + 4u)) ^ rngState) * 277803737u;
-  //return f32((word >> 22u) ^ word) / f32(0xffffffffu);
-  return ldexp(f32((word >> 22u) ^ word), -32);
-}
-
-fn rand2() -> vec2f
-{
-  return vec2f(rand(), rand());
-}
-
+// PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
 fn rand4() -> vec4f
 {
-  return vec4f(rand(), rand(), rand(), rand());
+  rng = rng * 1664525u + 1013904223u;
+
+  rng.x += rng.y * rng.w;
+  rng.y += rng.z * rng.x;
+  rng.z += rng.x * rng.y;
+  rng.w += rng.y * rng.z;
+
+  rng = rng ^ (rng >> vec4u(16));
+  rng.x += rng.y * rng.w;
+  rng.y += rng.z * rng.x;
+  rng.z += rng.x * rng.y;
+  rng.w += rng.y * rng.z;
+
+  return ldexp(vec4f((rng >> vec4u(22)) ^ rng), vec4i(-32));
 }
 
 // https://mathworld.wolfram.com/SpherePointPicking.html
@@ -256,8 +256,7 @@ fn rand2Disk(r: vec2f) -> vec2f
   return vec2f(radius * cos(theta), radius * sin(theta));
 }
 
-// Parallelogram method
-// https://mathworld.wolfram.com/TrianglePointPicking.html
+// Parallelogram method, https://mathworld.wolfram.com/TrianglePointPicking.html
 fn randBarycentric(r: vec2f) -> vec3f
 {
   if(r.x + r.y > 1.0) {
@@ -403,7 +402,7 @@ fn intersectUnitSphereAnyHit(ray: Ray, tfar: f32) -> bool
   return true;
 }
 
-// Moeller/Trumbore ray-triangle intersection
+// Moeller/Trumbore: Ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
 fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<function, f32>, v: ptr<function, f32>) -> f32
 {
@@ -938,6 +937,7 @@ fn renderNaive(initialRay: Ray) -> vec3f
     var ia: IA;
     finalizeHit(ray, hit, &ia);
 
+    // Hit a light
     if(isEmissive(ia.mtl)) {
       if(dot(ray.dir, ia.nrm) < 0) {
         col += throughput * ia.mtl.col;
@@ -945,19 +945,27 @@ fn renderNaive(initialRay: Ray) -> vec3f
       break;
     }
 
+    let r0 = rand4();
+
+    // Sample new ray direction from material
     var bsdfPdf: f32;
-    let bsdf = sampleMaterial(&ia, rand4(), &bsdfPdf);
+    let bsdf = sampleMaterial(&ia, r0, &bsdfPdf);
     if(bsdfPdf < EPSILON) {
       break;
     }
     throughput *= bsdf / bsdfPdf;
 
+    // Russian roulette
+    // Terminate with prob inverse to throughput, except for primary ray or specular interaction
     let p = maxComp3(throughput);
-    if(rand() > p) {
+    if(rand4().x > p) {
       break;
     }
+    // Account for bias introduced by path termination (pdf = p)
+    // Boost surviving paths by their probability to be terminated
     throughput *= 1.0 / p;
 
+    // Next ray
     ray = Ray(ia.pos + ia.inDir * EPSILON, ia.inDir);
   }
 
@@ -1006,7 +1014,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
       // Pick ltri with uniform distribution
       //let ltriCnt = arrayLength(&ltris);
       //let pickPdf = 1.0 / f32(ltriCnt);
-      //let ltriId = min(u32(rand() * f32(ltriCnt)), ltriCnt - 1);
+      //let ltriId = min(u32(r0.z * f32(ltriCnt)), ltriCnt - 1);
 
       // Pick ltri according to its contribution and calc picking probability
       var pickPdf: f32;
@@ -1102,7 +1110,7 @@ fn render(initialRay: Ray) -> vec3f
           col += throughput * ia.mtl.col / bsdfPdf;
         } else if(ia.ltriId == ltriId) {
           // Last hit was diffuse, apply MIS
-          // Veach/Guibas "Optimally Combining Sampling Techniques for Monte Carlo Rendering"
+          // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
           let ltri = &ltris[ia.ltriId];
 
           // Calculate picking prob for the light we hit
@@ -1221,14 +1229,13 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  let index = globals.width * globalId.y + globalId.x;
-  rngState = index ^ u32(globals.rngSeed1 * 0xffffffff);
-
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    col += render(createPrimaryRay(vec2f(globalId.xy), rand4()));
+    rng = vec4u(globalId.xy, u32(globals.frame), i);
+    col += renderNaive(createPrimaryRay(vec2f(globalId.xy), rand4()));
   }
 
+  let index = globals.width * globalId.y + globalId.x;
   buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);
 }
 
