@@ -6,7 +6,7 @@ struct Global
   maxBounces:   u32,
   rngSeed1:     f32, // TODO Remove
   rngSeed2:     f32, // TODO Remove
-  gatheredSpp:  f32, // TODO Make u32
+  gatheredSpp:  f32, // TODO Remove/make u32
   weight:       f32,
   bgColor:      vec3f,
   frame:        f32, // TODO Make u32
@@ -143,6 +143,7 @@ const ST_SPHERE           = 2u;
 
 // Math constants
 const EPS                 = 0.0001;
+const GEOM_EPS            = 0.0001;
 const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
 const INV_PI              = 1.0 / PI;
@@ -255,6 +256,11 @@ fn randBarycentric(r: vec2f) -> vec3f
   }
 
   return vec3f(r, 1 - r.x - r.y);
+}
+
+fn safeOfs(pos: vec3f, nrm: vec3f, dir: vec3f) -> vec3f
+{
+  return pos + nrm * select(-GEOM_EPS, GEOM_EPS, dot(nrm, dir) > 0);
 }
 
 fn isNan(v: f32) -> bool
@@ -752,10 +758,9 @@ fn schlickReflectance(cosTheta: f32, iorRatio: f32) -> f32
 
 fn evalMaterial(wi: vec3f, nrm: vec3f, mtl: Mtl, pdf: ptr<function, f32>) -> vec3f
 {
-  let lDotN = max(0.0, dot(wi, nrm));
   // Scale by probability of diffuse reflection (since mtl can also produce specular refl/refr)
-  *pdf = lDotN * INV_PI * (1.0 - mtl.refl - mtl.refr);
-  return mtl.col * INV_PI * lDotN;
+  *pdf = max(0.0, dot(wi, nrm)) * INV_PI * (1.0 - mtl.refl - mtl.refr);
+  return mtl.col * INV_PI * max(0.0, dot(wi, nrm));
 }
 
 // https://computergraphics.stackexchange.com/questions/2482/choosing-reflection-or-refraction-in-path-tracing
@@ -775,8 +780,8 @@ fn sampleMaterial(wo: vec3f, dist: f32, nrm: vec3f, faceDir: f32, mtl: Mtl, r: v
     } else {
       *wi = normalize(*wi + mtl.fuzz * rand3Hemi(*wi, r.zw));
     }
-    let beer = exp(-dist * mtl.att) * step(faceDir, 0.0) + step(0.0, faceDir);
-    return mtl.col * beer;
+    // Col * beer attenuating refraction
+    return mtl.col * exp(-dist * mtl.att) * step(faceDir, 0.0) + step(0.0, faceDir);
   } else {
     if(r.y < mtl.refl) {
       // Specular reflection
@@ -999,7 +1004,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
       // Pick ltri with uniform distribution
       //let ltriCnt = arrayLength(&ltris);
       //let pickPdf = 1.0 / f32(ltriCnt);
-      //let ltriId = min(u32(r0.z * f32(ltriCnt)), ltriCnt - 1);
+      //let ltriId = u32(floor(r0.z * f32(ltriCnt)));
 
       // Pick ltri according to its contribution and calc picking probability
       var pickPdf: f32;
@@ -1055,7 +1060,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
     throughput *= 1.0 / p;
 
     // Next ray
-    ray = Ray(ia.pos + wi * EPS, wi);
+    ray = Ray(safeOfs(ia.pos, ia.faceDir * ia.nrm, wi), wi);
   }
 
   return col;
@@ -1184,7 +1189,7 @@ fn render(initialRay: Ray) -> vec3f
     lastNrm = ia.faceDir * ia.nrm;
 
     // Next ray
-    ray = Ray(ia.pos + wi * EPS, wi);
+    ray = Ray(safeOfs(ia.pos, ia.faceDir * ia.nrm, wi), wi);
   }
 
   return col;

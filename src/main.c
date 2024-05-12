@@ -141,6 +141,7 @@ void init_scene_riow(scene *s)
  
   // Sphere instances
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
+  ///m = mtl_create_diffuse();
   m = mtl_create_mirror();
   m.col = (vec3){ 0.7f, 0.6f, 0.5f };
   mtl_id = scene_add_mtl(s, &m);
@@ -148,6 +149,7 @@ void init_scene_riow(scene *s)
   scene_add_inst_mesh(s, sid, mtl_id, translation);
 
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
+  ///m = mtl_create_diffuse();
   m = mtl_create_glass();
   m.att = vec3_scale((vec3){ 1.0f, 2.0f, 3.0f }, 0.5f);
   mtl_id = scene_add_mtl(s, &m);
