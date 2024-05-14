@@ -197,6 +197,19 @@ fn toMat4x4(m: mat3x4f) -> mat4x4f
   return mat4x4f(m[0], m[1], m[2], vec4f(0, 0, 0, 1));
 }
 
+// Duff et al: Building an Orthonormal Basis, Revisited
+fn constructONB(n: vec3f) -> mat3x3f
+{
+  var r: mat3x3f;
+  let s = select(-1.0, 1.0, n.z >= 0.0); // = copysign
+  let a = -1.0 / (s + n.z);
+  let b = n.x * n.y * a;
+  r[0] = vec3f(1.0 + s * n.x * n.x * a, s * b, -s * n.x);
+  r[1] = n;
+  r[2] = vec3f(b, s + n.y * n.y * a, -n.y);
+  return r;
+}
+
 // PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
 fn rand4() -> vec4f
 {
@@ -216,6 +229,14 @@ fn rand4() -> vec4f
   return ldexp(vec4f((rng >> vec4u(22)) ^ rng), vec4i(-32));
 }
 
+// https://mathworld.wolfram.com/DiskPointPicking.html
+fn rand2Disk(r: vec2f) -> vec2f
+{
+  let radius = sqrt(r.x);
+  let theta = 2 * PI * r.y;
+  return vec2f(cos(theta), sin(theta)) * radius;
+}
+
 // https://mathworld.wolfram.com/SpherePointPicking.html
 fn rand3UnitSphere(r: vec2f) -> vec3f
 {
@@ -232,21 +253,21 @@ fn rand3Hemi(nrm: vec3f, r: vec2f) -> vec3f
   return select(-v, v, dot(v, nrm) > 0);
 }
 
-// http://psgraphics.blogspot.com/2019/02/picking-points-on-hemisphere-with.html
-fn rand3HemiCosWeighted(nrm: vec3f, r: vec2f) -> vec3f
+fn rand3HemiCosWeighted(r: vec2f) -> vec3f
 {
-  // Expects nrm to be unit vector
-  let dir = nrm + rand3UnitSphere(r);
-  return select(normalize(dir), nrm, all(abs(dir) < vec3f(EPS)));
+  // Sample disc at base of hemisphere uniformly
+  let disk = rand2Disk(r);
+
+  // Project samples upwards on the hemisphere
+  return vec3f(disk.x, sqrt(max(0.0, 1.0 - dot(disk, disk))), disk.y);
 }
 
-// https://mathworld.wolfram.com/DiskPointPicking.html
-fn rand2Disk(r: vec2f) -> vec2f
+// http://psgraphics.blogspot.com/2019/02/picking-points-on-hemisphere-with.html
+/*fn rand3HemiCosWeighted(nrm: vec3f, r: vec2f) -> vec3f
 {
-  let radius = sqrt(r.x);
-  let theta = 2 * PI * r.y;
-  return vec2f(radius * cos(theta), radius * sin(theta));
-}
+  let dir = nrm + rand3UnitSphere(r);
+  return select(normalize(dir), nrm, all(abs(dir) < vec3f(EPS)));
+}*/
 
 // Parallelogram method, https://mathworld.wolfram.com/TrianglePointPicking.html
 fn randBarycentric(r: vec2f) -> vec3f
@@ -765,7 +786,7 @@ fn sampleMaterial(mtl: Mtl, nrm: vec3f, wo: vec3f, dist: f32, r0: vec3f, wi: ptr
     *isSpecular = true;
     *pdf = mtl.refl;
   } else {
-    *wi = rand3HemiCosWeighted(nrm, r0.yz);
+    *wi = constructONB(nrm) * rand3HemiCosWeighted(r0.yz);
     *isSpecular = false;
     *pdf = max(0.0, dot(*wi, nrm)) * INV_PI * (1 - mtl.refl);
   }
