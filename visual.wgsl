@@ -963,7 +963,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
   }
 
   // Backside hit
-  (*ia).faceDir = select(1.0, -1.0, dot((*ia).wo, (*ia).nrm) < EPS);
+  (*ia).faceDir = select(1.0, -1.0, dot(dir, (*ia).nrm) > 0);
 }
 
 fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
@@ -978,8 +978,8 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   var mtl: Mtl;
   finalizeHit(oriPrim, dirPrim, hit, &ia, &mtl);
 
-  if(isEmissive(mtl) && dot(dirPrim, ia.nrm) < 0) {
-    return mtl.col;
+  if(isEmissive(mtl)) {
+    return mtl.col * step(0.0, ia.faceDir);
   }
 
   var col = vec3f(0);
@@ -995,15 +995,15 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       var ltriNrm: vec3f;
       var emission: vec3f;
       var ltriPdf: f32;
-      if(sampleLights(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+      if(sampleLights(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
         // Apply MIS
         // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
         var ltriWi = normalize(ltriPos - ia.pos);
         let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-        let pdf = sampleMaterialPdf(mtl, ia.nrm, ia.wo, ltriWi, false);
+        let pdf = sampleMaterialPdf(mtl, ia.faceDir * ia.nrm, ia.wo, ltriWi, false);
         let weight = ltriPdf / (ltriPdf + pdf * gsa);
-        let brdf = evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, ltriWi, false);
-        col += throughput * brdf * gsa * max(0.0, dot(ia.nrm, ltriWi)) * weight * emission / ltriPdf;
+        let brdf = evalMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, ltriWi, false);
+        col += throughput * brdf * gsa * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) * weight * emission / ltriPdf;
       }
     }
 
@@ -1011,14 +1011,13 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     let r1 = rand4();
     var wi: vec3f;
     var pdf: f32;
-    sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
+    sampleMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
     if(pdf < EPS) {
       break;
     }
 
     // Trace indirect light direction
-    //let ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
-    let ori = ia.pos;
+    let ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
     let dir = wi;
     hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
@@ -1027,7 +1026,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
     
     // Scale indirect light contribution by material
-    throughput *= evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, wi, wasSpecular) * dot(wi, ia.nrm) / pdf;
+    throughput *= evalMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, wi, wasSpecular) * dot(ia.faceDir * ia.nrm, wi) / pdf;
 
     let lastPos = ia.pos;
     let lastNrm = ia.faceDir * ia.nrm;
@@ -1037,13 +1036,13 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     // Hit light via material direction
     if(isEmissive(mtl)) {
       // Lights emit from front side only
-      if(dot(dir, ia.nrm) < 0) {
+      if(ia.faceDir > 0) {
         if(wasSpecular) {
           // Last bounce was specular, directly apply light contribution
           col += throughput * mtl.col;
         } else {
           // Came from diffuse, apply MIS
-          let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm);
+          let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
           let ltriPdf = sampleLightsPdf(lastPos, lastNrm, ia.ltriId);
           let weight = pdf * gsa / (pdf * gsa + ltriPdf);
           col += throughput * weight * mtl.col;
@@ -1089,7 +1088,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     // Hit a light
     if(isEmissive(mtl)) {
       // Lights emit from front side only
-      if(dot(dir, ia.nrm) < 0) {
+      if(ia.faceDir > 0) {
         // Last bounce was specular
         if(bounces == 0 || wasSpecular) {
           col += throughput * mtl.col;
@@ -1105,11 +1104,11 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       var ltriNrm: vec3f;
       var emission: vec3f;
       var ltriPdf: f32;
-      if(sampleLights(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+      if(sampleLights(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
         var ltriWi = normalize(ltriPos - ia.pos);
         let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-        let brdf = evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, ltriWi, false);
-        col += throughput * brdf * gsa * max(0.0, dot(ia.nrm, ltriWi)) * emission / ltriPdf;
+        let brdf = evalMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, ltriWi, false);
+        col += throughput * brdf * gsa * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) * emission / ltriPdf;
       }
     }
 
@@ -1117,13 +1116,13 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     let r1 = rand4();
     var wi: vec3f;
     var pdf: f32;
-    sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
+    sampleMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
     if(pdf < EPS) {
       break;
     }
 
     // Scale indirect light contribution by material
-    throughput *= evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, wi, wasSpecular) * dot(wi, ia.nrm) / pdf;
+    throughput *= evalMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, wi, wasSpecular) * dot(ia.faceDir * ia.nrm, wi) / pdf;
 
     // Russian roulette
     // Terminate with prob inverse to throughput
@@ -1163,8 +1162,8 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     finalizeHit(ori, dir, hit, &ia, &mtl);
 
     // Hit a light
-    if(isEmissive(mtl) && dot(dir, ia.nrm) < 0) {
-      col += throughput * mtl.col;
+    if(isEmissive(mtl)) {
+      col += throughput * mtl.col * step(0.0, ia.faceDir);
       break;
     }
 
@@ -1173,13 +1172,13 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var wi: vec3f;
     var wasSpecular: bool;
     var pdf: f32;
-    sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
+    sampleMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
     if(pdf < EPS) {
       break;
     }
 
     // Scale indirect light contribution by material
-    throughput *= evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, wi, wasSpecular) * dot(wi, ia.nrm) / pdf;
+    throughput *= evalMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, wi, wasSpecular) * dot(ia.faceDir * ia.nrm, wi) / pdf;
 
     // Russian roulette
     // Terminate with prob inverse to throughput
