@@ -27,12 +27,6 @@ struct Global
   randAlpha:    array<vec4f, 20u>
 }
 
-struct Ray
-{
-  ori:  vec3f,
-  dir:  vec3f
-}
-
 struct Hit
 {
   t: f32,
@@ -59,7 +53,7 @@ struct BvhNode
 
 struct Mtl
 {
-  col: vec3f,             // Albedo/diffuse. If component > 1.0, obj emits light.
+  col: vec3f,             // Diffuse base col. If component > 1.0, obj emits light.
   refl: f32,              // Probability of reflection
   refr: f32,              // Probability of refraction
   fuzz: f32,              // Fuzziness = 1 - glossiness
@@ -161,6 +155,7 @@ const INV_PI              = 1.0 / PI;
 const MAX_LTRIS     = 64;
 const MAX_NODE_CNT  = 32;
 
+// Traversal stacks for bvhs
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
@@ -229,48 +224,8 @@ fn rand4() -> vec4f
   return ldexp(vec4f((rng >> vec4u(22)) ^ rng), vec4i(-32));
 }
 
-// https://mathworld.wolfram.com/DiskPointPicking.html
-fn rand2Disk(r: vec2f) -> vec2f
-{
-  let radius = sqrt(r.x);
-  let theta = 2 * PI * r.y;
-  return vec2f(cos(theta), sin(theta)) * radius;
-}
-
-// https://mathworld.wolfram.com/SpherePointPicking.html
-fn rand3UnitSphere(r: vec2f) -> vec3f
-{
-  let u = 2 * r.x - 1;
-  let theta = 2 * PI * r.y;
-  let radius = sqrt(1 - u * u);
-  return vec3f(radius * cos(theta), radius * sin(theta), u);
-}
-
-fn rand3Hemi(nrm: vec3f, r: vec2f) -> vec3f
-{
-  // Uniform + rejection sampling
-  let v = rand3UnitSphere(r);
-  return select(-v, v, dot(v, nrm) > 0);
-}
-
-fn rand3HemiCosWeighted(r: vec2f) -> vec3f
-{
-  // Sample disc at base of hemisphere uniformly
-  let disk = rand2Disk(r);
-
-  // Project samples upwards on the hemisphere
-  return vec3f(disk.x, sqrt(max(0.0, 1.0 - dot(disk, disk))), disk.y);
-}
-
-// http://psgraphics.blogspot.com/2019/02/picking-points-on-hemisphere-with.html
-/*fn rand3HemiCosWeighted(nrm: vec3f, r: vec2f) -> vec3f
-{
-  let dir = nrm + rand3UnitSphere(r);
-  return select(normalize(dir), nrm, all(abs(dir) < vec3f(EPS)));
-}*/
-
 // Parallelogram method, https://mathworld.wolfram.com/TrianglePointPicking.html
-fn randBarycentric(r: vec2f) -> vec3f
+fn sampleBarycentric(r: vec2f) -> vec3f
 {
   if(r.x + r.y > 1.0) {
     return vec3f(1.0 - r.x, 1.0 - r.y, -1.0 + r.x + r.y);
@@ -279,25 +234,42 @@ fn randBarycentric(r: vec2f) -> vec3f
   return vec3f(r, 1 - r.x - r.y);
 }
 
+// https://mathworld.wolfram.com/DiskPointPicking.html
+fn sampleDisk(r: vec2f) -> vec2f
+{
+  let radius = sqrt(r.x);
+  let theta = 2 * PI * r.y;
+  return vec2f(cos(theta), sin(theta)) * radius;
+}
+
+// https://mathworld.wolfram.com/SpherePointPicking.html
+fn sampleUnitSphere(r: vec2f) -> vec3f
+{
+  let u = 2 * r.x - 1;
+  let theta = 2 * PI * r.y;
+  let radius = sqrt(1 - u * u);
+  return vec3f(radius * cos(theta), radius * sin(theta), u);
+}
+
+fn sampleHemisphere(nrm: vec3f, r: vec2f) -> vec3f
+{
+  // Sample uniform and reject directions in wrong hemisphere
+  let v = sampleUnitSphere(r);
+  return select(-v, v, dot(v, nrm) > 0);
+}
+
+fn sampleHemisphereCos(r: vec2f) -> vec3f
+{
+  // Sample disc at base of hemisphere uniformly
+  let disk = sampleDisk(r);
+
+  // Project samples up to the hemisphere
+  return vec3f(disk.x, sqrt(max(0.0, 1.0 - dot(disk, disk))), disk.y);
+}
+
 fn safeOfs(pos: vec3f, nrm: vec3f, dir: vec3f) -> vec3f
 {
   return pos + nrm * select(-GEOM_EPS, GEOM_EPS, dot(nrm, dir) > 0);
-}
-
-fn isNan(v: f32) -> bool
-{
-  //return v != v;
-  return select(true, false, v < 0.0 || 0.0 < v || v == 0.0);
-}
-
-fn fixNan3(v: vec3f) -> vec3f
-{
-  return select(v, vec3f(0), isNan(v.x + v.y + v.z));
-}
-
-fn transformRay(ray: Ray, m: mat4x4f) -> Ray
-{
-  return Ray((vec4f(ray.ori, 1.0) * m).xyz, ray.dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz));
 }
 
 // Laine et al. 2013; Afra et al. 2016: GPU efficient slabs test
@@ -321,11 +293,11 @@ fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxE
   return maxComp4(vec4f(min(t0, t1), EPS)) <= minComp4(vec4f(max(t0, t1), tfar));
 }
 
-fn intersectPlane(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
+fn intersectPlane(ori: vec3f, dir: vec3f, instId: u32, h: ptr<function, Hit>) -> bool
 {
-  let d = ray.dir.y;
+  let d = dir.y;
   if(abs(d) > EPS) {
-    let t = -ray.ori.y / d;
+    let t = -ori.y / d;
     if(t < (*h).t && t > EPS) {
       (*h).t = t;
       (*h).e = (ST_PLANE << 16) | (instId & INST_ID_MASK);
@@ -335,11 +307,11 @@ fn intersectPlane(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
   return false;
 }
 
-fn intersectPlaneAnyHit(ray: Ray, tfar: f32) -> bool
+fn intersectPlaneAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
-  let d = ray.dir.y;
+  let d = dir.y;
   if(abs(d) > EPS) {
-    let t = -ray.ori.y / d;
+    let t = -ori.y / d;
     return t < tfar && t > EPS;
   }
   return false;
@@ -368,11 +340,11 @@ fn intersectUnitBox(ori: vec3f, invDir: vec3f, instId: u32, h: ptr<function, Hit
   return false;
 }
 
-fn intersectUnitSphere(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
+fn intersectUnitSphere(ori: vec3f, dir: vec3f, instId: u32, h: ptr<function, Hit>) -> bool
 {
-  let a = dot(ray.dir, ray.dir);
-  let b = dot(ray.ori, ray.dir);
-  let c = dot(ray.ori, ray.ori) - 1.0;
+  let a = dot(dir, dir);
+  let b = dot(ori, dir);
+  let c = dot(ori, ori) - 1.0;
 
   var d = b * b - a * c;
   if(d < 0.0) {
@@ -393,11 +365,11 @@ fn intersectUnitSphere(ray: Ray, instId: u32, h: ptr<function, Hit>) -> bool
   return true;
 }
 
-fn intersectUnitSphereAnyHit(ray: Ray, tfar: f32) -> bool
+fn intersectUnitSphereAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
-  let a = dot(ray.dir, ray.dir);
-  let b = dot(ray.ori, ray.dir);
-  let c = dot(ray.ori, ray.ori) - 1.0;
+  let a = dot(dir, dir);
+  let b = dot(ori, dir);
+  let c = dot(ori, ori) - 1.0;
 
   var d = b * b - a * c;
   if(d < 0.0) {
@@ -455,11 +427,11 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<
   return dot(edge2, qvec) * invDet;
 }
 
-fn intersectTriClosest(ray: Ray, tri: Tri, instTriId: u32, h: ptr<function, Hit>) -> bool
+fn intersectTriClosest(ori: vec3f, dir: vec3f, tri: Tri, instTriId: u32, h: ptr<function, Hit>) -> bool
 {
   var u: f32;
   var v: f32;
-  let dist = intersectTri(ray.ori, ray.dir, tri.v0, tri.v1, tri.v2, &u, &v);
+  let dist = intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, &u, &v);
   if(dist > EPS && dist < (*h).t) {
     (*h).t = dist;
     (*h).u = u;
@@ -471,15 +443,15 @@ fn intersectTriClosest(ray: Ray, tri: Tri, instTriId: u32, h: ptr<function, Hit>
   return false;
 }
 
-fn intersectTriAnyHit(ray: Ray, tfar: f32, tri: Tri) -> bool
+fn intersectTriAnyHit(ori: vec3f, dir: vec3f, tfar: f32, tri: Tri) -> bool
 {
   var u: f32;
   var v: f32;
-  let dist = intersectTri(ray.ori, ray.dir, tri.v0, tri.v1, tri.v2, &u, &v);
+  let dist = intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, &u, &v);
   return dist > EPS && dist < tfar;
 }
 
-fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
+fn intersectBvh(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
@@ -495,7 +467,7 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
       // Leaf node, intersect all contained triangles
       for(var i=0u; i<nodeObjCount; i++) {
         let triId = indices[dataOfs + nodeStartIndex + i];
-        intersectTriClosest(ray, tris[dataOfs + triId], (triId << 16) | (instId & INST_ID_MASK), hit);
+        intersectTriClosest(ori, dir, tris[dataOfs + triId], (triId << 16) | (instId & INST_ID_MASK), hit);
       }
     } else {
       // Interior node
@@ -506,8 +478,8 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
       let rightChildNode = &bvhNodes[bvhOfs + rightChildIndex];
 
       // Intersect both child node aabbs
-      var leftDist = intersectAabb(ray.ori, invDir, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      var rightDist = intersectAabb(ray.ori, invDir, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+      var leftDist = intersectAabb(ori, invDir, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
+      var rightDist = intersectAabb(ori, invDir, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
  
       // Swap for nearer child
       if(leftDist > rightDist) {
@@ -541,7 +513,7 @@ fn intersectBvh(ray: Ray, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<fun
   }
 }
 
-fn intersectBvhAnyHit(ray: Ray, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
+fn intersectBvhAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
@@ -550,14 +522,14 @@ fn intersectBvhAnyHit(ray: Ray, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
   // Early exit, unordered DF traversal
   loop {
     let node = &bvhNodes[bvhOfs + nodeIndex];
-    if(intersectAabbAnyHit(ray.ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
+    if(intersectAabbAnyHit(ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
       let nodeStartIndex = (*node).startIndex;
       let nodeObjCount = (*node).objCount; 
       if(nodeObjCount != 0) {
         // Leaf node, intersect all contained triangles
         for(var i=0u; i<nodeObjCount; i++) {
           let triId = indices[dataOfs + nodeStartIndex + i];
-          if(intersectTriAnyHit(ray, tfar, tris[dataOfs + triId])) {
+          if(intersectTriAnyHit(ori, dir, tfar, tris[dataOfs + triId])) {
             return true;
           }
         }
@@ -582,60 +554,62 @@ fn intersectBvhAnyHit(ray: Ray, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
   return false; // Required by firefox
 }
 
-fn intersectInst(ray: Ray, inst: Inst, hit: ptr<function, Hit>)
+fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, Hit>)
 {
-  // Transform ray into object space of the instance
-  let rayObjSpace = transformRay(ray, toMat4x4(inst.invTransform));
-  let invDir = 1 / rayObjSpace.dir;
+  // Transform to object space of the instance
+  let m = toMat4x4(inst.invTransform);
+  let oriObj = (vec4f(ori, 1.0) * m).xyz;
+  let dirObj = dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz);
 
   switch(inst.data & INST_DATA_MASK) {
     // Shape type
     case (SHAPE_TYPE_BIT | ST_PLANE): {
-      intersectPlane(rayObjSpace, inst.id, hit);
+      intersectPlane(oriObj, dirObj, inst.id, hit);
     }
     case (SHAPE_TYPE_BIT | ST_BOX): {
-      intersectUnitBox(rayObjSpace.ori, invDir, inst.id, hit);
+      intersectUnitBox(oriObj, 1 / dirObj, inst.id, hit);
     }
     case (SHAPE_TYPE_BIT | ST_SPHERE): {
-      intersectUnitSphere(rayObjSpace, inst.id, hit);
+      intersectUnitSphere(oriObj, dirObj, inst.id, hit);
     }
     default: {
       // Mesh type
-      intersectBvh(rayObjSpace, invDir, inst.id, inst.data & MESH_SHAPE_MASK, hit);
+      intersectBvh(oriObj, dirObj, 1 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
     }
   }
 }
 
-fn intersectInstAnyHit(ray: Ray, tfar: f32, inst: Inst) -> bool
+fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, inst: Inst) -> bool
 {
-  // Transform ray into object space of the instance
-  let rayObjSpace = transformRay(ray, toMat4x4(inst.invTransform));
-  let invDir = 1 / rayObjSpace.dir;
+  // Transform to object space of the instance
+  let m = toMat4x4(inst.invTransform);
+  let oriObj = (vec4f(ori, 1.0) * m).xyz;
+  let dirObj = dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz);
 
   switch(inst.data & INST_DATA_MASK) {
     // Shape type
     case (SHAPE_TYPE_BIT | ST_PLANE): {
-      return intersectPlaneAnyHit(rayObjSpace, tfar);
+      return intersectPlaneAnyHit(oriObj, dirObj, tfar);
     }
     case (SHAPE_TYPE_BIT | ST_BOX): {
-      return intersectAabbAnyHit(rayObjSpace.ori, invDir, tfar, vec3f(-1), vec3f(1)); 
+      return intersectAabbAnyHit(oriObj, 1 / dirObj, tfar, vec3f(-1), vec3f(1)); 
     }
     case (SHAPE_TYPE_BIT | ST_SPHERE): {
-      return intersectUnitSphereAnyHit(rayObjSpace, tfar);
+      return intersectUnitSphereAnyHit(oriObj, dirObj, tfar);
     }
     default: {
       // Mesh type
-      return intersectBvhAnyHit(rayObjSpace, invDir, tfar, inst.data & MESH_SHAPE_MASK);
+      return intersectBvhAnyHit(oriObj, dirObj, 1 / dirObj, tfar, inst.data & MESH_SHAPE_MASK);
     }
   }
 }
 
-fn intersectTlas(ray: Ray, tfar: f32) -> Hit
+fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
-  let invDir = 1 / ray.dir;
+  let invDir = 1 / dir;
 
   var hit: Hit;
   hit.t = tfar;
@@ -647,7 +621,7 @@ fn intersectTlas(ray: Ray, tfar: f32) -> Hit
 
     if(nodeChildren == 0) {
       // Leaf node, intersect the single assigned instance 
-      intersectInst(ray, instances[(*node).inst], &hit);
+      intersectInst(ori, dir, instances[(*node).inst], &hit);
     } else {
       // Interior node
       var leftChildIndex = nodeChildren & TLAS_NODE_MASK;
@@ -657,8 +631,8 @@ fn intersectTlas(ray: Ray, tfar: f32) -> Hit
       let rightChildNode = &tlasNodes[rightChildIndex];
 
       // Intersect both child node aabbs
-      var leftDist = intersectAabb(ray.ori, invDir, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      var rightDist = intersectAabb(ray.ori, invDir, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+      var leftDist = intersectAabb(ori, invDir, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
+      var rightDist = intersectAabb(ori, invDir, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
 
       // Swap for nearer child
       if(leftDist > rightDist) {
@@ -695,20 +669,20 @@ fn intersectTlas(ray: Ray, tfar: f32) -> Hit
   return hit; // Required by firefox
 }
 
-fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> bool
+fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-  let invDir = 1 / ray.dir;
+  let invDir = 1 / dir;
 
   // Early exit, unordered DF traversal
   loop {
     let node = &tlasNodes[nodeIndex];
-    if(intersectAabbAnyHit(ray.ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
+    if(intersectAabbAnyHit(ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
       let nodeChildren = (*node).children;
       if(nodeChildren == 0) {
         // Leaf node, intersect the single assigned instance
-        if(intersectInstAnyHit(ray, tfar, instances[(*node).inst])) {
+        if(intersectInstAnyHit(ori, dir, tfar, instances[(*node).inst])) {
           return true;
         }
       } else {
@@ -730,6 +704,13 @@ fn intersectTlasAnyHit(ray: Ray, tfar: f32) -> bool
   }
 
   return false; // Required by firefox
+}
+
+fn intersectTlasIntersect(p0: vec3f, p1: vec3f) -> bool
+{
+  var dir = p1 - p0;
+  let dist = length(dir);
+  return intersectTlasAnyHit(p0, dir / dist, dist);
 }
 
 fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
@@ -786,7 +767,7 @@ fn sampleMaterial(mtl: Mtl, nrm: vec3f, wo: vec3f, dist: f32, r0: vec3f, wi: ptr
     *isSpecular = true;
     *pdf = mtl.refl;
   } else {
-    *wi = constructONB(nrm) * rand3HemiCosWeighted(r0.yz);
+    *wi = constructONB(nrm) * sampleHemisphereCos(r0.yz);
     *isSpecular = false;
     *pdf = max(0.0, dot(*wi, nrm)) * INV_PI * (1 - mtl.refl);
   }
@@ -814,7 +795,7 @@ fn evalMaterial(mtl: Mtl, nrm: vec3f, wo: vec3f, dist: f32, wi: vec3f, isSpecula
 
 fn sampleLights(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
-  let bc = randBarycentric(r0.xy);
+  let bc = sampleBarycentric(r0.xy);
   
   let ltriCnt = arrayLength(&ltris);
   let ltriId = u32(floor(r0.z * f32(ltriCnt)));
@@ -833,7 +814,7 @@ fn sampleLights(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>
   ldir /= dist;
 
   // Something blocking our ltri
-  visible &= !intersectTlasAnyHit(Ray(pos, -ldir), dist - EPS);
+  visible &= !intersectTlasIntersect(safeOfs(pos, nrm, -ldir), safeOfs(lpos, (*ltri).nrm, ldir));
 
   *ltriPos = lpos;
   *ltriNrm = (*ltri).nrm;
@@ -860,6 +841,24 @@ fn geomSolidAngle(pos: vec3f, surfPos: vec3f, surfNrm: vec3f) -> f32
   let dist = length(dir);
   dir /= dist;
   return abs(dot(surfNrm, dir)) / (dist * dist);
+}
+
+fn samplePixel(pixelPos: vec2f, r: vec2f) -> vec3f
+{
+  var pixelSample = globals.pixelTopLeft + globals.pixelDeltaX * pixelPos.x + globals.pixelDeltaY * pixelPos.y;
+  pixelSample += (r.x - 0.5) * globals.pixelDeltaX + (r.y - 0.5) * globals.pixelDeltaY;
+  return pixelSample;
+}
+
+fn sampleEye(r: vec2f) -> vec3f
+{
+  var eyeSample = globals.eye;
+  if(globals.focAngle > 0) {
+    let focRadius = globals.focDist * tan(0.5 * radians(globals.focAngle));
+    let diskSample = sampleDisk(r);
+    eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
+  }
+  return eyeSample;
 }
 
 fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPoint: vec3f, ltriNrm: vec3f, lightPower: f32) -> f32
@@ -942,13 +941,13 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
   return ltriId;
 }
 
-fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>, mtl: ptr<function, Mtl>)
+fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr<function, Mtl>)
 {
   let inst = instances[hit.e & INST_ID_MASK];
 
   (*ia).dist = hit.t;
-  (*ia).pos = ray.ori + hit.t * ray.dir;
-  (*ia).wo = -ray.dir;
+  (*ia).pos = ori + hit.t * dir;
+  (*ia).wo = -dir;
  
   if((inst.data & SHAPE_TYPE_BIT) > 0) {
     // Shape
@@ -968,21 +967,19 @@ fn finalizeHit(ray: Ray, hit: Hit, ia: ptr<function, IA>, mtl: ptr<function, Mtl
   (*ia).faceDir = select(1.0, -1.0, dot((*ia).wo, (*ia).nrm) < EPS);
 }
 
-fn renderMIS(initialRay: Ray) -> vec3f
+fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 {
-  var ray = initialRay;
-
   // Primary ray
-  var hit = intersectTlas(ray, INF);
+  var hit = intersectTlas(oriPrim, dirPrim, INF);
   if(hit.t == INF) {
     return globals.bgColor;
   }
 
   var ia: IA;
   var mtl: Mtl;
-  finalizeHit(ray, hit, &ia, &mtl);
+  finalizeHit(oriPrim, dirPrim, hit, &ia, &mtl);
 
-  if(isEmissive(mtl) && dot(ray.dir, ia.nrm) < 0) {
+  if(isEmissive(mtl) && dot(dirPrim, ia.nrm) < 0) {
     return mtl.col;
   }
 
@@ -1018,8 +1015,9 @@ fn renderMIS(initialRay: Ray) -> vec3f
     }
 
     // Trace indirect light direction
-    ray = Ray(safeOfs(ia.pos, ia.faceDir * ia.nrm, wi), wi);
-    hit = intersectTlas(ray, INF);
+    let ori = safeOfs(ia.pos, ia.faceDir * ia.nrm, wi);
+    let dir = wi;
+    hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
       col += throughput * globals.bgColor;
       break;
@@ -1031,12 +1029,12 @@ fn renderMIS(initialRay: Ray) -> vec3f
     let lastPos = ia.pos;
     let lastNrm = ia.faceDir * ia.nrm;
 
-    finalizeHit(ray, hit, &ia, &mtl);
+    finalizeHit(ori, dir, hit, &ia, &mtl);
 
     // Hit light via material direction
     if(isEmissive(mtl)) {
       // Lights emit from front side only
-      if(dot(ray.dir, ia.nrm) < 0) {
+      if(dot(dir, ia.nrm) < 0) {
         if(wasSpecular) {
           // Last bounce was specular, directly apply light contribution
           col += throughput * mtl.col;
@@ -1052,7 +1050,7 @@ fn renderMIS(initialRay: Ray) -> vec3f
     }
 
     // Russian roulette
-    // Terminate with prob inverse to throughput, except for primary ray or specular interaction
+    // Terminate with prob inverse to throughput
     let p = min(0.95, maxComp3(throughput));
     if(r1.w > p) {
       break;
@@ -1065,16 +1063,17 @@ fn renderMIS(initialRay: Ray) -> vec3f
   return col;
 }
 
-fn renderNEE(initialRay: Ray) -> vec3f
+fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 {
-  var ray = initialRay;
   var col = vec3f(0);
   var throughput = vec3f(1);
+  var ori = oriPrim;
+  var dir = dirPrim;
   var wasSpecular = false;
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
-    var hit = intersectTlas(ray, INF);
+    var hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
       col += throughput * globals.bgColor;
       break;
@@ -1082,12 +1081,12 @@ fn renderNEE(initialRay: Ray) -> vec3f
 
     var ia: IA;
     var mtl: Mtl;
-    finalizeHit(ray, hit, &ia, &mtl);
+    finalizeHit(ori, dir, hit, &ia, &mtl);
 
     // Hit a light
     if(isEmissive(mtl)) {
       // Lights emit from front side only
-      if(dot(ray.dir, ia.nrm) < 0) {
+      if(dot(dir, ia.nrm) < 0) {
         // Last bounce was specular
         if(bounces == 0 || wasSpecular) {
           col += throughput * mtl.col;
@@ -1121,7 +1120,7 @@ fn renderNEE(initialRay: Ray) -> vec3f
     throughput *= evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, wi, wasSpecular) * dot(wi, ia.nrm) / pdf;
 
     // Russian roulette
-    // Terminate with prob inverse to throughput, except for primary ray or specular interaction
+    // Terminate with prob inverse to throughput
     let p = min(0.95, maxComp3(throughput));
     if(r1.w > p) {
       break;
@@ -1131,21 +1130,23 @@ fn renderNEE(initialRay: Ray) -> vec3f
     throughput *= 1.0 / p;
     
     // Next ray
-    ray = Ray(safeOfs(ia.pos, ia.faceDir * ia.nrm, wi), wi);
+    ori = safeOfs(ia.pos, ia.faceDir * ia.nrm, wi);
+    dir = wi;
   }
 
   return col;
 }
 
-fn renderNaive(initialRay: Ray) -> vec3f
+fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 {
-  var ray = initialRay;
   var col = vec3f(0);
   var throughput = vec3f(1);
+  var ori = oriPrim;
+  var dir = dirPrim;
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
-    var hit = intersectTlas(ray, INF);
+    var hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
       col += throughput * globals.bgColor;
       break;
@@ -1153,10 +1154,10 @@ fn renderNaive(initialRay: Ray) -> vec3f
 
     var ia: IA;
     var mtl: Mtl;
-    finalizeHit(ray, hit, &ia, &mtl);
+    finalizeHit(ori, dir, hit, &ia, &mtl);
 
     // Hit a light
-    if(isEmissive(mtl) && dot(ray.dir, ia.nrm) < 0) {
+    if(isEmissive(mtl) && dot(dir, ia.nrm) < 0) {
       col += throughput * mtl.col;
       break;
     }
@@ -1174,7 +1175,7 @@ fn renderNaive(initialRay: Ray) -> vec3f
     throughput *= evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, wi, wasSpecular) * dot(wi, ia.nrm) / pdf;
 
     // Russian roulette
-    // Terminate with prob inverse to throughput, except for primary ray or specular interaction
+    // Terminate with prob inverse to throughput
     let p = min(0.95, maxComp3(throughput));
     if(r1.w > p) {
       break;
@@ -1184,25 +1185,11 @@ fn renderNaive(initialRay: Ray) -> vec3f
     throughput *= 1.0 / p;
 
     // Next ray
-    ray = Ray(safeOfs(ia.pos, ia.faceDir * ia.nrm, wi), wi);
+    ori = safeOfs(ia.pos, ia.faceDir * ia.nrm, wi);
+    dir = wi;
   }
 
   return col;
-}
-
-fn createPrimaryRay(pixelPos: vec2f, r: vec4f) -> Ray
-{
-  var pixelSample = globals.pixelTopLeft + globals.pixelDeltaX * pixelPos.x + globals.pixelDeltaY * pixelPos.y;
-  pixelSample += (r.x - 0.5) * globals.pixelDeltaX + (r.y - 0.5) * globals.pixelDeltaY;
-
-  var eyeSample = globals.eye;
-  if(globals.focAngle > 0) {
-    let focRadius = globals.focDist * tan(0.5 * radians(globals.focAngle));
-    let diskSample = rand2Disk(r.zw);
-    eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
-  }
-
-  return Ray(eyeSample, normalize(pixelSample - eyeSample));
 }
 
 @compute @workgroup_size(8,8)
@@ -1215,7 +1202,9 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
     rng = vec4u(globalId.xy, u32(globals.frame), i);
-    col += renderMIS(createPrimaryRay(vec2f(globalId.xy), rand4()));
+    let r0 = rand4();
+    let eye = sampleEye(r0.xy);
+    col += renderMIS(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));
   }
 
   let index = globals.width * globalId.y + globalId.x;
