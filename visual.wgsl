@@ -759,7 +759,7 @@ fn schlickReflectance(cosTheta: f32, iorRatio: f32) -> f32
 }
 
 // https://computergraphics.stackexchange.com/questions/2482/choosing-reflection-or-refraction-in-path-tracing 
-fn sampleMaterial(mtl: Mtl, nrm: vec3f, wo: vec3f, dist: f32, r0: vec3f, wi: ptr<function, vec3f>, isSpecular: ptr<function, bool>, pdf: ptr<function, f32>) -> bool
+fn sampleMaterial(mtl: Mtl, nrm: vec3f, wo: vec3f, dist: f32, r0: vec3f, wi: ptr<function, vec3f>, isSpecular: ptr<function, bool>, pdf: ptr<function, f32>)
 {
   // TODO Add refraction and fuzziness back in
   if(r0.x < mtl.refl) {
@@ -771,8 +771,6 @@ fn sampleMaterial(mtl: Mtl, nrm: vec3f, wo: vec3f, dist: f32, r0: vec3f, wi: ptr
     *isSpecular = false;
     *pdf = max(0.0, dot(*wi, nrm)) * INV_PI * (1 - mtl.refl);
   }
-
-  return *pdf > 0;
 }
 
 fn sampleMaterialPdf(mtl: Mtl, nrm: vec3f, wo: vec3f, wi: vec3f, isSpecular: bool) -> f32
@@ -990,27 +988,30 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
     // Sample lights directly (NEE) if not specular
-    let r0 = rand4();
-    var ltriPos: vec3f;
-    var ltriNrm: vec3f;
-    var emission: vec3f;
-    var ltriPdf: f32;
-    if(!isSpecular(mtl) && sampleLights(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-      var ltriWi = normalize(ltriPos - ia.pos);
-      // Apply MIS
-      // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
-      let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-      let pdf = sampleMaterialPdf(mtl, ia.nrm, ia.wo, ltriWi, false);
-      let weight = ltriPdf / (ltriPdf + pdf * gsa);
-      let brdf = evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, ltriWi, false);
-      col += throughput * brdf * gsa * max(0.0, dot(ia.nrm, ltriWi)) * weight * emission / ltriPdf;
+    if(!isSpecular(mtl)) {
+      let r0 = rand4();
+      var ltriPos: vec3f;
+      var ltriNrm: vec3f;
+      var emission: vec3f;
+      var ltriPdf: f32;
+      if(sampleLights(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+        var ltriWi = normalize(ltriPos - ia.pos);
+        // Apply MIS
+        // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
+        let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
+        let pdf = sampleMaterialPdf(mtl, ia.nrm, ia.wo, ltriWi, false);
+        let weight = ltriPdf / (ltriPdf + pdf * gsa);
+        let brdf = evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, ltriWi, false);
+        col += throughput * brdf * gsa * max(0.0, dot(ia.nrm, ltriWi)) * weight * emission / ltriPdf;
+      }
     }
 
     // Sample material
     let r1 = rand4();
     var wi: vec3f;
     var pdf: f32;
-    if(!sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf)) {
+    sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
+    if(pdf < EPS) {
       break;
     }
 
@@ -1043,7 +1044,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
           let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm);
           let ltriPdf = sampleLightsPdf(lastPos, lastNrm, ia.ltriId);
           let weight = pdf * gsa / (pdf * gsa + ltriPdf);
-          col += throughput * weight * mtl.col; // evalLight(ia.ltriId);
+          col += throughput * weight * mtl.col;
         }
       }
       break;
@@ -1096,23 +1097,26 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
 
     // Sample lights directly (NEE) if not specular
-    let r0 = rand4();
-    var ltriPos: vec3f;
-    var ltriNrm: vec3f;
-    var emission: vec3f;
-    var ltriPdf: f32;
-    if(!isSpecular(mtl) && sampleLights(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-      var ltriWi = normalize(ltriPos - ia.pos);
-      let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-      let brdf = evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, ltriWi, false);
-      col += throughput * brdf * gsa * max(0.0, dot(ia.nrm, ltriWi)) * emission / ltriPdf;
+    if(!isSpecular(mtl)) {
+      let r0 = rand4();
+      var ltriPos: vec3f;
+      var ltriNrm: vec3f;
+      var emission: vec3f;
+      var ltriPdf: f32;
+      if(sampleLights(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+        var ltriWi = normalize(ltriPos - ia.pos);
+        let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
+        let brdf = evalMaterial(mtl, ia.nrm, ia.wo, ia.dist, ltriWi, false);
+        col += throughput * brdf * gsa * max(0.0, dot(ia.nrm, ltriWi)) * emission / ltriPdf;
+      }
     }
 
     // Sample material
     let r1 = rand4();
     var wi: vec3f;
     var pdf: f32;
-    if(!sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf)) {
+    sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
+    if(pdf < EPS) {
       break;
     }
 
@@ -1167,7 +1171,8 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var wi: vec3f;
     var wasSpecular: bool;
     var pdf: f32;
-    if(!sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf)) {
+    sampleMaterial(mtl, ia.nrm, ia.wo, ia.dist, r1.xyz, &wi, &wasSpecular, &pdf);
+    if(pdf < EPS) {
       break;
     }
 
