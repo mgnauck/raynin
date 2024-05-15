@@ -797,40 +797,28 @@ fn evalMaterial(mtl: Mtl, nrm: vec3f, wo: vec3f, dist: f32, wi: vec3f, isSpecula
 
 fn sampleLights(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
-  let bc = sampleBarycentric(r0.xy);
-  
+  // Pick a ltri uniformly
   let ltriCnt = arrayLength(&ltris);
   let ltriId = u32(floor(r0.z * f32(ltriCnt)));
   let ltri = &ltris[ltriId];
 
-  let lpos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
-  var ldir = pos - lpos;
-
-  // Lights emit only on the front side
-  var visible = dot(ldir, (*ltri).nrm) > 0.0;
-
-  // Is light behind the surface at pos
-  visible &= dot(ldir, nrm) < 0.0;
-
-  // Check if something is blocking our ltri
-  visible &= !intersectTlasAnyHit(posOfs(pos, nrm), posOfs(lpos, (*ltri).nrm));
-
-  *ltriPos = lpos;
+  let bc = sampleBarycentric(r0.xy);
+  *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
   *ltriNrm = (*ltri).nrm;
+
+  let ldir = pos - *ltriPos;
+  var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
+  visible &= dot(ldir, nrm) < 0; // Not facing (behind)
+
   *pdf = 1.0 / ((*ltri).area * f32(ltriCnt));
   *emission = (*ltri).emission;
 
-  return visible;
+  return visible && *pdf > EPS;
 }
 
 fn sampleLightsPdf(pos: vec3f, nrm: vec3f, ltriId: u32) -> f32
 {
   return 1.0 / (ltris[ltriId].area * f32(arrayLength(&ltris)));
-}
-
-fn evalLight(ltriId: u32) -> vec3f
-{
-  return ltris[ltriId].emission;
 }
 
 fn geomSolidAngle(pos: vec3f, surfPos: vec3f, surfNrm: vec3f) -> f32
@@ -1003,7 +991,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
         let pdf = sampleMaterialPdf(mtl, ia.faceDir * ia.nrm, ia.wo, ltriWi, false);
         let weight = ltriPdf / (ltriPdf + pdf * gsa);
         let brdf = evalMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, ltriWi, false);
-        col += throughput * brdf * gsa * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) * weight * emission / ltriPdf;
+        if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
+          col += throughput * brdf * gsa * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) * weight * emission / ltriPdf;
+        }
       }
     }
 
@@ -1108,7 +1098,9 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
         var ltriWi = normalize(ltriPos - ia.pos);
         let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
         let brdf = evalMaterial(mtl, ia.faceDir * ia.nrm, ia.wo, ia.dist, ltriWi, false);
-        col += throughput * brdf * gsa * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) * emission / ltriPdf;
+        if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
+          col += throughput * brdf * gsa * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) * emission / ltriPdf;
+        }
       }
     }
 
