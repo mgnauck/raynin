@@ -135,12 +135,15 @@ const ST_PLANE            = 0u;
 const ST_BOX              = 1u;
 const ST_SPHERE           = 2u;
 
-// Math constants
+// General constants
 const EPS                 = 0.0001;
 const GEOM_EPS            = 0.0001;
 const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
-const INV_PI              = 1.0 / PI;
+const INV_PI              = 1 / PI;
+const ORIGIN              = vec3f(1 / 32.0); // posOfs()
+const FLOAT_SCALE         = 1 / 65536.0;
+const INT_SCALE           = 256.0;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -193,7 +196,7 @@ fn toMat4x4(m: mat3x4f) -> mat4x4f
 }
 
 // Duff et al: Building an Orthonormal Basis, Revisited
-fn constructONB(n: vec3f) -> mat3x3f
+fn createONB(n: vec3f) -> mat3x3f
 {
   var r: mat3x3f;
   let s = select(-1.0, 1.0, n.z >= 0.0); // = copysign
@@ -203,6 +206,15 @@ fn constructONB(n: vec3f) -> mat3x3f
   r[1] = n;
   r[2] = vec3f(b, s + n.y * n.y * a, -n.y);
   return r;
+}
+
+// Waechter/Binder: A Fast and Robust Method for Avoiding Self-Intersection
+// From Ray Tracing Gems (chapter 6). Hope the vectorization & conversion to wgsl is correct :)
+fn posOfs(p: vec3f, n: vec3f) -> vec3f
+{
+  let ofInt = vec3i(INT_SCALE * n);
+  let pInt = bitcast<vec3f>(bitcast<vec3i>(p) + select(ofInt, -ofInt, p < vec3f(0)));
+  return select(pInt, p + FLOAT_SCALE * n, abs(p) < ORIGIN);
 }
 
 // PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
@@ -265,11 +277,6 @@ fn sampleHemisphereCos(r: vec2f) -> vec3f
 
   // Project samples up to the hemisphere
   return vec3f(disk.x, sqrt(max(0.0, 1.0 - dot(disk, disk))), disk.y);
-}
-
-fn safeOfs(pos: vec3f, nrm: vec3f, dir: vec3f) -> vec3f
-{
-  return pos + nrm * select(-GEOM_EPS, GEOM_EPS, dot(nrm, dir) > 0);
 }
 
 // Laine et al. 2013; Afra et al. 2016: GPU efficient slabs test
@@ -669,20 +676,24 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
   return hit; // Required by firefox
 }
 
-fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
+fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
 {
+  var dir = p1 - p0;
+  let tfar = length(dir);
+  dir /= tfar;
+  let invDir = 1 / dir;
+
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-  let invDir = 1 / dir;
 
   // Early exit, unordered DF traversal
   loop {
     let node = &tlasNodes[nodeIndex];
-    if(intersectAabbAnyHit(ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
+    if(intersectAabbAnyHit(p0, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
       let nodeChildren = (*node).children;
       if(nodeChildren == 0) {
         // Leaf node, intersect the single assigned instance
-        if(intersectInstAnyHit(ori, dir, tfar, instances[(*node).inst])) {
+        if(intersectInstAnyHit(p0, dir, tfar, instances[(*node).inst])) {
           return true;
         }
       } else {
@@ -704,13 +715,6 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
   }
 
   return false; // Required by firefox
-}
-
-fn intersectTlasIntersect(p0: vec3f, p1: vec3f) -> bool
-{
-  var dir = p1 - p0;
-  let dist = length(dir);
-  return intersectTlasAnyHit(p0, dir / dist, dist);
 }
 
 fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
@@ -767,7 +771,7 @@ fn sampleMaterial(mtl: Mtl, nrm: vec3f, wo: vec3f, dist: f32, r0: vec3f, wi: ptr
     *isSpecular = true;
     *pdf = mtl.refl;
   } else {
-    *wi = constructONB(nrm) * sampleHemisphereCos(r0.yz);
+    *wi = createONB(nrm) * sampleHemisphereCos(r0.yz);
     *isSpecular = false;
     *pdf = max(0.0, dot(*wi, nrm)) * INV_PI * (1 - mtl.refl);
   }
@@ -808,11 +812,8 @@ fn sampleLights(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>
   // Is light behind the surface at pos
   visible &= dot(ldir, nrm) < 0.0;
 
-  let dist = length(ldir);
-  ldir /= dist;
-
-  // Something blocking our ltri
-  visible &= !intersectTlasIntersect(safeOfs(pos, nrm, -ldir), safeOfs(lpos, (*ltri).nrm, ldir));
+  // Check if something is blocking our ltri
+  visible &= !intersectTlasAnyHit(posOfs(pos, nrm), posOfs(lpos, (*ltri).nrm));
 
   *ltriPos = lpos;
   *ltriNrm = (*ltri).nrm;
@@ -995,9 +996,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       var emission: vec3f;
       var ltriPdf: f32;
       if(sampleLights(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-        var ltriWi = normalize(ltriPos - ia.pos);
         // Apply MIS
         // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
+        var ltriWi = normalize(ltriPos - ia.pos);
         let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
         let pdf = sampleMaterialPdf(mtl, ia.nrm, ia.wo, ltriWi, false);
         let weight = ltriPdf / (ltriPdf + pdf * gsa);
@@ -1016,7 +1017,8 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
 
     // Trace indirect light direction
-    let ori = safeOfs(ia.pos, ia.faceDir * ia.nrm, wi);
+    //let ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
+    let ori = ia.pos;
     let dir = wi;
     hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
@@ -1134,7 +1136,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     throughput *= 1.0 / p;
     
     // Next ray
-    ori = safeOfs(ia.pos, ia.faceDir * ia.nrm, wi);
+    ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
     dir = wi;
   }
 
@@ -1190,7 +1192,7 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     throughput *= 1.0 / p;
 
     // Next ray
-    ori = safeOfs(ia.pos, ia.faceDir * ia.nrm, wi);
+    ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
     dir = wi;
   }
 
