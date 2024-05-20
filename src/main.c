@@ -104,7 +104,7 @@ void init_scene_riow(scene *s)
   mat4 transform, translation, rotation, scale;
 
   // Light meshes (need to be unique!)
-  m = mtl_create_emissive();
+  m = mtl_init((vec3){ 1.0006f, 1.0006, 1.006f });
   mtl_id = scene_add_mtl(s, &m);
   uint16_t lid = scene_add_quad(s, 1, 1, mtl_id);
   for(uint8_t i=1; i<LIGHT_CNT; i++) { 
@@ -118,8 +118,7 @@ void init_scene_riow(scene *s)
   //uint16_t sid = scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1, false);
   
   // Floor mesh
-  m = mtl_create_diffuse();
-  m.col = (vec3){ 0.5f, 0.5f, 0.5f };
+  m = mtl_init((vec3){ 0.5f, 0.5f, 0.5f });
   mtl_id = scene_add_mtl(s, &m);
   uint16_t fid = scene_add_quad(s, 10, 10, mtl_id);
  
@@ -139,27 +138,27 @@ void init_scene_riow(scene *s)
   //scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
   scene_add_inst_mesh(s, fid, -1, scale);
  
-  // Sphere instances
+  // Reflecting sphere
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  ///m = mtl_create_diffuse();
-  m = mtl_create_mirror();
-  m.col = (vec3){ 0.7f, 0.6f, 0.5f };
+  m = mtl_init((vec3){ 0.7f, 0.6f, 0.5f });
+  //m.metallic = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
 
+  // Refracting sphere
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  ///m = mtl_create_diffuse();
-  m = mtl_create_glass();
-  m.att = vec3_scale((vec3){ 1.0f, 2.0f, 3.0f }, 0.5f);
+  m = mtl_init((vec3){0.6f, 0.7f, 1.0f});
+  //m.metallic = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, 1, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
 
+  // Diffuse sphere
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
-  m = mtl_create_diffuse();
-  m.col = (vec3){ 0.1f, 0.2f, 0.4f };
-  //m.refl = 0.1f;
+  m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
+  //m.roughness = 0.3f;
+  //m.metallic = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
   //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
   scene_add_inst_mesh(s, sid, mtl_id, translation);
@@ -168,21 +167,10 @@ void init_scene_riow(scene *s)
   
   for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
     for(int b=-RIOW_SIZE/2; b<RIOW_SIZE/2; b++) {
-      float mtl_p = pcg_randf();
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
-        if(mtl_p < 0.8f) {
-          m = mtl_create_diffuse();
-          mtl_id = scene_add_mtl(s, &m);
-        } else if(mtl_p < 0.95f) {
-          m = mtl_create_mirror();
-          m.fuzz = pcg_randf() * 0.2f;
-          mtl_id = scene_add_mtl(s, &m);
-        } else {
-          m = mtl_create_glass();
-          mtl_id = scene_add_mtl(s, &m);
-        }
-
+        m = mtl_init(vec3_rand());
+        mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
         //scene_add_inst_shape(s, ST_SPHERE, mtl_id, transform);

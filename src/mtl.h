@@ -4,26 +4,17 @@
 #include "vec3.h"
 #include <stdbool.h>
 
-typedef struct mtl {
-  vec3      col;    // Albedo/diffuse. If component > 1.0, obj emits light.
-  float     refl;   // Probability of reflection (diffuse = 1 - refl - refr)
-  float     refr;   // Probability of refraction
-  float     fuzz;   // Fuzziness = 1 - glossiness
-  float     ior;    // Refraction index of obj we are entering
-  float     pad0;
-  vec3      att;    // Attenuation of transmission per col comp (beer)
-  float     pad1;
+typedef struct mtl
+{
+  vec3  col;                // Diff col of non-metallics/spec col of metallics, values > 1.0 = emissive
+  float metallic;           // Appearance range from dielectric to conductor (0 - 1)
+  float roughness;          // Perfect reflection at 0, diffuse at 1
+  float reflectance;        // Fresnel reflectance (F0) for non-metallic surfaces (mimics ior)
+  float clearCoat;          // Strength of the clear coat layer
+  float clearCoatRoughness; // Roughness of the clear coat layer
 } mtl;
 
 bool  mtl_is_emissive(const mtl *mtl);
-
 mtl   mtl_init(vec3 col);
-
-// Generate random materials
-mtl   mtl_create_diffuse();
-mtl   mtl_create_diffuse_white();
-mtl   mtl_create_mirror();
-mtl   mtl_create_glass();
-mtl   mtl_create_emissive();
 
 #endif
