@@ -749,32 +749,13 @@ fn isEmissive(mtl: Mtl) -> bool
   return any(mtl.col > vec3f(1.0));
 }
 
-fn isSpecular(mtl: Mtl) -> bool
-{
-  return mtl.roughness < 0.5 || mtl.metallic > 0.9;
-}
-
-fn luminance(col: vec3f) -> f32
-{
-	return dot(col, vec3f(0.2126, 0.7152, 0.0722));
-}
-
 fn distributionGGX(n: vec3f, h: vec3f, alpha: f32) -> f32
 {
   let NoH = dot(n, h);
   let alphaSqr = alpha * alpha;
   let NoHSqr = NoH * NoH;
   let den = NoHSqr * alphaSqr + (1.0 - NoHSqr);
-  return (step(0.0, NoH) * alphaSqr) / (PI * den * den);
-}
-
-fn geometryPartialGGX(v: vec3f, n: vec3f, h: vec3f, alpha: f32) -> f32
-{
-  var VoHSqr = saturate(dot(v, h));
-  let chi = step(0.0, VoHSqr / saturate(dot(v, n)));
-  VoHSqr = VoHSqr * VoHSqr;
-  let tan2 = (1.0 - VoHSqr) / VoHSqr;
-  return (chi * 2.0) / (1.0 + sqrt(1.0 + alpha * alpha * tan2));
+  return (step(EPS, NoH) * alphaSqr) / (PI * den * den);
 }
 
 fn fresnelSchlick(cosTheta: f32, f0: vec3f) -> vec3f
@@ -782,76 +763,13 @@ fn fresnelSchlick(cosTheta: f32, f0: vec3f) -> vec3f
   return f0 + (vec3f(1.0) - f0) * pow(1.0 - cosTheta, 5.0);
 }
 
-fn evalDiffuse(n: vec3f, wi: vec3f, col: vec3f) -> vec3f
+fn geometryPartialGGX(v: vec3f, n: vec3f, h: vec3f, alpha: f32) -> f32
 {
-  // Diffuse brdf pre-divided by pdf
-  return col / max(0.0, dot(n, wi));
-}
-
-fn evalSpecular(wo: vec3f, n: vec3f, wi: vec3f, roughness: f32, f0: vec3f, kS: ptr<function, vec3f>) -> vec3f
-{
-  let h = normalize(wo + wi);
-  var cosT = dot(n, wi);
-  cosT *= cosT;
-  let sinT = sqrt(1.0 - cosT * cosT);
-
-  let geometry = geometryPartialGGX(wo, n, h, roughness) * geometryPartialGGX(wi, n, h, roughness); 
-  let denominator = saturate(4.0 * (saturate(dot(n, wo)) * saturate(dot(n, h)) + 0.05));
-  let fresnel = fresnelSchlick(saturate(dot(wo, h)), f0);
-  
-  *kS = fresnel;
-
-  // Specular brdf pre-divided with pdf
-  return geometry * fresnel * sinT / denominator;
-}
-
-fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> vec3f
-{
-  // For metallic mtl we use the mtl color, otherwise the index of refraction
-  let ior = 1.5; // TODO Take from material (or use mtl.reflectance)
-  var f0 = vec3f(abs((1.0 - ior) / (1.0 + ior)));
-  f0 = mix(f0 * f0, mtl.col, mtl.metallic); // 0.004?
-
-  var kS: vec3f; // = Fresnel
-  let specularBrdf = evalSpecular(wo, n, wi, mtl.roughness * mtl.roughness, f0, &kS);
-
-  let kD = (vec3f(1) - kS) * (1.0 - mtl.metallic);
-  let diffuseBrdf = evalDiffuse(n, wi, kD * mtl.col);
-
-  // Already pre-divided by pdf
-  return diffuseBrdf + specularBrdf;
-}
-
-fn evalMaterialIndirect(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, isSpecular: bool) -> vec3f
-{
-  // For metallic mtl we use the mtl color, otherwise the index of refraction
-  let ior = 1.5; // TODO Take from material (or use mtl.reflectance)
-  var f0 = vec3f(abs((1.0 - ior) / (1.0 + ior)));
-  f0 = mix(f0 * f0, mtl.col, mtl.metallic); // 0.004?
-
-  if(isSpecular) {
-    var fresnel: vec3f; // unused
-    return evalSpecular(wo, n, wi, mtl.roughness * mtl.roughness, f0, &fresnel);
-  } else {
-    let h = normalize(wo + wi);
-    let fresnel = fresnelSchlick(saturate(dot(h, wo)), f0);
-    let kD = (vec3f(1) - fresnel) * (1.0 - mtl.metallic);
-    return evalDiffuse(n, wi, kD * mtl.col);
-  }
-}
-
-fn getSpecularProb(mtl: Mtl, wo: vec3f, n: vec3f) -> f32
-{
-  //let f0 = mtl.metallic * mtl.col + vec3f(0.16 * (1.0 - mtl.metallic) * mtl.reflectance * mtl.reflectance);
-  //let fresnel = saturate(luminance(fresnelSchlick(max(0.0, dot(wo, n)), f0)));
-  let f0 = luminance(mix(vec3f(0.004), mtl.col, mtl.metallic));
-  let fresnel = saturate(luminance(fresnelSchlick(max(0.0, dot(n, wo)), vec3f(f0)))); // h is still unknown
-  let diffRefl = luminance((1.0 - mtl.metallic) * mtl.col);
-
-  let specular = fresnel;
-  let diffuse = (1.0 - fresnel) * diffRefl;
-
-  return clamp(specular / max(specular + diffuse, 0.0001), 0.1, 0.9);
+  var VoHSqr = saturate(dot(v, h));
+  let chi = step(EPS, VoHSqr / saturate(dot(v, n)));
+  VoHSqr = VoHSqr * VoHSqr;
+  let tan2 = (1.0 - VoHSqr) / VoHSqr;
+  return (chi * 2.0) / (1.0 + sqrt(1.0 + alpha * alpha * tan2));
 }
 
 fn sampleGGX(roughness: f32, r0: vec2f) -> vec3f
@@ -862,36 +780,64 @@ fn sampleGGX(roughness: f32, r0: vec2f) -> vec3f
   return normalize(vec3f(cos(phi) * sinT, cos(theta), sin(phi) * sinT));
 }
 
-fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, isSpecular: ptr<function, bool>)
+fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>) -> f32
 {
-  // TODO BUGGY
-  let specProb = 0.5; // getSpecularProb(mtl, wo, n);
-  if(r0.z < specProb) {
-    let r = reflect(-wo, n);
-    *wi = normalize(createONB(r) * sampleGGX(mtl.roughness * mtl.roughness, r0.xy)); 
-    *isSpecular = true;
-  } else {
-    *wi = createONB(n) * sampleHemisphereCos(r0.xy);
-    *isSpecular = false;
+  let r = reflect(-wo, n);
+  let roughness = saturate(mtl.roughness - EPS) + EPS;
+  *wi = normalize(createONB(r) * sampleGGX(roughness, r0.xy));
+
+  if(dot(n, *wi) < EPS) {
+    return 0.0;
   }
+
+  return sampleMaterialPdf(mtl, wo, n, *wi);
 }
 
 fn sampleMaterialPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> f32
 {
   let h = normalize(wo + wi);
+  let roughness = saturate(mtl.roughness - EPS) + EPS;
+  return distributionGGX(n, h, roughness) * dot(n, h);
+}
 
-  let specularPdf = distributionGGX(n, h, mtl.roughness * mtl.roughness) * dot(h, n);
-  let diffusePdf = max(0.0, dot(n, wi)) * INV_PI;
+fn evalSpecular(wo: vec3f, n: vec3f, wi: vec3f, roughness: f32, f0: vec3f, fres: ptr<function, vec3f>) -> vec3f
+{
+  let h = normalize(wo + wi);
+  let cosT = saturate(dot(n, wi));
+  let sinT = sqrt(1.0 - cosT * cosT);
 
-  // For metallic mtl we use the mtl color, otherwise the index of refraction
-  // TODO Take from material (or use mtl.reflectance)
-  let ior = 1.5;
+  let geom = geometryPartialGGX(wo, n, h, roughness) * geometryPartialGGX(wi, n, h, roughness); 
+  let denom = saturate(4.0 * (saturate(dot(n, wo)) * saturate(dot(n, h)) + 0.05));
+  
+  *fres = fresnelSchlick(saturate(dot(wo, h)), f0);
+
+  // Specular is brdf pre-divided by pdf
+  return geom * (*fres) * sinT / (denom * dot(n, wi));
+}
+
+fn evalDiffuse(mtl: Mtl) -> vec3f
+{
+  return mtl.col * INV_PI;
+}
+
+fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> vec3f
+{
+  let roughness = saturate(mtl.roughness - EPS) + EPS;
+
+  // TODO Put ior in mtl
+  // For metallic materials we use the base color, otherwise the index of refraction
+  let ior = 1.6;
   var f0 = vec3f(abs((1.0 - ior) / (1.0 + ior)));
-  f0 = mix(f0 * f0, mtl.col, mtl.metallic); // 0.004?
-  let fresnel = luminance(saturate(fresnelSchlick(max(0.0, dot(h, wo)), f0)));
+  f0 = mix(f0 * f0, mtl.col, mtl.metallic);
 
-  // TODO Can we mix pdfs like this?
-  return mix(diffusePdf, specularPdf, fresnel);
+  var fresnel: vec3f;
+  let specular = evalSpecular(wo, n, wi, roughness, f0, &fresnel);
+
+  // Scale diffuse by 1 - fresnel and metallic factor
+  let diffuse = (vec3f(1) - fresnel) * (1.0 - mtl.metallic) * evalDiffuse(mtl);
+
+  // The dot(n, wi) is from the rendering equation not brdf
+  return diffuse + specular;
 }
 
 fn sampleLights(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
@@ -1100,14 +1046,10 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
     // Sample material
     var wi: vec3f;
-    //var pdf: f32;
-    //sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular, &pdf);
-    sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular);
-    /*if(pdf < EPS) {
+    let pdf = sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi);
+    if(pdf < EPS) {
       break;
-    }*/
-
-    let pdf = sampleMaterialPdf(mtl, ia.wo, ia.faceDir * ia.nrm, wi); // TODO Combine with sampleMat above
+    } 
 
     // Trace indirect light direction
     let ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
@@ -1119,10 +1061,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
     
     // Scale indirect light contribution by material
-    ///throughput *= evalMaterialIndirect(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular) * dot(ia.faceDir * ia.nrm, wi) / pdf;
-    ///throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi) * dot(ia.faceDir * ia.nrm, wi) / pdf;
-
-    throughput *= evalMaterialIndirect(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular) * dot(ia.faceDir * ia.nrm, wi);
+    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi) * dot(ia.faceDir * ia.nrm, wi);
 
     let lastPos = ia.pos;
     let lastNrm = ia.faceDir * ia.nrm;
@@ -1266,20 +1205,27 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       break;
     }
 
-    // Sample material
+    //// COOK-TORRANCE
     let r1 = rand4();
     var wi: vec3f;
-    var wasSpecular: bool;
-    ///var pdf: f32;
-    ///sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular, &pdf);
-    sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular);
-    ///if(pdf < EPS) {
-    ///  break;
-    ///}
+    let pdf = sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi);
+    if(pdf < EPS) {
+      break;
+    }
+    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi) * dot(ia.nrm, wi);
+    ////
 
-    // Scale indirect light contribution by material
-    ///throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi) * dot(ia.faceDir * ia.nrm, wi) / pdf;
-    throughput *= evalMaterialIndirect(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular) * dot(ia.faceDir * ia.nrm, wi);
+    /*
+    //// STANDARD DIFFUSE
+    let r1 = rand4();
+    let wi = createONB(ia.nrm) * sampleHemisphereCos(r1.xy);
+    let pdf = max(0.0, dot(wi, ia.nrm)) * INV_PI;
+    if(pdf < EPS) {
+      break;
+    }
+    throughput *= mtl.col * INV_PI * dot(wi, ia.nrm) / pdf;
+    ////
+    */
 
     // Russian roulette
     // Terminate with prob inverse to throughput
