@@ -799,7 +799,7 @@ fn sampleSpecular(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec2f, wi: ptr<function, ve
   let roughness = saturate(mtl.roughness - EPS) + EPS;
   *wi = normalize(createONB(r) * sampleGGX(roughness, r0));
 
-  if(dot(n, *wi) < EPS) {
+  if(dot(n, wo) <= 0.0 || dot(n, *wi) <= 0.0) {
     return 0.0;
   }
 
@@ -842,7 +842,7 @@ fn evalSpecular(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<function, ve
   let denom = saturate(4.0 * (saturate(dot(n, wo)) * saturate(dot(n, h)) + 0.05));
 
   // Pre-divided by pdf
-  return geom * (*fres) * sinT / (denom * dot(n, wi));
+  return geom * (*fres) * sinT / denom;
 }
 
 fn sampleDiffuse(n: vec3f, r0: vec2f, wi: ptr<function, vec3f>) -> f32
@@ -858,11 +858,10 @@ fn sampleDiffusePdf(n: vec3f, wi: vec3f) -> f32
 
 fn evalDiffuse(mtl: Mtl, n: vec3f, wi: vec3f) -> vec3f
 {
-  // Predivided by pdf
-  return (1.0 - mtl.metallic) * mtl.col / dot(n, wi);
+  return (1.0 - mtl.metallic) * mtl.col * INV_PI;
 }
 
-fn sampleCombined(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, isSpecular: ptr<function, bool>, specProb: ptr<function, f32>, pdf: ptr<function, f32>) -> bool
+fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, isSpecular: ptr<function, bool>, specProb: ptr<function, f32>, pdf: ptr<function, f32>) -> bool
 {
   *specProb = getSpecularProb(mtl, wo, n);
   if(r0.z < *specProb) {
@@ -876,18 +875,23 @@ fn sampleCombined(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, ve
   return *pdf >= EPS;
 }
 
-fn evalCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, isSpecular: bool, specProb: f32) -> vec3f
+fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, isSpecular: bool, specProb: f32) -> vec3f
 {
   if(isSpecular) {
     var fres: vec3f;
-    return evalSpecular(mtl, wo, n, wi, &fres) / specProb;
+    // We always want to apply rendering equation dot(n, wi), so remove it here
+    return evalSpecular(mtl, wo, n, wi, &fres) / (specProb * max(0.0, dot(n, wi)));
   } else {
-    return evalDiffuse(mtl, n, wi) / (1.0 - specProb);
+    return evalDiffuse(mtl, n, wi) / ((1.0 - specProb) * dot(n, wi) * INV_PI);
   }
 }
 
-fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> vec3f
+fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> vec3f
 {
+  if(dot(n, wo) <= 0.0 || dot(n, wi) <= 0.0) {
+    return vec3f(0);
+  }
+
   var fresnel: vec3f;
   return evalSpecular(mtl, wo, n, wi, &fresnel) + (vec3f(1) - fresnel) * evalDiffuse(mtl, n, wi);
 }
@@ -1087,7 +1091,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
         let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
         let pdf = sampleSpecularPdf(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
         let weight = ltriPdf / (ltriPdf + pdf * gsa);
-        let brdf = evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
+        let brdf = evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
         if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
           col += throughput * brdf * gsa * saturate(dot(ia.faceDir * ia.nrm, ltriWi)) * weight * emission / ltriPdf;
         }
@@ -1113,7 +1117,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
     
     // Scale indirect light contribution by material
-    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi) * dot(ia.faceDir * ia.nrm, wi);
+    throughput *= evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, wi) * dot(ia.faceDir * ia.nrm, wi);
 
     let lastPos = ia.pos;
     let lastNrm = ia.faceDir * ia.nrm;
@@ -1184,34 +1188,31 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       break;
     }
 
-    // Sample lights directly (NEE) if not specular
-    {
-      let r0 = rand4();
-      var ltriPos: vec3f;
-      var ltriNrm: vec3f;
-      var emission: vec3f;
-      var ltriPdf: f32;
-      if(sampleLights(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-        var ltriWi = normalize(ltriPos - ia.pos);
-        let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-        let brdf = evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
-        if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
-          col += throughput * brdf * gsa * emission * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) / ltriPdf;
-        }
+    let r0 = rand4();
+    let r1 = rand4();
+
+    // Sample lights directly (NEE)
+    var ltriPos: vec3f;
+    var ltriNrm: vec3f;
+    var emission: vec3f;
+    var ltriPdf: f32;
+    if(sampleLights(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+      var ltriWi = normalize(ltriPos - ia.pos);
+      let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
+      let brdf = evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
+      if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
+        col += throughput * brdf * gsa * emission * saturate(dot(ia.faceDir * ia.nrm, ltriWi)) / ltriPdf;
       }
     }
 
-    let r1 = rand4();
-
+    // Sample material
     var wi: vec3f;
-    var isSpecular: bool;
     var specProb: f32;
     var pdf: f32;
-    if(!sampleCombined(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &isSpecular, &specProb, &pdf)) {
+    if(!sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular, &specProb, &pdf)) {
       break;
     }
-    //throughput *= evalCombined(mtl, ia.wo, ia.faceDir * ia.nrm, wi, isSpecular, specProb) * dot(ia.faceDir * ia.nrm, wi);
-    throughput *= evalCombined(mtl, ia.wo, ia.faceDir * ia.nrm, wi, isSpecular, specProb) * dot(ia.nrm, wi);
+    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular, specProb) * dot(ia.nrm, wi);
 
     // Russian roulette
     // Terminate with prob inverse to throughput
@@ -1256,21 +1257,22 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       break;
     }
 
-    let r1 = rand4();
+    let r0 = rand4();
 
+    // Sample material
     var wi: vec3f;
     var isSpecular: bool;
     var specProb: f32;
     var pdf: f32;
-    if(!sampleCombined(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &isSpecular, &specProb, &pdf)) {
+    if(!sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r0.xyz, &wi, &isSpecular, &specProb, &pdf)) {
       break;
     }
-    throughput *= evalCombined(mtl, ia.wo, ia.faceDir * ia.nrm, wi, isSpecular, specProb) * dot(/* ia.faceDir * */ia.nrm, wi);
+    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, isSpecular, specProb) * dot(/* ia.faceDir * */ ia.nrm, wi);
 
     // Russian roulette
     // Terminate with prob inverse to throughput
     let p = min(0.95, maxComp3(throughput));
-    if(r1.w > p) {
+    if(r0.w > p) {
       break;
     }
     // Account for bias introduced by path termination (pdf = p)
@@ -1297,7 +1299,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
     rng = vec4u(globalId.xy, u32(globals.frame), i);
     let r0 = rand4();
     let eye = sampleEye(r0.xy);
-    col += renderNaive(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));
+    col += renderNEE(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));
   }
 
   let index = globals.width * globalId.y + globalId.x;
