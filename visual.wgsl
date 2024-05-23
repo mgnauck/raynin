@@ -810,14 +810,14 @@ fn sampleSpecularPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> f32
 {
   let h = normalize(wo + wi);
   let roughness = saturate(mtl.roughness - EPS) + EPS;
-  return distributionGGX(n, h, roughness) * dot(n, h);
+  return distributionGGX(n, h, roughness) * max(0.0, dot(n, h));
 }
 
 fn getSpecularProb(mtl: Mtl, wo: vec3f, n: vec3f) -> f32
 {
-  // No half vector available yet, use normal for fresnel
+  // No half vector available yet, use normal for fresnel diff/spec separation
   let f0 = mtlToSpecularF0(mtl);
-  let fres = fresnelSchlick(max(0.0, dot(wo, n)), f0);
+  let fres = fresnelSchlick(max(0.0, dot(wo, n)), f0);`
   let diffRefl = (1.0 - mtl.metallic) * mtl.col;
 
   let s = luminance(fres);
@@ -879,7 +879,7 @@ fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, isSpecular: bool, spec
 {
   if(isSpecular) {
     var fres: vec3f;
-    // We always want to apply rendering equation dot(n, wi), so remove it here
+    // We want to apply rendering equation's dot(n, wi) elsewhere, so remove it here
     return evalSpecular(mtl, wo, n, wi, &fres) / (specProb * max(0.0, dot(n, wi)));
   } else {
     return evalDiffuse(mtl, n, wi) / ((1.0 - specProb) * dot(n, wi) * INV_PI);
@@ -1077,35 +1077,35 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
-    // Sample lights directly (NEE) if not specular
-    /*if(!isSpecular(mtl))*/ {
-      let r0 = rand4();
-      var ltriPos: vec3f;
-      var ltriNrm: vec3f;
-      var emission: vec3f;
-      var ltriPdf: f32;
-      if(sampleLights(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-        // Apply MIS
-        // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
-        var ltriWi = normalize(ltriPos - ia.pos);
-        let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-        let pdf = sampleSpecularPdf(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
-        let weight = ltriPdf / (ltriPdf + pdf * gsa);
-        let brdf = evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
-        if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
-          col += throughput * brdf * gsa * saturate(dot(ia.faceDir * ia.nrm, ltriWi)) * weight * emission / ltriPdf;
-        }
+    let r0 = rand4();
+    let r1 = rand4();
+
+    // Sample lights directly (NEE)
+    var ltriPos: vec3f;
+    var ltriNrm: vec3f;
+    var emission: vec3f;
+    var ltriPdf: f32;
+    if(sampleLights(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+      // Apply MIS
+      // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
+      var ltriWi = normalize(ltriPos - ia.pos);
+      let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
+      let diffusePdf = sampleDiffusePdf(ia.faceDir * ia.nrm, ltriWi);
+      let specularPdf = sampleSpecularPdf(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
+      let weight = ltriPdf / (ltriPdf + specularPdf * gsa + diffusePdf * gsa);
+      let brdf = evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
+      if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
+        col += throughput * brdf * gsa * weight * emission * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) / ltriPdf;
       }
     }
 
-    let r1 = rand4();
-
     // Sample material
     var wi: vec3f;
-    let pdf = sampleSpecular(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xy, &wi);
-    if(pdf < EPS) {
+    var specProb: f32;
+    var pdf: f32;
+    if(!sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular, &specProb, &pdf)) {
       break;
-    } 
+    }
 
     // Trace indirect light direction
     let ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
@@ -1117,8 +1117,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
     
     // Scale indirect light contribution by material
-    throughput *= evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, wi) * dot(ia.faceDir * ia.nrm, wi);
+    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular, specProb) * dot(ia.nrm, wi); // ia.faceDir * ia.nrm
 
+    // Save for light hit MIS calculation
     let lastPos = ia.pos;
     let lastNrm = ia.faceDir * ia.nrm;
 
@@ -1128,16 +1129,10 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(isEmissive(mtl)) {
       // Lights emit from front side only
       if(ia.faceDir > 0) {
-        /*if(wasSpecular) {
-          // Last bounce was specular, directly apply light contribution
-          col += throughput * mtl.col;
-        } else*/ {
-          // Came from diffuse, apply MIS
-          let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
-          let ltriPdf = sampleLightsPdf(lastPos, lastNrm, ia.ltriId);
-          let weight = pdf * gsa / (pdf * gsa + ltriPdf);
-          col += throughput * weight * mtl.col;
-        }
+        let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
+        let ltriPdf = sampleLightsPdf(lastPos, lastNrm, ia.ltriId);
+        let weight = pdf * gsa / (pdf * gsa + ltriPdf);
+        col += throughput * weight * mtl.col;
       }
       break;
     }
@@ -1299,7 +1294,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
     rng = vec4u(globalId.xy, u32(globals.frame), i);
     let r0 = rand4();
     let eye = sampleEye(r0.xy);
-    col += renderNEE(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));
+    col += renderMIS(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));
   }
 
   let index = globals.width * globalId.y + globalId.x;
