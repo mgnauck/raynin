@@ -55,10 +55,10 @@ struct Mtl
 {
   col: vec3f,             // Base color (diff col of non-metallics, spec col of metallics)
   metallic: f32,          // Appearance range from dielectric to conductor (0 - 1)
-  roughness: f32,         // Perfect reflection at 0, diffuse at 1
-  reflectance: f32,       // Fresnel reflectance (F0) for non-metallic surfaces
-  clearCoat: f32,         // Strength of the clear coat layer
-  clearCoatRoughness: f32 // Roughness of the clear coat layer
+  roughness: f32,         // Perfect reflection to completely diffuse (0 - 1)
+  reflectance: f32,       // Reflectance of non-metallic materials (0 - 1)
+  pad0: f32,
+  pad1: f32
 }
 
 struct IA
@@ -757,11 +757,17 @@ fn luminance(col: vec3f) -> f32
 fn mtlToSpecularF0(mtl: Mtl) -> vec3f
 {
   // For metallic materials we use the base color, otherwise the ior
-  let ior = 1.6;
-  var f0 = vec3f(abs((1.0 - ior) / (1.0 + ior)));
-  return mix(f0 * f0, mtl.col, mtl.metallic);
+  //var f0 = vec3f(abs((1.0 - mtl.ior) / (1.0 + mtl.ior)));
+  //return mix(f0 * f0, mtl.col, mtl.metallic);
+
+  // For metallic materials we use the base color, otherwise the reflectance
+  var f0 = vec3f(0.16 * mtl.reflectance * mtl.reflectance);
+  return mix(f0, mtl.col, mtl.metallic);
 }
 
+// Boksansky: Crash Cource in BRDF Implementation
+// Cook/Torrance: A Reflectance Model for Computer Graphics
+// Walter et al: Microfacet Models for Refraction through Rough Surfaces
 fn distributionGGX(n: vec3f, h: vec3f, alpha: f32) -> f32
 {
   let NoH = dot(n, h);
@@ -787,6 +793,7 @@ fn geometryPartialGGX(v: vec3f, n: vec3f, h: vec3f, alpha: f32) -> f32
 
 fn sampleGGX(roughness: f32, r0: vec2f) -> vec3f
 {
+  // TODO Optimize atan usage to cos(theta)
   let theta = atan(roughness * sqrt(r0.x / (1.0 - r0.x)));
   let phi = TWO_PI * r0.y;
   let sinT = sin(theta);
@@ -813,19 +820,6 @@ fn sampleSpecularPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> f32
   return distributionGGX(n, h, roughness) * max(0.0, dot(n, h));
 }
 
-fn getSpecularProb(mtl: Mtl, wo: vec3f, n: vec3f) -> f32
-{
-  // No half vector available yet, use normal for fresnel diff/spec separation
-  let f0 = mtlToSpecularF0(mtl);
-  let fres = fresnelSchlick(max(0.0, dot(wo, n)), f0);`
-  let diffRefl = (1.0 - mtl.metallic) * mtl.col;
-
-  let s = luminance(fres);
-  let d = (1.0 - s) * luminance(diffRefl);
-
-  return clamp(s / max(EPS, s + d), 0.1, 0.9);
-}
-
 fn evalSpecular(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<function, vec3f>) -> vec3f
 {
   let h = normalize(wo + wi);
@@ -848,7 +842,7 @@ fn evalSpecular(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<function, ve
 fn sampleDiffuse(n: vec3f, r0: vec2f, wi: ptr<function, vec3f>) -> f32
 {
   *wi = createONB(n) * sampleHemisphereCos(r0);
-  return max(0.0, dot(*wi, n)) * INV_PI;
+  return max(0.0, dot(n, *wi)) * INV_PI;
 }
 
 fn sampleDiffusePdf(n: vec3f, wi: vec3f) -> f32
@@ -859,6 +853,18 @@ fn sampleDiffusePdf(n: vec3f, wi: vec3f) -> f32
 fn evalDiffuse(mtl: Mtl, n: vec3f, wi: vec3f) -> vec3f
 {
   return (1.0 - mtl.metallic) * mtl.col * INV_PI;
+}
+
+fn getSpecularProb(mtl: Mtl, wo: vec3f, n: vec3f) -> f32
+{
+  // No half vector available yet, use normal for fresnel diff/spec separation
+  let f0 = mtlToSpecularF0(mtl);
+  let fres = fresnelSchlick(saturate(dot(n, wo)), f0);
+
+  let s = luminance(fres);
+  let d = (1.0 - s) * luminance((1.0 - mtl.metallic) * mtl.col);
+
+  return clamp(s / max(EPS, s + d), 0.1, 0.9);
 }
 
 fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, isSpecular: ptr<function, bool>, specProb: ptr<function, f32>, pdf: ptr<function, f32>) -> bool
@@ -893,7 +899,8 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> vec3f
   }
 
   var fresnel: vec3f;
-  return evalSpecular(mtl, wo, n, wi, &fresnel) + (vec3f(1) - fresnel) * evalDiffuse(mtl, n, wi);
+  // TODO Improve explicit undo of applied pdf for specular
+  return evalSpecular(mtl, wo, n, wi, &fresnel) * sampleSpecularPdf(mtl, wo, n, wi) + (vec3f(1) - fresnel) * evalDiffuse(mtl, n, wi);
 }
 
 fn sampleLights(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
@@ -1075,6 +1082,19 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   var throughput = vec3f(1);
   var wasSpecular = false;
 
+  /*
+  TODO:
+  - Clean up: saturate vs. max vs. abs
+  - Roughness input squared
+  - Optimize GGX sampling (direct cos(theta))
+  - Refactoring PDF handling for Cook-Torrance
+  - Non-uniform light picking back in
+  - Transmission/Refraction?
+  - Path space regularization (increase roughness)
+  - Try LDS once more
+  - Clean up globals
+  */
+
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
     let r0 = rand4();
@@ -1129,6 +1149,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(isEmissive(mtl)) {
       // Lights emit from front side only
       if(ia.faceDir > 0) {
+        // Apply MIS
         let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
         let ltriPdf = sampleLightsPdf(lastPos, lastNrm, ia.ltriId);
         let weight = pdf * gsa / (pdf * gsa + ltriPdf);
@@ -1207,7 +1228,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(!sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular, &specProb, &pdf)) {
       break;
     }
-    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular, specProb) * dot(ia.nrm, wi);
+    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular, specProb) * dot(ia.nrm, wi); // * ia.faceDir
 
     // Russian roulette
     // Terminate with prob inverse to throughput
@@ -1262,7 +1283,7 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(!sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r0.xyz, &wi, &isSpecular, &specProb, &pdf)) {
       break;
     }
-    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, isSpecular, specProb) * dot(/* ia.faceDir * */ ia.nrm, wi);
+    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, isSpecular, specProb) * dot(ia.nrm, wi); // * ia.faceDir
 
     // Russian roulette
     // Terminate with prob inverse to throughput

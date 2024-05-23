@@ -6,12 +6,12 @@
 
 typedef struct mtl
 {
-  vec3  col;                // Diff col of non-metallics/spec col of metallics, values > 1.0 = emissive
+  vec3  col;                // Diff col of non-metallics/spec col of metallics. Values > 1.0 = emissive.
   float metallic;           // Appearance range from dielectric to conductor (0 - 1)
-  float roughness;          // Perfect reflection at 0, diffuse at 1
-  float reflectance;        // Fresnel reflectance (F0) for non-metallic surfaces (mimics ior)
-  float clearCoat;          // Strength of the clear coat layer
-  float clearCoatRoughness; // Roughness of the clear coat layer
+  float roughness;          // Perfect reflection to completely diffuse diffuse (0 - 1)
+  float reflectance;        // Reflectance for non-metallic materials (0 - 1)
+  float pad0;
+  float pad1;
 } mtl;
 
 bool  mtl_is_emissive(const mtl *mtl);
