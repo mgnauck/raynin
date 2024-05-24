@@ -798,11 +798,15 @@ fn geometryPartialGGX(v: vec3f, n: vec3f, h: vec3f, alpha: f32) -> f32
 
 fn sampleGGX(roughness: f32, r0: vec2f) -> vec3f
 {
-  // TODO Optimize atan usage to cos(theta)
-  let theta = atan(roughness * sqrt(r0.x / (1.0 - r0.x)));
+  //let theta = atan(roughness * sqrt(r0.x / (1.0 - r0.x)));
+  //let phi = TWO_PI * r0.y;
+  //let sinTheta = sin(theta);
+  //return normalize(vec3f(cos(phi) * sinTheta, cos(theta), sin(phi) * sinTheta));
+
+  let cosTheta = sqrt((1.0 - r0.x) / ((roughness * roughness - 1.0) * r0.x + 1.0));
+  let sinTheta = sqrt(1.0 - cosTheta * cosTheta);
   let phi = TWO_PI * r0.y;
-  let sinT = sin(theta);
-  return normalize(vec3f(cos(phi) * sinT, cos(theta), sin(phi) * sinT));
+  return normalize(vec3f(cos(phi) * sinTheta, cosTheta, sin(phi) * sinTheta));
 }
 
 fn sampleSpecular(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec2f, wi: ptr<function, vec3f>) -> f32
@@ -1087,13 +1091,11 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
   /*
   TODO:
-  - Optimize GGX sampling (direct cos(theta))
   - Refactoring PDF handling for Cook-Torrance
   - Non-uniform light picking back in
-  - Transmission/Refraction?
-  - Path space regularization (increase roughness)
   - Try LDS once more
   - Clean up globals
+  - Transmission/Refraction
   */
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
@@ -1136,7 +1138,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       col += throughput * globals.bgColor;
       break;
     }
-    
+
     // Scale indirect light contribution by material
     throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular, specProb) * dot(ia.nrm, wi); // ia.faceDir * ia.nrm
 
