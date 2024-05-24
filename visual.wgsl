@@ -765,6 +765,11 @@ fn mtlToSpecularF0(mtl: Mtl) -> vec3f
   return mix(f0, mtl.col, mtl.metallic);
 }
 
+fn getRoughness(mtl: Mtl) -> f32
+{
+  return saturate(mtl.roughness * mtl.roughness - EPS) + EPS;
+}
+
 // Boksansky: Crash Cource in BRDF Implementation
 // Cook/Torrance: A Reflectance Model for Computer Graphics
 // Walter et al: Microfacet Models for Refraction through Rough Surfaces
@@ -784,8 +789,8 @@ fn fresnelSchlick(cosTheta: f32, f0: vec3f) -> vec3f
 
 fn geometryPartialGGX(v: vec3f, n: vec3f, h: vec3f, alpha: f32) -> f32
 {
-  var VoHSqr = saturate(dot(v, h));
-  let chi = step(EPS, VoHSqr / saturate(dot(n, v)));
+  var VoHSqr = max(0.0, dot(v, h));
+  let chi = step(EPS, VoHSqr / max(0.0, dot(n, v)));
   VoHSqr = VoHSqr * VoHSqr;
   let tan2 = (1.0 - VoHSqr) / VoHSqr;
   return (chi * 2.0) / (1.0 + sqrt(1.0 + alpha * alpha * tan2));
@@ -803,8 +808,7 @@ fn sampleGGX(roughness: f32, r0: vec2f) -> vec3f
 fn sampleSpecular(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec2f, wi: ptr<function, vec3f>) -> f32
 {
   let r = reflect(-wo, n);
-  let roughness = saturate(mtl.roughness - EPS) + EPS;
-  *wi = normalize(createONB(r) * sampleGGX(roughness, r0));
+  *wi = normalize(createONB(r) * sampleGGX(getRoughness(mtl), r0));
 
   if(dot(n, wo) <= 0.0 || dot(n, *wi) <= 0.0) {
     return 0.0;
@@ -816,24 +820,23 @@ fn sampleSpecular(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec2f, wi: ptr<function, ve
 fn sampleSpecularPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> f32
 {
   let h = normalize(wo + wi);
-  let roughness = saturate(mtl.roughness - EPS) + EPS;
-  return distributionGGX(n, h, roughness) * max(0.0, dot(n, h));
+  return distributionGGX(n, h, getRoughness(mtl)) * max(0.0, dot(n, h));
 }
 
 fn evalSpecular(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<function, vec3f>) -> vec3f
 {
   let h = normalize(wo + wi);
 
-  let cosT = saturate(dot(n, wi));
+  let cosT = max(0.0, dot(n, wi));
   let sinT = sqrt(1.0 - cosT * cosT);
 
-  let roughness = saturate(mtl.roughness - EPS) + EPS;
+  let roughness = getRoughness(mtl);
   let geom = geometryPartialGGX(wo, n, h, roughness) * geometryPartialGGX(wi, n, h, roughness); 
   
   let f0 = mtlToSpecularF0(mtl);
-  *fres = fresnelSchlick(saturate(dot(wo, h)), f0);
+  *fres = fresnelSchlick(max(0.0, dot(wo, h)), f0);
 
-  let denom = saturate(4.0 * (saturate(dot(n, wo)) * saturate(dot(n, h)) + 0.05));
+  let denom = saturate(4.0 * (max(0.0, dot(n, wo)) * max(0.0, dot(n, h)) + 0.05));
 
   // Pre-divided by pdf
   return geom * (*fres) * sinT / denom;
@@ -859,7 +862,7 @@ fn getSpecularProb(mtl: Mtl, wo: vec3f, n: vec3f) -> f32
 {
   // No half vector available yet, use normal for fresnel diff/spec separation
   let f0 = mtlToSpecularF0(mtl);
-  let fres = fresnelSchlick(saturate(dot(n, wo)), f0);
+  let fres = fresnelSchlick(max(0.0, dot(n, wo)), f0);
 
   let s = luminance(fres);
   let d = (1.0 - s) * luminance((1.0 - mtl.metallic) * mtl.col);
@@ -1084,8 +1087,6 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
   /*
   TODO:
-  - Clean up: saturate vs. max vs. abs
-  - Roughness input squared
   - Optimize GGX sampling (direct cos(theta))
   - Refactoring PDF handling for Cook-Torrance
   - Non-uniform light picking back in
@@ -1217,7 +1218,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
       let brdf = evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
       if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
-        col += throughput * brdf * gsa * emission * saturate(dot(ia.faceDir * ia.nrm, ltriWi)) / ltriPdf;
+        col += throughput * brdf * gsa * emission * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) / ltriPdf;
       }
     }
 
