@@ -10,6 +10,7 @@ mtl mtl_init(vec3 c)
 {
   return (mtl){
     .col = c,
+    //.col = c.x > 1.0f ? c : (vec3){ 1.0f, 1.0f, 1.0f },
     .metallic = 0.0f,
     .roughness = 0.0f,
     .reflectance = 0.0f,
