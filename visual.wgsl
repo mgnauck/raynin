@@ -886,62 +886,9 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> vec3f
   return vec3f(0);
 }
 
-fn sampleLights(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriNrm: vec3f, lightPower: f32) -> f32
 {
-  // Pick a ltri uniformly
-  let ltriCnt = arrayLength(&ltris);
-  let ltriId = u32(floor(r0.z * f32(ltriCnt)));
-  let ltri = &ltris[ltriId];
-
-  let bc = sampleBarycentric(r0.xy);
-  *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
-  *ltriNrm = (*ltri).nrm;
-
-  let ldir = pos - *ltriPos;
-  var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
-  visible &= dot(ldir, n) < 0; // Not facing (behind)
-
-  *pdf = 1.0 / ((*ltri).area * f32(ltriCnt));
-  *emission = (*ltri).emission;
-
-  return visible && *pdf > EPS;
-}
-
-fn sampleLightsPdf(pos: vec3f, n: vec3f, ltriId: u32) -> f32
-{
-  return 1.0 / (ltris[ltriId].area * f32(arrayLength(&ltris)));
-}
-
-fn geomSolidAngle(pos: vec3f, surfPos: vec3f, surfNrm: vec3f) -> f32
-{
-  // Distance attenuation ('geometric solid angle')
-  var dir = pos - surfPos;
-  let dist = length(dir);
-  dir /= dist;
-  return abs(dot(surfNrm, dir)) / (dist * dist);
-}
-
-fn samplePixel(pixelPos: vec2f, r: vec2f) -> vec3f
-{
-  var pixelSample = globals.pixelTopLeft + globals.pixelDeltaX * pixelPos.x + globals.pixelDeltaY * pixelPos.y;
-  pixelSample += (r.x - 0.5) * globals.pixelDeltaX + (r.y - 0.5) * globals.pixelDeltaY;
-  return pixelSample;
-}
-
-fn sampleEye(r: vec2f) -> vec3f
-{
-  var eyeSample = globals.eye;
-  if(globals.focAngle > 0) {
-    let focRadius = globals.focDist * tan(0.5 * radians(globals.focAngle));
-    let diskSample = sampleDisk(r);
-    eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
-  }
-  return eyeSample;
-}
-
-fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPoint: vec3f, ltriNrm: vec3f, lightPower: f32) -> f32
-{
-  var lightDir = ltriPoint - pos;
+  var lightDir = ltriPos - pos;
   let invDist = 1.0 / length(lightDir);
   lightDir *= invDist;
 
@@ -957,7 +904,7 @@ fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPoint: vec3f, ltriNrm: vec3f
   return lnDotL * nDotL * lightPower * invDist * invDist;
 }
 
-fn calcLTriPickProb(pos: vec3f, nrm: vec3f, ltriPoint: vec3f, ltriId: u32) -> f32
+fn calcLTriPickProb(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
 {
   // Calculate picking probability with respect to ltri contributions
   var contributions: array<f32, MAX_LTRIS>;
@@ -967,7 +914,7 @@ fn calcLTriPickProb(pos: vec3f, nrm: vec3f, ltriPoint: vec3f, ltriId: u32) -> f3
   // Calc contribution of each ltri with the given light dir/pos and total of all contributions
   for(var i=0u; i<ltriCnt; i++) {
     let ltri = &ltris[i];
-    let curr = calcLTriContribution(pos, nrm, ltriPoint, (*ltri).nrm, (*ltri).power);
+    let curr = calcLTriContribution(pos, nrm, ltriPos, (*ltri).nrm, (*ltri).power);
     contributions[i] = curr;
     totalContrib += curr;
   }
@@ -1019,6 +966,74 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
   return ltriId;
 }
 
+fn sampleLTris(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+{
+  let bc = sampleBarycentric(r0.xy);
+
+  // Pick a ltri uniformly
+  //let ltriCnt = arrayLength(&ltris);
+  //let ltriId = u32(floor(r0.z * f32(ltriCnt)));
+
+  // Pick ltri via contribution
+  var pickProb: f32;
+  let ltriId = pickLTriRandomly(pos, n, r0.z, bc, &pickProb);
+  if(pickProb == 0.0) {
+    return false;
+  }
+
+  let ltri = &ltris[ltriId];
+
+  *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
+  *ltriNrm = (*ltri).nrm;
+
+  let ldir = pos - *ltriPos;
+  var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
+  visible &= dot(ldir, n) < 0; // Not facing (behind)
+
+  //*pdf = 1.0 / ((*ltri).area * f32(ltriCnt)); // Uniform
+  *pdf = pickProb / (*ltri).area;
+
+  *emission = (*ltri).emission;
+
+  return visible;
+}
+
+fn sampleLTriPdf(pos: vec3f, n: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
+{
+  // Uniform
+  //return 1.0 / (ltris[ltriId].area * f32(arrayLength(&ltris)));
+
+  let pickProb = calcLTriPickProb(pos, n, ltriPos, ltriId);
+  return pickProb / ltris[ltriId].area;
+}
+
+fn geomSolidAngle(pos: vec3f, surfPos: vec3f, surfNrm: vec3f) -> f32
+{
+  // Distance attenuation ('geometric solid angle'), converts from direction to area
+  var dir = pos - surfPos;
+  let dist = length(dir);
+  dir /= dist;
+  return abs(dot(surfNrm, dir)) / (dist * dist);
+}
+
+fn samplePixel(pixelPos: vec2f, r: vec2f) -> vec3f
+{
+  var pixelSample = globals.pixelTopLeft + globals.pixelDeltaX * pixelPos.x + globals.pixelDeltaY * pixelPos.y;
+  pixelSample += (r.x - 0.5) * globals.pixelDeltaX + (r.y - 0.5) * globals.pixelDeltaY;
+  return pixelSample;
+}
+
+fn sampleEye(r: vec2f) -> vec3f
+{
+  var eyeSample = globals.eye;
+  if(globals.focAngle > 0) {
+    let focRadius = globals.focDist * tan(0.5 * radians(globals.focAngle));
+    let diskSample = sampleDisk(r);
+    eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
+  }
+  return eyeSample;
+}
+
 fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr<function, Mtl>)
 {
   let inst = instances[hit.e & INST_ID_MASK];
@@ -1067,10 +1082,11 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
   /*
   TODO:
-  - Non-uniform light picking back in
   - Try LDS once more
   - Clean up globals
   - Transmission/Refraction
+  - Optimize calculating terms for sampling/brdf
+  - Optimize light pdf calc
   */
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
@@ -1083,7 +1099,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    if(sampleLights(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLTris(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       // Apply MIS
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
       var ltriWi = normalize(ltriPos - ia.pos);
@@ -1128,7 +1144,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       if(ia.faceDir > 0) {
         // Apply MIS
         let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
-        let ltriPdf = sampleLightsPdf(lastPos, lastNrm, ia.ltriId);
+        let ltriPdf = sampleLTriPdf(lastPos, lastNrm, ia.pos, ia.ltriId);
         let weight = pdf * gsa / (pdf * gsa + ltriPdf);
         col += throughput * weight * mtl.col;
       }
@@ -1189,7 +1205,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    if(sampleLights(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLTris(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
       let brdf = evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
