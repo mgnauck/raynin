@@ -100,20 +100,21 @@ void init_scene_riow(scene *s)
   cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   uint16_t mtl_id = 0;
+  uint16_t lid = 0;
   mtl m;
   mat4 transform, translation, rotation, scale;
 
   // Light meshes (need to be unique!)
-  m = mtl_init((vec3){ 1.0006f, 1.0006, 1.006f });
+  m = mtl_init((vec3){ 1.16f, 1.16, 1.16f });
   mtl_id = scene_add_mtl(s, &m);
-  uint16_t lid = scene_add_quad(s, 1, 1, mtl_id);
+  lid = scene_add_quad(s, 1, 1, mtl_id);
   for(uint8_t i=1; i<LIGHT_CNT; i++) { 
     scene_add_quad(s, 1, 1, mtl_id);
   }
 
   // Sphere mesh
   uint16_t sid = scene_add_uvsphere(s, 1.0f, 20, 20, mtl_id, false);
-  //uint16_t sid = scene_add_icosphere(s, 2, mtl_id, false);
+  //uint16_t sid = scene_add_icosphere(s, 3, mtl_id, false);
   //uint16_t sid = scene_add_mesh(s, teapot, mtl_id, false);
   //uint16_t sid = scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1, false);
   

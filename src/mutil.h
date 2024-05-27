@@ -42,10 +42,4 @@ uint32_t  pcg_rand(void);
 float     pcg_randf(void);
 float     pcg_randf_rng(float start, float end);
 
-// Quasirandom sequence (LDS)
-void      qrand_alpha(uint32_t dim, float *alpha);
-void      qrand_init(uint32_t dim, uint32_t n, float *alpha, float *values);
-void      qrand_get_next(uint32_t dim, float *alpha, float *last_values, float *new_values);
-void      qrand_get_next_n(uint32_t dim, uint32_t n, float *alpha, float *last_values, float *new_values);
-
 #endif

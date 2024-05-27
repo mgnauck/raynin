@@ -4,12 +4,12 @@ struct Global
   height:       u32,
   spp:          u32,
   maxBounces:   u32,
-  rngSeed1:     f32, // TODO Remove
-  rngSeed2:     f32, // TODO Remove
-  gatheredSpp:  f32, // TODO Remove/make u32
-  weight:       f32,
+  frame:        u32,
+  gatheredSpp:  u32,
+  pad0:         u32,
+  pad1:         u32,
   bgColor:      vec3f,
-  frame:        f32, // TODO Make u32
+  weight:       f32,
   eye:          vec3f,
   vertFov:      f32,
   right:        vec3f,
@@ -17,14 +17,11 @@ struct Global
   up:           vec3f,
   focAngle:     f32,
   pixelDeltaX:  vec3f,
-  pad1:         f32,
-  pixelDeltaY:  vec3f,
   pad2:         f32,
-  pixelTopLeft: vec3f,
+  pixelDeltaY:  vec3f,
   pad3:         f32,
-  // Use vec4 to adhere to stride requirement of 16 for arrays
-  // TODO This should be possible as runtime sized array (not on Firefox yet?)
-  randAlpha:    array<vec4f, 20u>
+  pixelTopLeft: vec3f,
+  pad4:         f32,
 }
 
 struct Hit
@@ -135,7 +132,6 @@ const ST_SPHERE           = 2u;
 
 // General constants
 const EPS                 = 0.0001;
-const GEOM_EPS            = 0.0001;
 const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
 const TWO_PI              = 6.283185;
@@ -154,8 +150,8 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(7) var<storage, read> materials: array<Mtl>;
 @group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
-const MAX_LTRIS     = 64;
-const MAX_NODE_CNT  = 32;
+const MAX_LTRIS     = 64u;
+const MAX_NODE_CNT  = 32u;
 
 // Traversal stacks for bvhs
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
@@ -163,6 +159,25 @@ var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
 // State of prng
 var<private> rng: vec4u;
+
+// PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
+fn rand4() -> vec4f
+{
+  rng = rng * 1664525u + 1013904223u;
+
+  rng.x += rng.y * rng.w;
+  rng.y += rng.z * rng.x;
+  rng.z += rng.x * rng.y;
+  rng.w += rng.y * rng.z;
+
+  rng = rng ^ (rng >> vec4u(16));
+  rng.x += rng.y * rng.w;
+  rng.y += rng.z * rng.x;
+  rng.z += rng.x * rng.y;
+  rng.w += rng.y * rng.z;
+
+  return ldexp(vec4f((rng >> vec4u(22)) ^ rng), vec4i(-32));
+}
 
 fn minComp3(v: vec3f) -> f32
 {
@@ -208,31 +223,12 @@ fn createONB(n: vec3f) -> mat3x3f
 }
 
 // Waechter/Binder: A Fast and Robust Method for Avoiding Self-Intersection
-// From Ray Tracing Gems (chapter 6). Hope the vectorization & conversion to wgsl is correct :)
+// Hope the vectorization & conversion to wgsl is correct :)
 fn posOfs(p: vec3f, n: vec3f) -> vec3f
 {
   let ofInt = vec3i(INT_SCALE * n);
   let pInt = bitcast<vec3f>(bitcast<vec3i>(p) + select(ofInt, -ofInt, p < vec3f(0)));
   return select(pInt, p + FLOAT_SCALE * n, abs(p) < ORIGIN);
-}
-
-// PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
-fn rand4() -> vec4f
-{
-  rng = rng * 1664525u + 1013904223u;
-
-  rng.x += rng.y * rng.w;
-  rng.y += rng.z * rng.x;
-  rng.z += rng.x * rng.y;
-  rng.w += rng.y * rng.z;
-
-  rng = rng ^ (rng >> vec4u(16));
-  rng.x += rng.y * rng.w;
-  rng.y += rng.z * rng.x;
-  rng.z += rng.x * rng.y;
-  rng.w += rng.y * rng.z;
-
-  return ldexp(vec4f((rng >> vec4u(22)) ^ rng), vec4i(-32));
 }
 
 // Parallelogram method, https://mathworld.wolfram.com/TrianglePointPicking.html
@@ -934,8 +930,8 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
   // Calc contribution of each ltri and total of all contributions
   for(var i=0u; i<ltriCnt; i++) {
     let ltri = &ltris[i];
-    let ltriPoint = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
-    let curr = calcLTriContribution(pos, nrm, ltriPoint, (*ltri).nrm, (*ltri).power);
+    let ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
+    let curr = calcLTriContribution(pos, nrm, ltriPos, (*ltri).nrm, (*ltri).power);
     contributions[i] = curr;
     totalContrib += curr;
   }
@@ -1053,11 +1049,14 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
     // Either use the material id from the triangle or the material override from the instance
     *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
     (*ia).nrm = calcTriNormal(hit, inst, tri);
-    (*ia).ltriId = tri.ltriId;
+    (*ia).ltriId = select(MAX_LTRIS + 1u, tri.ltriId, isEmissive(*mtl));
   }
 
   // Backside hit
   (*ia).faceDir = select(1.0, -1.0, dot(dir, (*ia).nrm) > 0);
+
+  // Flip normal if backside, except if we hit a ltri
+  (*ia).nrm *= select((*ia).faceDir, 1.0, isEmissive(*mtl));
 }
 
 fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
@@ -1080,15 +1079,6 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   var throughput = vec3f(1);
   var wasSpecular = false;
 
-  /*
-  TODO:
-  - Try LDS once more
-  - Clean up globals
-  - Transmission/Refraction
-  - Optimize calculating terms for sampling/brdf
-  - Optimize light pdf calc
-  */
-
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
     let r0 = rand4();
@@ -1099,29 +1089,29 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    if(sampleLTris(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       // Apply MIS
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-      let diffusePdf = sampleDiffusePdf(ia.faceDir * ia.nrm, ltriWi);
-      let specularPdf = sampleSpecularPdf(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
+      let diffusePdf = sampleDiffusePdf(ia.nrm, ltriWi);
+      let specularPdf = sampleSpecularPdf(mtl, ia.wo, ia.nrm, ltriWi);
       let weight = ltriPdf / (ltriPdf + specularPdf * gsa + diffusePdf * gsa);
-      let brdf = evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
-      if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
-        col += throughput * brdf * gsa * weight * emission * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) / ltriPdf;
+      let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi);
+      if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
+        col += throughput * brdf * gsa * weight * emission * max(0.0, dot(ia.nrm, ltriWi)) / ltriPdf;
       }
     }
 
     // Sample material
     var wi: vec3f;
     var pdf: f32;
-    if(!sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular, &pdf)) {
+    if(!sampleMaterial(mtl, ia.wo, ia.nrm, r1.xyz, &wi, &wasSpecular, &pdf)) {
       break;
     }
 
     // Trace indirect light direction
-    let ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
+    let ori = posOfs(ia.pos, ia.nrm);
     let dir = wi;
     hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
@@ -1130,11 +1120,11 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
 
     // Scale indirect light contribution by material
-    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular) * dot(ia.faceDir * ia.nrm, wi) / pdf;
+    throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, wasSpecular) * dot(ia.nrm, wi) / pdf;
 
     // Save for light hit MIS calculation
     let lastPos = ia.pos;
-    let lastNrm = ia.faceDir * ia.nrm;
+    let lastNrm = ia.nrm;
 
     finalizeHit(ori, dir, hit, &ia, &mtl);
 
@@ -1205,22 +1195,22 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    if(sampleLTris(ia.pos, ia.faceDir * ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-      let brdf = evalMaterialCombined(mtl, ia.wo, ia.faceDir * ia.nrm, ltriWi);
-      if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.faceDir * ia.nrm), posOfs(ltriPos, ltriNrm))) {
-        col += throughput * brdf * gsa * emission * max(0.0, dot(ia.faceDir * ia.nrm, ltriWi)) / ltriPdf;
+      let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi);
+      if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
+        col += throughput * brdf * gsa * emission * max(0.0, dot(ia.nrm, ltriWi)) / ltriPdf;
       }
     }
 
     // Sample material
     var wi: vec3f;
     var pdf: f32;
-    if(!sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r1.xyz, &wi, &wasSpecular, &pdf)) {
+    if(!sampleMaterial(mtl, ia.wo, ia.nrm, r1.xyz, &wi, &wasSpecular, &pdf)) {
       break;
     }
-    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, wasSpecular) * dot(ia.faceDir * ia.nrm, wi) / pdf;
+    throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, wasSpecular) * dot(ia.nrm, wi) / pdf;
 
     // Russian roulette
     // Terminate with prob inverse to throughput
@@ -1233,7 +1223,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     throughput *= 1.0 / p;
     
     // Next ray
-    ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
+    ori = posOfs(ia.pos, ia.nrm);
     dir = wi;
   }
 
@@ -1271,10 +1261,10 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var wi: vec3f;
     var isSpecular: bool;
     var pdf: f32;
-    if(!sampleMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, r0.xyz, &wi, &isSpecular, &pdf)) {
+    if(!sampleMaterial(mtl, ia.wo, ia.nrm, r0.xyz, &wi, &isSpecular, &pdf)) {
       break;
     }
-    throughput *= evalMaterial(mtl, ia.wo, ia.faceDir * ia.nrm, wi, isSpecular) * dot(ia.faceDir * ia.nrm, wi) / pdf;
+    throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, isSpecular) * dot(ia.nrm, wi) / pdf;
 
     // Russian roulette
     // Terminate with prob inverse to throughput
@@ -1287,7 +1277,7 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     throughput *= 1.0 / p;
 
     // Next ray
-    ori = posOfs(ia.pos, ia.faceDir * ia.nrm);
+    ori = posOfs(ia.pos, ia.nrm);
     dir = wi;
   }
 
@@ -1303,7 +1293,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 
   var col = vec3f(0);
   for(var i=0u; i<globals.spp; i++) {
-    rng = vec4u(globalId.xy, u32(globals.frame), i);
+    rng = vec4u(globalId.xy, globals.frame, i);
     let r0 = rand4();
     let eye = sampleEye(r0.xy);
     col += renderMIS(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));

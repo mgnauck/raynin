@@ -22,11 +22,9 @@
 #define GLOB_BUF_OFS_FRAME  16
 #define GLOB_BUF_OFS_CAM    48
 #define GLOB_BUF_OFS_VIEW   96
-#define GLOB_BUF_OFS_SEQ    144
+#define GLOB_BUF_SIZE       144
 
 #define MAX_BOUNCES         5
-#define SEQ_DIM             16 // Dimensionality of a path/sequence
-#define SEQ_LEN             MAX_BOUNCES * SEQ_DIM
 
 // GPU buffer types
 typedef enum buf_type {
@@ -49,7 +47,6 @@ typedef struct render_data {
   uint32_t  frame;
   uint32_t  gathered_spp;
   vec3      bg_col;
-  float     *alpha;
 } render_data;
 
 #ifndef NATIVE_BUILD
@@ -72,7 +69,7 @@ void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
     uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
   gpu_create_res(
-      GLOB_BUF_OFS_SEQ + SEQ_LEN * sizeof(float), // Globals + quasirandom sequence (uniform buf))
+      GLOB_BUF_SIZE,
       total_tri_cnt * sizeof(tri), // Tris
       total_ltri_cnt * sizeof(ltri), // LTris
       total_tri_cnt * sizeof(uint32_t), // Indices
@@ -94,17 +91,12 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
   rd->frame = 0;
   rd->gathered_spp = 0;
   rd->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
-  rd->alpha = malloc(SEQ_LEN * sizeof(*rd->alpha));
-
-  // Initialize alphas for quasirandom sequence (low discrepancy series)
-  qrand_alpha(SEQ_LEN, rd->alpha);
 
   return rd;
 }
 
 void renderer_release(render_data *rd)
 {
-  free(rd->alpha);
   free(rd);
 }
 
@@ -151,9 +143,6 @@ void renderer_update_static(render_data *rd)
   // Push part of globals
   uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
-
-  // Push alphas of quasi random sequence
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_SEQ, rd->alpha, SEQ_LEN * sizeof(*rd->alpha));
 #endif
 
   // Prepare bvhs
@@ -224,10 +213,11 @@ void renderer_update(render_data *rd, float time)
 
 #ifndef NATIVE_BUILD
   // Push frame data
-  float frame[8] = { pcg_randf(), pcg_randf(),
-    (float)rd->gathered_spp, rd->spp / (float)(rd->gathered_spp + rd->spp),
-    rd->bg_col.x, rd->bg_col.y, rd->bg_col.z, (float)rd->frame };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frame, sizeof(frame));
+  uint32_t frameUint[4] = { rd->frame, rd->gathered_spp, /* pad */ 0, /* pad */ 0 };
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frameUint, sizeof(frameUint));
+  float frameFloat[4] = { rd->bg_col.x, rd->bg_col.y, rd->bg_col.z,
+    rd->spp / (float)(rd->gathered_spp + rd->spp) };
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME + sizeof(frameUint), frameFloat, sizeof(frameFloat));
 #endif
 
   // Update frame and sample counter
