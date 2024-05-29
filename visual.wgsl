@@ -868,15 +868,15 @@ fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, ve
 
 fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, isSpecular: bool) -> vec3f
 {
+  // Diffuse not scaled by fresnel
   var fres: vec3f;
   return select(evalDiffuse(mtl, n, wi), evalSpecular(mtl, wo, n, wi, &fres), isSpecular);
 }
 
-fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> vec3f
+fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<function, vec3f>) -> vec3f
 {
   if(dot(n, wi) > 0.0) {
-    var fres: vec3f;
-    return evalSpecular(mtl, wo, n, wi, &fres) + (vec3f(1) - fres) * evalDiffuse(mtl, n, wi);
+    return evalSpecular(mtl, wo, n, wi, fres) + evalDiffuse(mtl, n, wi) * (vec3f(1) - *fres);
   }
   
   return vec3f(0);
@@ -1095,12 +1095,13 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-      let diffusePdf = sampleDiffusePdf(ia.nrm, ltriWi);
-      let specularPdf = sampleSpecularPdf(mtl, ia.wo, ia.nrm, ltriWi);
-      let weight = ltriPdf / (ltriPdf + specularPdf * gsa + diffusePdf * gsa);
-      let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi);
-      if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
-        col += throughput * brdf * gsa * weight * emission * max(0.0, dot(ia.nrm, ltriWi)) / ltriPdf;
+      var fres: vec3f;
+      let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
+      let diffusePdf = sampleDiffusePdf(ia.nrm, ltriWi) * (1.0 - fres);
+      let specularPdf = sampleSpecularPdf(mtl, ia.wo, ia.nrm, ltriWi) * fres;
+      let weight = ltriPdf / (ltriPdf + (specularPdf + diffusePdf) * gsa);
+      if(any(brdf * gsa * weight > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
+        col += throughput * brdf * gsa * weight * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
       }
     }
 
@@ -1199,7 +1200,8 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
-      let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi);
+      var fres: vec3f;
+      let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
       if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
         col += throughput * brdf * gsa * emission * max(0.0, dot(ia.nrm, ltriWi)) / ltriPdf;
       }
@@ -1297,7 +1299,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
     rng = vec4u(globalId.xy, globals.frame, i);
     let r0 = rand4();
     let eye = sampleEye(r0.xy);
-    col += renderMIS(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));
+    col += renderNaive(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));
   }
 
   let index = globals.width * globalId.y + globalId.x;
