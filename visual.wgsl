@@ -982,16 +982,17 @@ fn sampleLTris(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, l
   *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
   *ltriNrm = (*ltri).nrm;
 
-  let ldir = pos - *ltriPos;
-  var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
-  visible &= dot(ldir, n) < 0; // Not facing (behind)
+  //let ldir = pos - *ltriPos;
+  //var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
+  //visible &= dot(ldir, n) < 0; // Not facing (behind)
 
   //*pdf = 1.0 / ((*ltri).area * f32(ltriCnt)); // Uniform
   *pdf = pickProb / (*ltri).area;
 
   *emission = (*ltri).emission;
 
-  return visible;
+  //return visible;
+  return true;
 }
 
 fn sampleLTriPdf(pos: vec3f, n: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
