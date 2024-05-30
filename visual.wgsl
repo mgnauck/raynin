@@ -1004,9 +1004,11 @@ fn sampleLTriPdf(pos: vec3f, n: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
   return pickProb / ltris[ltriId].area;
 }
 
+// Lessig: The Area Formulation of Light Transport
 fn geomSolidAngle(pos: vec3f, surfPos: vec3f, surfNrm: vec3f) -> f32
 {
-  // Distance attenuation ('geometric solid angle'), converts from direction to area
+  // Distance attenuation
+  // Converts from solid angle to surface area
   var dir = pos - surfPos;
   let dist = length(dir);
   dir /= dist;
