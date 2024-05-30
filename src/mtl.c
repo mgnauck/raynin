@@ -11,7 +11,7 @@ mtl mtl_init(vec3 c)
   return (mtl){
     .col = c,
     .metallic = 0.0f,
-    .roughness = 0.25f,
+    .roughness = 0.0f,
     .reflectance = 0.0f,
   };
 }
