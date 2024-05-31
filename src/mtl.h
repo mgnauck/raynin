@@ -10,8 +10,8 @@ typedef struct mtl
   float metallic;       // Appearance range from dielectric to conductor (0 - 1)
   float roughness;      // Perfect reflection to completely diffuse diffuse (0 - 1)
   float reflectance;    // Reflectance for non-metallic materials (0 - 1)
-  float pad0;
-  float pad1;
+  float ior;            // Temp
+  float refracting;     // Temp
 } mtl;
 
 bool  mtl_is_emissive(const mtl *mtl);

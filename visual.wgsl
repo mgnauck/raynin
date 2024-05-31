@@ -54,8 +54,8 @@ struct Mtl
   metallic: f32,          // Appearance range from dielectric to conductor (0 - 1)
   roughness: f32,         // Perfect reflection to completely diffuse (0 - 1)
   reflectance: f32,       // Reflectance of non-metallic materials (0 - 1)
-  pad0: f32,
-  pad1: f32
+  ior: f32,               // Temp
+  refracting: f32         // Temp
 }
 
 struct IA
