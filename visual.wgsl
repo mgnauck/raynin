@@ -866,6 +866,12 @@ fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, ve
   return *pdf > 0.0;
 }
 
+fn sampleMaterialCombinedPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: vec3f) -> f32
+{
+  let f = luminance(fres);
+  return sampleDiffusePdf(n, wi) * (1.0 - f) + sampleSpecularPdf(mtl, wo, n, wi) * f;
+}
+
 fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: vec3f, isSpecular: bool) -> vec3f
 {
   return select(
@@ -1102,9 +1108,8 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
       var fres: vec3f;
       let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
-      let diffusePdf = sampleDiffusePdf(ia.nrm, ltriWi) * (1.0 - fres);
-      let specularPdf = sampleSpecularPdf(mtl, ia.wo, ia.nrm, ltriWi) * fres;
-      let weight = ltriPdf / (ltriPdf + (specularPdf + diffusePdf) * gsa);
+      let brdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ltriWi, fres);
+      let weight = ltriPdf / (ltriPdf + brdfPdf * gsa);
       if(any(brdf * gsa * weight > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
         col += throughput * brdf * gsa * weight * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
       }
