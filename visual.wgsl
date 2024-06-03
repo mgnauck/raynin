@@ -53,9 +53,9 @@ struct Mtl
   col: vec3f,             // Base color (diff col of non-metallics, spec col of metallics)
   metallic: f32,          // Appearance range from dielectric to conductor (0 - 1)
   roughness: f32,         // Perfect reflection to completely diffuse (0 - 1)
-  reflectance: f32,       // Reflectance of non-metallic materials (0 - 1)
-  ior: f32,               // Temp
-  refracting: f32         // Temp
+  ior: f32,               // Index of refraction
+  refractive: f32,        // Flag if material refracts
+  pad0: f32
 }
 
 struct IA
@@ -747,7 +747,7 @@ fn isEmissive(mtl: Mtl) -> bool
 
 fn luminance(col: vec3f) -> f32
 {
-	return dot(col, vec3f(0.2126, 0.7152, 0.0722));
+  return dot(col, vec3f(0.2126, 0.7152, 0.0722));
 }
 
 fn getRoughness(mtl: Mtl) -> f32
@@ -755,25 +755,17 @@ fn getRoughness(mtl: Mtl) -> f32
   return saturate(mtl.roughness * mtl.roughness - EPS) + EPS;
 }
 
-fn mtlToSpecularF0(mtl: Mtl) -> vec3f
+fn mtlToF0(mtl: Mtl) -> vec3f
 {
-  var f0 = (1.0 - mtl.ior) / (1.0 + mtl.ior);
+  var f0: f32;
+  f0 = (1.0 - mtl.ior) / (1.0 + mtl.ior);
   f0 *= f0;
-  
+ 
   // For metallic materials we use the base color, otherwise the ior
   return mix(vec3f(f0), mtl.col, mtl.metallic);
 }
 
-fn getSpecularProb(mtl: Mtl, fres: vec3f) -> f32
-{
-  // Evaluate specular probabilty based on fresnel and mtl properties
-  let s = luminance(fres);
-  let d = (1.0 - s) * luminance((1.0 - mtl.metallic) * mtl.col);
-
-  // Avoid extremes to keep variance in check
-  return clamp(s / max(EPS, s + d), 0.1, 0.9);
-}
-
+// https://en.wikipedia.org/wiki/Schlick's_approximation
 fn fresnelSchlick(cosTheta: f32, f0: vec3f) -> vec3f
 {
   return f0 + (vec3f(1.0) - f0) * pow(1.0 - cosTheta, 5.0);
@@ -814,7 +806,7 @@ fn sampleGGXPdf(n: vec3f, m: vec3f, alpha: f32) -> f32
   return distributionGGX(n, m, alpha) * abs(dot(n, m));
 }
 
-fn sampleSpecular(mtl: Mtl, wo: vec3f, n: vec3f, m: vec3f, wi: ptr<function, vec3f>) -> f32
+fn sampleReflection(mtl: Mtl, wo: vec3f, n: vec3f, m: vec3f, wi: ptr<function, vec3f>) -> f32
 {
   if(dot(wo, m) <= 0.0) {
     return 0.0;
@@ -822,19 +814,19 @@ fn sampleSpecular(mtl: Mtl, wo: vec3f, n: vec3f, m: vec3f, wi: ptr<function, vec
 
   // Reflect at microfacet normal
   *wi = reflect(-wo, m);
-  return sampleSpecularPdf(mtl, wo, n, *wi);
+  return sampleReflectionPdf(mtl, wo, n, *wi);
 }
 
-fn sampleSpecularPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> f32
+fn sampleReflectionPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> f32
 {
   let h = sign(dot(n, wo)) * normalize(wo + wi);
   let dwhDwi = 4.0 * abs(dot(wo, h));
   return sampleGGXPdf(n, h, getRoughness(mtl)) / dwhDwi;
 }
 
-fn evalSpecular(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> f32
+fn evalReflection(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f) -> f32
 {
-  // Modulate by sign so that it works for front and back side
+  // Modulate by sign so that half vector works for front and back side
   let h = sign(dot(n, wo)) * normalize(wo + wi);
 
   let roughness = getRoughness(mtl);
@@ -875,8 +867,8 @@ fn sampleRefractionPdf(mtl: Mtl, wo: vec3f, n: vec3f, faceDir: f32, wi: vec3f) -
 
 fn evalRefraction(mtl: Mtl, wo: vec3f, n: vec3f, faceDir: f32, wi: vec3f) -> vec3f
 {
-  let etaI = select(1.0, mtl.ior, faceDir < 0); // incoming
-  let etaT = select(mtl.ior, 1.0, faceDir < 0); // transmitted
+  let etaI = select(1.0, mtl.ior, faceDir < 0);
+  let etaT = select(mtl.ior, 1.0, faceDir < 0);
   var h = -normalize(etaI * wo + etaT * wi);
 
   let WIoH = dot(wi, h);
@@ -912,15 +904,15 @@ fn evalDiffuse(mtl: Mtl, n: vec3f, wi: vec3f) -> vec3f
 fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, faceDir: f32, r0: vec3f, wi: ptr<function, vec3f>, fres: ptr<function, vec3f>, isSpecular: ptr<function, bool>, pdf: ptr<function, f32>) -> bool
 {
   let m = faceDir * sampleGGX(n, r0.xy, getRoughness(mtl));
-  *fres = fresnelSchlick(dot(wo, m), mtlToSpecularF0(mtl));
+  *fres = fresnelSchlick(dot(wo, m), mtlToF0(mtl));
   let p = luminance(*fres);
 
   if(r0.z < p) {
     *isSpecular = true;
-    *pdf = sampleSpecular(mtl, wo, n, m, wi) * p;
+    *pdf = sampleReflection(mtl, wo, n, m, wi) * p;
   } else {
     *isSpecular = false;
-    if(mtl.refracting > 0.0) {
+    if(mtl.refractive > 0.0) { // Do not write as select, likely error in naga
       *pdf = sampleRefraction(mtl, wo, n, faceDir, m, wi) * (1.0 - p);
     } else {
       *pdf = sampleDiffuse(n, r0.xy, wi) * (1.0 - p);
@@ -932,27 +924,17 @@ fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, faceDir: f32, r0: vec3f, wi: pt
 
 fn sampleMaterialCombinedPdf(mtl: Mtl, wo: vec3f, n: vec3f, faceDir: f32, wi: vec3f, fres: vec3f) -> f32
 {
-  var otherPdf: f32;
-  if(mtl.refracting > 0.0) {
-    otherPdf = sampleRefractionPdf(mtl, wo, n, faceDir, wi);
-  } else {
-    otherPdf = sampleDiffusePdf(n, wi);
-  }
-
   let f = luminance(fres);
-  return otherPdf * (1.0 - f) + sampleSpecularPdf(mtl, wo, n, wi) * f;
+  let otherPdf = select(sampleDiffusePdf(n, wi), sampleRefractionPdf(mtl, wo, n, faceDir, wi), mtl.refractive > 0.0);
+  return otherPdf * (1.0 - f) + sampleReflectionPdf(mtl, wo, n, wi) * f;
 }
 
 fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, faceDir: f32, wi: vec3f, fres: vec3f, isSpecular: bool) -> vec3f
 {
   if(isSpecular) {
-    return evalSpecular(mtl, wo, n, wi) * fres;
+    return evalReflection(mtl, wo, n, wi) * fres;
   } else {
-    if(mtl.refracting > 0.0) {
-      return evalRefraction(mtl, wo, n, faceDir, wi) * (vec3f(1) - fres);
-    } else {
-      return evalDiffuse(mtl, n, wi) * (vec3f(1) - fres);
-    }
+    return select(evalDiffuse(mtl, n, wi), evalRefraction(mtl, wo, n, faceDir, wi), mtl.refractive > 0.0) * (vec3f(1) - fres);
   }
 }
 
@@ -960,14 +942,9 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, faceDir: f32, wi: vec3f, 
 {
   if(dot(n, wi) > 0.0) {
     let h = normalize(wo + wi);
-    *fres = fresnelSchlick(dot(wo, h), mtlToSpecularF0(mtl));
-    var otherBrdf: vec3f;
-    if(mtl.refracting > 0.0) {
-      otherBrdf = evalRefraction(mtl, wo, n, faceDir, wi);
-    } else {
-      otherBrdf = evalDiffuse(mtl, n, wi);
-    }
-    return otherBrdf * (vec3f(1) - *fres) + evalSpecular(mtl, wo, n, wi) * (*fres);
+    *fres = fresnelSchlick(dot(wo, h), mtlToF0(mtl));
+    let otherBsdf = select(evalDiffuse(mtl, n, wi), evalRefraction(mtl, wo, n, faceDir, wi), mtl.refractive > 0.0);
+    return otherBsdf * (vec3f(1) - *fres) + evalReflection(mtl, wo, n, wi) * (*fres);
   }
 
   return vec3f(0);
@@ -1189,11 +1166,11 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
       var fres: vec3f;
-      let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, &fres);
-      let brdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, fres);
-      let weight = ltriPdf / (ltriPdf + brdfPdf * gsa);
-      if(any(brdf * gsa * weight > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
-        col += throughput * brdf * gsa * weight * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
+      let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, &fres);
+      let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, fres);
+      let weight = ltriPdf / (ltriPdf + bsdfPdf * gsa);
+      if(any(bsdf * gsa * weight > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
+        col += throughput * bsdf * gsa * weight * emission * abs(dot(ia.nrm, ltriWi)) / ltriPdf;
       }
     }
 
@@ -1294,9 +1271,9 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
       var fres: vec3f;
-      let brdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, &fres);
-      if(any(brdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
-        col += throughput * brdf * gsa * emission * max(0.0, dot(ia.nrm, ltriWi)) / ltriPdf;
+      let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, &fres);
+      if(any(bsdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
+        col += throughput * bsdf * gsa * emission * abs(dot(ia.nrm, ltriWi)) / ltriPdf;
       }
     }
 
@@ -1404,7 +1381,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 {
-  // Workaround for below code which does not pass naga
+  // Workaround for below code which does work with naga
   switch(vertexIndex)
   {
     case 0u: {

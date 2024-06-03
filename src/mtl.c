@@ -11,10 +11,9 @@ mtl mtl_init(vec3 c)
   return (mtl){
     .col = c,
     .metallic = 0.0f,
-    .roughness = 0.5f,
-    .reflectance = 0.0f,
-    .ior = 1.3f,
-    .refracting = 0.0f
+    .roughness = 0.0f,
+    .ior = 1.01f,
+    .refractive = 0.0f
   };
 }
 
@@ -24,8 +23,7 @@ mtl mtl_rand()
     .col = vec3_rand(),
     .metallic = pcg_randf(),
     .roughness = pcg_randf(),
-    .reflectance = pcg_randf(),
-    .ior = 1.3f,
-    .refracting = 0.0f
+    .ior = 1.01f,
+    .refractive = 0.0f
   };
 }

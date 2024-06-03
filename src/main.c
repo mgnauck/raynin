@@ -105,7 +105,7 @@ void init_scene_riow(scene *s)
   mat4 transform, translation, rotation, scale;
 
   // Light meshes (need to be unique!)
-  m = mtl_init((vec3){ 1.36f, 1.36, 1.36f });
+  m = mtl_init((vec3){ 1.16f, 1.16, 1.16f });
   mtl_id = scene_add_mtl(s, &m);
   lid = scene_add_quad(s, 1, 1, mtl_id);
   for(uint8_t i=1; i<LIGHT_CNT; i++) { 
@@ -120,6 +120,7 @@ void init_scene_riow(scene *s)
   
   // Floor mesh
   m = mtl_init((vec3){ 0.25f, 0.25f, 0.25f });
+  m.metallic = 0.0f;
   m.roughness = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
   uint16_t fid = scene_add_quad(s, 10, 10, mtl_id);
@@ -137,38 +138,33 @@ void init_scene_riow(scene *s)
 
   // Floor instance
   mat4_scale(scale, 2.4f);
-  //scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
-  scene_add_inst_mesh(s, fid, -1, scale);
+  scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
+  //scene_add_inst_mesh(s, fid, -1, scale);
  
-  // Reflecting sphere
+  // Reflecting sphere (black)
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
   m = mtl_init((vec3){ 0.0f, 0.0f, 0.0f });
-  m.roughness = 0.0f;
-  m.ior = 1.3f;
-  //m.reflectance = 1.0f;
+  m.ior = 2.3f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
-  scene_add_inst_mesh(s, sid, mtl_id, translation);
+  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_inst_mesh(s, sid, mtl_id, translation);
 
-  // Refracting sphere
+  // Reflecting sphere (white)
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
-  m.roughness = 0.04f;
   m.ior = 1.5f;
-  m.refracting = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_inst_shape(s, ST_SPHERE, 1, translation);
-  scene_add_inst_mesh(s, sid, mtl_id, translation);
+  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_inst_mesh(s, sid, mtl_id, translation);
 
   // Metallic sphere
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   m = mtl_init((vec3){ 0.98f, 0.85f, 0.72f });
   m.metallic = 1.0f;
   m.roughness = 0.5f;
-  m.ior = 1.1f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
-  scene_add_inst_mesh(s, sid, mtl_id, translation);
+  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_inst_mesh(s, sid, mtl_id, translation);
 
   mat4_scale(scale, 0.2f);
   
@@ -177,19 +173,16 @@ void init_scene_riow(scene *s)
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
         m = mtl_init(vec3_rand());
-        //m.roughness = 0.0f;
-        //m.ior = 1.5f;
-        if(pcg_randf() > 0.3f)
-          m.refracting = 1.0f;
-        else if(pcg_randf() > 0.7f)
-          m.metallic = pcg_randf();
-        m.ior = 1.01 + pcg_randf();
-        m.roughness = pcg_randf();
+        if(pcg_randf() < 0.4f) {
+          m.refractive = 1.0f;
+          m.roughness = pcg_randf();
+          m.ior = 1.01 + pcg_randf();
+        }
         mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        //scene_add_inst_shape(s, ST_SPHERE, mtl_id, transform);
-        scene_add_inst_mesh(s, sid, mtl_id, transform);
+        scene_add_inst_shape(s, ST_SPHERE, mtl_id, transform);
+        //scene_add_inst_mesh(s, sid, mtl_id, transform);
       }
     }
   }
