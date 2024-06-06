@@ -6,6 +6,7 @@
 #include "inst.h"
 #include "scene.h"
 #include "renderer.h"
+#include "gltfimp.h"
 #include "settings.h"
 
 #include "data/teapot.h"
@@ -186,6 +187,12 @@ void init_scene_riow(scene *s)
       }
     }
   }
+}
+
+__attribute__((visibility("default")))
+void init_scene(char *gltf, char *bin)
+{
+  gltf_import(cs, gltf, bin);
 }
 
 __attribute__((visibility("default")))

@@ -306,7 +306,23 @@ async function main()
 
   wa = new Wasm(module);
   await wa.instantiate();
+
+  // Create buffers with gltf text and binary data
+  let gltf = await (await fetch("scenes/scene.gltf")).arrayBuffer();
+  let gltfPtr = wa.malloc(gltf.byteLength);
+  wa.memUint8.set(new Uint8Array(gltf), gltfPtr);
+
+  let gltfBin = await (await fetch("scenes/scene.bin")).arrayBuffer();
+  let gltfBinPtr = wa.malloc(gltfBin.byteLength);
+  wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
+
+  console.log("gltf txt size: " + gltf.byteLength);
+  console.log("gltf bin size: " + gltfBin.byteLength);
+
+  // Init scene from gltf data
+  wa.init_scene(gltfPtr, gltfBinPtr);
   
+  // Init renderer and everything else
   wa.init(CANVAS_WIDTH, CANVAS_HEIGHT);
   
   // Pipelines
