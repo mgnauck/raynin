@@ -23,10 +23,6 @@
 	],
 	"nodes":[
 		{
-			"extras":{
-				"sx":10,
-				"sy":10
-			},
 			"mesh":0,
 			"name":"Grid",
 			"rotation":[
@@ -166,6 +162,10 @@
 	],
 	"meshes":[
 		{
+			"extras":{
+				"suby":20,
+				"subx":25
+			},
 			"name":"Grid",
 			"primitives":[
 				{
@@ -350,7 +350,7 @@
 	"buffers":[
 		{
 			"byteLength":58128,
-			"uri":"scene.bin"
+			"uri":"test.bin"
 		}
 	]
 }

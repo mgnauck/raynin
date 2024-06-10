@@ -11,6 +11,57 @@
 #define SBUF_LEN 1024
 char sbuf[SBUF_LEN];
 
+typedef enum prim_type {
+  PT_GRID,
+  PT_CUBE,
+  PT_SPHERE,
+  PT_CYLINDER,
+  PT_MESH
+} prim_type;
+
+typedef enum bufview_type {
+  BVT_SCALAR,
+  BVT_VEC3
+} bufview_type;
+
+typedef struct gltf_prim {
+  uint32_t pos_idx;
+  uint32_t nrm_idx;
+  uint32_t indices;
+  uint32_t mtl_idx;
+} gltf_prim;
+
+typedef struct gltf_mesh {
+  prim_type     type;
+  uint32_t      subx;
+  uint32_t      suby;
+  gltf_prim*    prims;
+  uint32_t      prim_cnt;
+} gltf_mesh;
+
+typedef struct gltf_accessor {
+  uint32_t      buffer_view;
+  uint32_t      component_type;
+  uint32_t      count;
+  bufview_type  type;
+} gltf_accessor;
+
+typedef struct gltf_bufview {
+  uint32_t      buffer;       // Only 1 supported, which is the .bin file that comes with the .gltf
+  uint32_t      byte_len;
+  uint32_t      byte_ofs;
+  uint32_t      target;
+} gltf_bufview;
+
+typedef struct gltf_data {
+  gltf_mesh     *meshes;
+  uint32_t      mesh_cnt;
+  gltf_accessor *accessors;
+  uint32_t      accessor_cnt;
+  gltf_bufview  *bufviews;
+  uint32_t      bufview_cnt;
+} gltf_data;
+
 char *bstrndup(const char *str, size_t len)
 {
   for(int i=0; i<(int)min(len, SBUF_LEN - 1); i++)
@@ -223,6 +274,128 @@ int read_mtls(scene *scene, const char *s, jsmntok_t *t)
   return j;
 }
 
+int read_cam_perspective(cam *c, const char *s, jsmntok_t *t)
+{
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "yfov") == 0) {
+      c->vert_fov = atof(toktostr(s, &t[j + 1]));
+      logc("yfov: %f", c->vert_fov);
+      j += 2;
+      continue;
+    }
+
+    // Ignore
+    j += dump(s, key);
+    if(key->size > 0) {
+      j += dump(s, t + j);
+    }
+  }
+
+  return j;
+}
+
+int read_cam(cam *c, const char *s, jsmntok_t *t)
+{
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "perspective") == 0) {
+      j += 1 + read_cam_perspective(c, s, t + j + 1);
+      continue;
+    }
+
+    // Ignore
+    j += dump(s, key);
+    if(key->size > 0) {
+      j += dump(s, t + j);
+    }
+  }
+
+  return j;
+}
+
+int read_cams(scene *scene, const char *s, jsmntok_t *t)
+{
+  logc(">> cams");
+
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    logc(">>>> cam %i", i);
+    if(i == 0) {
+      // Read parameters of first camera only
+      j += read_cam(&scene->cam, s, t + j);
+    } else {
+      j += dump(s, t + j);
+    }
+    logc("<<<< cam %i", i);
+  }
+
+  logc("<< cams (total: %i)", t->size);
+
+  return j;
+}
+
+int read_meshes(gltf_data *data, const char *s, jsmntok_t *t)
+{
+  logc(">> meshes");
+
+  data->meshes = malloc(t->size * sizeof(*data->meshes));
+  data->mesh_cnt = t->size;
+
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    logc(">>>> mesh %i", i);
+    j += dump(s, t + j);
+    logc("<<<< mesh %i", i);
+  }
+
+  logc("<< meshes (total: %i)", data->mesh_cnt);
+
+  return j;
+}
+
+int read_accessors(gltf_data *data, const char *s, jsmntok_t *t)
+{
+  logc(">> accessors");
+
+  data->accessors = malloc(t->size * sizeof(*data->accessors));
+  data->accessor_cnt = t->size;
+
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    logc(">>>> accessor %i", i);
+    j += dump(s, t + j);
+    logc("<<<< accessor %i", i);
+  }
+
+  logc("<< accessors (total: %i)", data->accessor_cnt);
+
+  return j;
+}
+
+int read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
+{
+  logc(">> bufviews");
+
+  data->bufviews = malloc(t->size * sizeof(*data->bufviews));
+  data->bufview_cnt = t->size;
+
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    logc(">>>> bufview %i", i);
+    j += dump(s, t + j);
+    logc("<<<< bufview %i", i);
+  }
+
+  logc("<< bufviews (total: %i)", data->bufview_cnt);
+
+  return j;
+}
+
 int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
 {
   jsmn_parser parser;
@@ -250,6 +423,12 @@ int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char 
     return 1;
   }
 
+  // Temporary gltf data
+  gltf_data data;
+  data.mesh_cnt = 0;
+  data.accessor_cnt = 0;
+  data.bufview_cnt = 0;
+
   int j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *k = t + j;
@@ -261,9 +440,33 @@ int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char 
       continue;
     }
 
-    // Meshes
+    // Cameras (read parameters of first camera only)
+    if(jsoneq(gltf, k, "cameras") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_cams(s, gltf, t + j);
+      continue;
+    }
 
-    // Nodes
+    // Meshes
+    if(jsoneq(gltf, k, "meshes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_meshes(&data, gltf, t + j);
+      continue;
+    }
+
+    // Accessors
+    if(jsoneq(gltf, k, "accessors") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_accessors(&data, gltf, t + j);
+      continue;
+    }
+
+    // Buffer views
+    if(jsoneq(gltf, k, "bufferViews") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_bufviews(&data, gltf, t + j);
+      continue;
+    }
 
     // Ignore
     logc("////////");
@@ -273,6 +476,16 @@ int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char 
     }
     logc("\\\\\\\\\\\\\\\\");
   }
+
+  // Combine meshes/accessors/bufviews to actual scene meshes
+  // Ignore primitives we can generate or built-intersect
+  // Do not ignore if mtl is emissive (these must be generated or loaded meshes)
+
+  // Read nodes (instances)
+
+  free(data.meshes);
+  free(data.accessors);
+  free(data.bufviews);
 
   return 0;
 }
