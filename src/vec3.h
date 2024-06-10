@@ -39,6 +39,6 @@ vec3  vec3_abs(vec3 v);
 vec3  vec3_uint32(uint32_t v);
 vec3  vec3_spherical(float theta, float phi);
 
-void  vec3_logc(vec3 v);
+void  vec3_logc(const char *prefix, vec3 v);
 
 #endif

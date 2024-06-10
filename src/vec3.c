@@ -119,7 +119,7 @@ vec3 vec3_spherical(float theta, float phi)
   return (vec3){ -cosf(phi) * sinf(theta), -cosf(theta), sinf(phi) * sinf(theta) };
 }
 
-void vec3_logc(vec3 v)
+void vec3_logc(const char *prefix, vec3 v)
 {
-  logc("%6.3f %6.3f %6.3f", v.x, v.y, v.z);
+  logc("%s %6.3f %6.3f %6.3f", prefix, v.x, v.y, v.z);
 }

@@ -1,8 +1,10 @@
 #ifndef GLTFIMP_H
 #define GLTFIMP_H
 
+#include <stddef.h>
+
 typedef struct scene scene;
 
-void gltf_import(scene *s, char *gltf, char *bin);
+int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz);
 
 #endif

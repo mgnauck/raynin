@@ -320,8 +320,9 @@ async function main()
   console.log("gltf bin size: " + gltfBin.byteLength);
 
   // Init scene from gltf data
-  wa.init_scene(gltfPtr, gltfBinPtr);
+  wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength);
   
+/*
   // Init renderer and everything else
   wa.init(CANVAS_WIDTH, CANVAS_HEIGHT);
   
@@ -336,6 +337,7 @@ async function main()
     document.addEventListener("click", startRender, { once: true });
   else
     startRender();
+*/
 }
 
 main();

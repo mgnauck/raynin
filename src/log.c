@@ -9,7 +9,7 @@
 extern void log_buf(char *addr, uint32_t len);
 #endif
 
-#define LINE_BUF_SIZE 1024
+#define LINE_BUF_SIZE 65536
 static char line_buf[LINE_BUF_SIZE];
 
 void log_msg(const char *file, uint32_t line, const char *format, ...)
