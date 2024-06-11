@@ -339,17 +339,178 @@ int read_cams(scene *scene, const char *s, jsmntok_t *t)
   return j;
 }
 
+int read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
+{
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "subx") == 0) {
+      m->subx = atoi(toktostr(s, &t[j + 1]));
+      logc("subx: %i", m->subx);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "suby") == 0) {
+      m->suby = atoi(toktostr(s, &t[j + 1]));
+      logc("suby: %i", m->suby);
+      j += 2;
+      continue;
+    }
+
+    // Ignore
+    j += dump(s, key);
+    if(key->size > 0) {
+      j += dump(s, t + j);
+    }
+  }
+
+  return j;
+}
+
+int read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
+{
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "POSITION") == 0) {
+      p->pos_idx = atoi(toktostr(s, &t[j + 1]));
+      logc("position: %i", p->pos_idx);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "NORMAL") == 0) {
+      p->nrm_idx = atoi(toktostr(s, &t[j + 1]));
+      logc("normal: %i", p->nrm_idx);
+      j += 2;
+      continue;
+    }
+
+    // Ignore
+    j += dump(s, key);
+    if(key->size > 0) {
+      j += dump(s, t + j);
+    }
+  }
+
+  return j;
+}
+
+int read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
+{
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "attributes") == 0) {
+      j += 1 + read_attributes(p, s, t + j + 1);
+      continue;
+    }
+
+    if(jsoneq(s, key, "indices") == 0) {
+      p->indices = atoi(toktostr(s, &t[j + 1]));
+      logc("indices: %i", p->indices);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "material") == 0) {
+      p->mtl_idx = atoi(toktostr(s, &t[j + 1]));
+      logc("material: %i", p->mtl_idx);
+      j += 2;
+      continue;
+    }
+
+    // Ignore
+    j += dump(s, key);
+    if(key->size > 0) {
+      j += dump(s, t + j);
+    }
+  }
+
+  return j;
+}
+
+
+int read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
+{
+  logc(">>>> primitives");
+
+  m->prims = malloc(t->size * sizeof(*m->prims));
+  m->prim_cnt = 0;
+
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    logc(">>>>>> primitive %i", i);
+    j += read_primitive(&m->prims[m->prim_cnt++], s, &t[j]);
+    logc("<<<<<< primitive %i", i);
+  }
+
+  logc("<<<< primitives (total: %i)", m->prim_cnt);
+
+  return j;
+}
+
+int read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
+{
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "extras") == 0) {
+      j += 1 + read_extras(m, s, t + j + 1);
+      continue;
+    }
+
+    if(jsoneq(s, key, "name") == 0) {
+      char *name = toktostr(s, &t[j + 1]);
+      if(strstr(name, "Grid"))
+        m->type = PT_GRID;
+      else if(strstr(name, "Cube"))
+        m->type = PT_CUBE;
+      else if(strstr(name, "Sphere"))
+        m->type = PT_SPHERE;
+      else if(strstr(name, "Cylinder"))
+        m->type = PT_CYLINDER;
+      else
+        m->type = PT_MESH;
+      logc("type: %i (%s)", m->type, name);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "primitives") == 0) {
+      if(t[j + 1].type == JSMN_ARRAY) {
+        j += 1 + read_primitives(m, s, &t[j + 1]);
+        continue;
+      } else
+        logc("Failed to read primitives");
+    }
+
+    // Ignore
+    j += dump(s, key);
+    if(key->size > 0) {
+      j += dump(s, t + j);
+    }
+  }
+
+  return j;
+}
+
 int read_meshes(gltf_data *data, const char *s, jsmntok_t *t)
 {
   logc(">> meshes");
 
   data->meshes = malloc(t->size * sizeof(*data->meshes));
-  data->mesh_cnt = t->size;
+  data->mesh_cnt = 0;
 
   int j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>> mesh %i", i);
-    j += dump(s, t + j);
+    j += read_mesh(&data->meshes[data->mesh_cnt++], s, t + j);
     logc("<<<< mesh %i", i);
   }
 

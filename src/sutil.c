@@ -53,6 +53,21 @@ int strncmp(const char *s1, const char *s2, size_t n)
   return 0;
 }
 
+char *strstr(const char *str, const char *sub)
+{
+  int l = strlen(sub);
+  char *p = (char *)sub;
+  while(*str && *p) {
+    if(*str++ == *p)
+      p++;
+    if(!*p)
+      return (char *)str - l;
+    if(l == p - sub)
+      p = (char *)sub;
+  }
+  return NULL;
+}
+
 float atof(const char* s)
 {
   float res = 0.0f;
@@ -76,6 +91,16 @@ float atof(const char* s)
     }
   }
   return res * fact;
+}
+
+int atoi(const char *s)
+{
+  int i = 0;
+  while(*s) {
+    i = i * 10 + *s - '0';
+    s++;
+  }
+  return i;
 }
 
 #endif
