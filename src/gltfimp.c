@@ -50,6 +50,7 @@ typedef struct gltf_bufview {
   uint32_t      buf; // Only 1 supported, which is the .bin file that comes with the .gltf
   uint32_t      byte_len;
   uint32_t      byte_ofs;
+  uint32_t      byte_stride;
   uint32_t      target;
 } gltf_bufview;
 
@@ -595,6 +596,8 @@ int read_accessors(gltf_data *data, const char *s, jsmntok_t *t)
 
 int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
 {
+  b->byte_stride = 0;
+
   int j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -619,6 +622,14 @@ int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
       j += 2;
       continue;
     }
+
+    if(jsoneq(s, key, "byteStride") == 0) {
+      b->byte_stride = atoi(toktostr(s, &t[j + 1]));
+      logc("byteStride: %i", b->byte_stride);
+      j += 2;
+      continue;
+    }
+
 
     if(jsoneq(s, key, "target") == 0) {
       b->target = atoi(toktostr(s, &t[j + 1]));
