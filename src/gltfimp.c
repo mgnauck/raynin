@@ -40,14 +40,14 @@ typedef struct gltf_mesh {
 } gltf_mesh;
 
 typedef struct gltf_accessor {
-  uint32_t      buffer_view;
-  uint32_t      component_type;
+  uint32_t      bufview;
+  uint32_t      comp_type;
   uint32_t      count;
   bufview_type  type;
 } gltf_accessor;
 
 typedef struct gltf_bufview {
-  uint32_t      buffer;       // Only 1 supported, which is the .bin file that comes with the .gltf
+  uint32_t      buf; // Only 1 supported, which is the .bin file that comes with the .gltf
   uint32_t      byte_len;
   uint32_t      byte_ofs;
   uint32_t      target;
@@ -519,21 +519,120 @@ int read_meshes(gltf_data *data, const char *s, jsmntok_t *t)
   return j;
 }
 
+int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
+{
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "bufferView") == 0) {
+      a->bufview = atoi(toktostr(s, &t[j + 1]));
+      logc("bufferView: %i", a->bufview);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "componentType") == 0) {
+      a->comp_type = atoi(toktostr(s, &t[j + 1]));
+      logc("componentType: %i", a->comp_type);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "count") == 0) {
+      a->count = atoi(toktostr(s, &t[j + 1]));
+      logc("count: %i", a->count);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "type") == 0) {
+      char *type = toktostr(s, &t[j + 1]);
+      bool err = false;
+      if(strstr(type, "VEC3"))
+        a->type = BVT_VEC3;
+      else if(strstr(type, "SCALAR"))
+        a->type = BVT_SCALAR;
+      else {
+        logc("Unknown buffer view type: %s", type);
+        err = true;
+      }
+      if(!err) {
+        logc("type: %i (%s)", a->type, type);
+        j += 2;
+      }
+      continue;
+    }
+
+    // Ignore
+    j += dump(s, key);
+    if(key->size > 0) {
+      j += dump(s, t + j);
+    }
+  }
+
+  return j;
+}
+
 int read_accessors(gltf_data *data, const char *s, jsmntok_t *t)
 {
   logc(">> accessors");
 
   data->accessors = malloc(t->size * sizeof(*data->accessors));
-  data->accessor_cnt = t->size;
+  data->accessor_cnt = 0;
 
   int j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>> accessor %i", i);
-    j += dump(s, t + j);
+    j += read_accessor(&data->accessors[data->accessor_cnt++], s, t + j);
     logc("<<<< accessor %i", i);
   }
 
   logc("<< accessors (total: %i)", data->accessor_cnt);
+
+  return j;
+}
+
+int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
+{
+  int j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "buffer") == 0) {
+      b->buf = atoi(toktostr(s, &t[j + 1]));
+      logc("buffer: %i", b->buf);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "byteLength") == 0) {
+      b->byte_len = atoi(toktostr(s, &t[j + 1]));
+      logc("byteLength: %i", b->byte_len);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "byteOffset") == 0) {
+      b->byte_ofs = atoi(toktostr(s, &t[j + 1]));
+      logc("count: %i", b->byte_ofs);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "target") == 0) {
+      b->target = atoi(toktostr(s, &t[j + 1]));
+      logc("target: %i", b->target);
+      j += 2;
+      continue;
+    }
+
+    // Ignore
+    j += dump(s, key);
+    if(key->size > 0) {
+      j += dump(s, t + j);
+    }
+  }
 
   return j;
 }
@@ -543,12 +642,12 @@ int read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
   logc(">> bufviews");
 
   data->bufviews = malloc(t->size * sizeof(*data->bufviews));
-  data->bufview_cnt = t->size;
+  data->bufview_cnt = 0;
 
   int j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>> bufview %i", i);
-    j += dump(s, t + j);
+    j += read_bufview(&data->bufviews[data->bufview_cnt++], s, t + j);
     logc("<<<< bufview %i", i);
   }
 
