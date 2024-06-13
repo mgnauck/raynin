@@ -16,6 +16,7 @@ typedef struct mesh {
 } mesh;
 
 void mesh_init(mesh *m, uint32_t tri_cnt);
+void mesh_finalize(scene *s, mesh *m);
 void mesh_release(mesh *m);
 
 #endif

@@ -3,9 +3,10 @@
 #include "mutil.h"
 #include "log.h"
 #include "scene.h"
-#include "mtl.h"
 #include "mesh.h"
 #include "bvh.h"
+#include "mtl.h"
+#include "tri.h"
 
 #define JSMN_PARENT_LINKS
 #include "jsmn.h"
@@ -39,22 +40,22 @@ typedef struct gltf_mesh {
   uint32_t      suby;
   gltf_prim*    prims;
   uint32_t      prim_cnt;
-  int32_t       mesh_idx; // Will be the index of the final mesh
+  int32_t       mesh_idx;   // Will be the index of the final mesh
 } gltf_mesh;
 
 typedef struct gltf_accessor {
-  uint32_t      bufview;
+  uint32_t      bufview;    // TODO: When undefined, the data MUST be initialized with zeros.
+  uint32_t      count;
+  uint32_t      byte_ofs;   // Optional
   uint32_t      comp_type;
   data_type     data_type;
-  uint32_t      count;
 } gltf_accessor;
 
 typedef struct gltf_bufview {
-  uint32_t      buf; // Only 1 supported, which is the .bin file that comes with the .gltf
+  uint32_t      buf;        // Only 1 supported, which is the .bin file that comes with the .gltf
   uint32_t      byte_len;
-  uint32_t      byte_ofs;
+  uint32_t      byte_ofs;   // Optional
   uint32_t      byte_stride;
-  uint32_t      target;
 } gltf_bufview;
 
 typedef struct gltf_data {
@@ -529,20 +530,17 @@ int read_meshes(gltf_data *data, const char *s, jsmntok_t *t)
 
 int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
 {
+  a->byte_ofs = 0;
+
   int j = 1;
+  bool bv_contained = false;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "bufferView") == 0) {
       a->bufview = atoi(toktostr(s, &t[j + 1]));
+      bv_contained = true;
       logc("bufferView: %i", a->bufview);
-      j += 2;
-      continue;
-    }
-
-    if(jsoneq(s, key, "componentType") == 0) {
-      a->comp_type = atoi(toktostr(s, &t[j + 1]));
-      logc("componentType: %i", a->comp_type);
       j += 2;
       continue;
     }
@@ -550,6 +548,20 @@ int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "count") == 0) {
       a->count = atoi(toktostr(s, &t[j + 1]));
       logc("count: %i", a->count);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "byteOffset") == 0) {
+      a->byte_ofs = atoi(toktostr(s, &t[j + 1]));
+      logc("byteOffset: %i", a->byte_ofs);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "componentType") == 0) {
+      a->comp_type = atoi(toktostr(s, &t[j + 1]));
+      logc("componentType: %i", a->comp_type);
       j += 2;
       continue;
     }
@@ -579,6 +591,9 @@ int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
     }
   }
 
+  if(!bv_contained)
+    logc(">>>> ERROR: Undefined buffer view found. This is not supported ATM.");
+
   return j;
 }
 
@@ -604,6 +619,7 @@ int read_accessors(gltf_data *data, const char *s, jsmntok_t *t)
 int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
 {
   b->byte_stride = 0;
+  b->byte_ofs = 0;
 
   int j = 1;
   for(int i=0; i<t->size; i++) {
@@ -637,13 +653,7 @@ int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
       continue;
     }
 
-
-    if(jsoneq(s, key, "target") == 0) {
-      b->target = atoi(toktostr(s, &t[j + 1]));
-      logc("target: %i", b->target);
-      j += 2;
-      continue;
-    }
+    // Ignore target, does not apply for our renderer
 
     // Ignore
     j += dump(s, key);
@@ -684,12 +694,26 @@ uint16_t read_short(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
   return *(uint16_t *)(buf + byte_ofs + sizeof(uint16_t) * i);
 }
 
+uint32_t read_int(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
+{
+  return *(uint32_t *)(buf + byte_ofs + sizeof(uint32_t) * i);
+}
+
 float read_float(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
 {
   return *(float *)(buf + byte_ofs + sizeof(float) * i);
 }
 
-void create_mesh(mesh *m, const uint8_t *bin, gltf_data *d, gltf_mesh *gm)
+vec3 read_vec(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
+{
+  return (vec3){
+    .x = read_float(buf, byte_ofs, i * 3 + 0),
+    .y = read_float(buf, byte_ofs, i * 3 + 1),
+    .z = read_float(buf, byte_ofs, i * 3 + 2),
+  };
+}
+
+void create_mesh(scene *s, mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 {
   // Calc triangle count from gltf mesh data
   for(uint32_t j=0; j<gm->prim_cnt; j++) {
@@ -699,7 +723,7 @@ void create_mesh(mesh *m, const uint8_t *bin, gltf_data *d, gltf_mesh *gm)
       // 3 indices to vertices = 1 triangle
       m->tri_cnt += a->count / 3;
     else
-      logc("Unexpected accessor data type found when creating a mesh");
+      logc("Unexpected accessor data type found when creating a mesh. Ignoring primitive.");
   }
 
   logc("Mesh with %i triangles found", m->tri_cnt);
@@ -709,7 +733,6 @@ void create_mesh(mesh *m, const uint8_t *bin, gltf_data *d, gltf_mesh *gm)
   // Collect the data and copy to our actual mesh
   uint32_t tri_cnt = 0;
   for(uint32_t j=0; j<gm->prim_cnt; j++) {
-    
     gltf_prim *p = &gm->prims[j];
     
     gltf_accessor *ind_acc = &d->accessors[p->ind_idx];
@@ -722,8 +745,6 @@ void create_mesh(mesh *m, const uint8_t *bin, gltf_data *d, gltf_mesh *gm)
       continue;
     }
 
-    gltf_bufview *ind_bv = &d->bufviews[ind_acc->bufview];
-
     gltf_accessor *pos_acc = &d->accessors[p->pos_idx];
     if(pos_acc->data_type != DT_VEC3) {
       logc("Ignoring primitive with non-VEC3 data type in position buffer.");
@@ -734,8 +755,6 @@ void create_mesh(mesh *m, const uint8_t *bin, gltf_data *d, gltf_mesh *gm)
       continue;
     }
 
-    gltf_bufview *pos_bv = &d->bufviews[pos_acc->bufview];
-
     gltf_accessor *nrm_acc = &d->accessors[p->nrm_idx];
     if(nrm_acc->data_type != DT_VEC3) {
       logc("Ignoring primitive with non-VEC3 data type in normal buffer.");
@@ -745,13 +764,60 @@ void create_mesh(mesh *m, const uint8_t *bin, gltf_data *d, gltf_mesh *gm)
       logc("Expected normal buffer with component type of float. Ignoring primitive.");
       continue;
     }
-
+    
+    gltf_bufview *ind_bv = &d->bufviews[ind_acc->bufview];
+    gltf_bufview *pos_bv = &d->bufviews[pos_acc->bufview];
     gltf_bufview *nrm_bv = &d->bufviews[nrm_acc->bufview];
 
-    for(uint32_t i=0; i<ind_acc->count / 3; i++) {
+    for(uint32_t j=0; j<ind_acc->count / 3; j++) {
 
+      tri *t = &m->tris[tri_cnt];
+      uint32_t i = j * 3;
+
+      uint32_t i0 = (ind_acc->comp_type == 5121) ?
+        read_byte(bin, ind_bv->byte_ofs, i + 0) : (ind_acc->comp_type == 5123) ?
+          read_short(bin, ind_bv->byte_ofs, i + 0) : read_int(bin, ind_bv->byte_ofs, i + 0);
+
+      uint32_t i1 = (ind_acc->comp_type == 5121) ?
+        read_byte(bin, ind_bv->byte_ofs, i + 1) : (ind_acc->comp_type == 5123) ?
+          read_short(bin, ind_bv->byte_ofs, i + 1) : read_int(bin, ind_bv->byte_ofs, i + 1);
+
+      uint32_t i2 = (ind_acc->comp_type == 5121) ?
+        read_byte(bin, ind_bv->byte_ofs, i + 2) : (ind_acc->comp_type == 5123) ?
+          read_short(bin, ind_bv->byte_ofs, i + 2) : read_int(bin, ind_bv->byte_ofs, i + 2);
+
+      //logc("Triangle %i with indices %i, %i, %i", j, i0, i1, i2);
+
+      t->v0 = read_vec(bin, pos_bv->byte_ofs, i0);
+      t->v1 = read_vec(bin, pos_bv->byte_ofs, i1);
+      t->v2 = read_vec(bin, pos_bv->byte_ofs, i2);
+
+      //vec3_logc("Tri with p0: ", t->v0);
+      //vec3_logc("Tri with p1: ", t->v1);
+      //vec3_logc("Tri with p2: ", t->v2);
+
+      t->n0 = read_vec(bin, nrm_bv->byte_ofs, i0);
+      t->n1 = read_vec(bin, nrm_bv->byte_ofs, i1);
+      t->n2 = read_vec(bin, nrm_bv->byte_ofs, i2);
+
+      //vec3_logc("Tri with n0: ", t->n0);
+      //vec3_logc("Tri with n1: ", t->n1);
+      //vec3_logc("Tri with n2: ", t->n2);
+
+      m->centers[tri_cnt] = tri_calc_center(t);
+      t->mtl = p->mtl_idx;
+      tri_cnt++;
     }
+
+    m->is_emissive |= mtl_is_emissive(&s->mtls[p->mtl_idx]);
   }
+
+  if(m->tri_cnt != tri_cnt)
+    logc("WARN: Mesh is missing some triangle data, i.e. skipped gltf primitve.");
+
+  // In case we skipped a primitive, adjust the tri cnt of the mesh
+  m->tri_cnt = tri_cnt;
+  mesh_finalize(s, m);
 }
 
 uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
@@ -843,11 +909,11 @@ uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
   // Identify actual meshes
   for(uint32_t j=0; j<data.mesh_cnt; j++) {
-    gltf_mesh *m = &data.meshes[j];
-    for(uint32_t i=0; i<m->prim_cnt; i++) {
-      gltf_prim *p = &m->prims[i]; 
-      /*if(mtl_is_emissive(&s->mtls[p->mtl_idx]) || p->type == PT_MESH)*/ {
-        m->mesh_idx = s->mesh_cnt++;
+    gltf_mesh *gm = &data.meshes[j];
+    for(uint32_t i=0; i<gm->prim_cnt; i++) {
+      gltf_prim *gp = &gm->prims[i]; 
+      /*if(mtl_is_emissive(&s->mtls[gp->mtl_idx]) || gm->type == PT_MESH)*/ {
+        gm->mesh_idx = s->mesh_cnt++;
         break;
       }
     }
@@ -860,9 +926,9 @@ uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
   // Populate meshes with gltf mesh data
   for(uint32_t i=0; i<data.mesh_cnt; i++) {
-    gltf_mesh *m = &data.meshes[i];
-    if(m->mesh_idx >= 0)
-      create_mesh(&s->meshes[m->mesh_idx], bin, &data, m);
+    gltf_mesh *gm = &data.meshes[i];
+    if(gm->mesh_idx >= 0)
+      create_mesh(s, &s->meshes[gm->mesh_idx], &data, gm, bin);
   }
 
   // Read nodes (instances)

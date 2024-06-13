@@ -367,14 +367,11 @@ uint32_t scene_get_inst_state(scene *s, uint32_t inst_id)
   return s->inst_info[inst_id].state;
 }
 
-void finalize_mesh(scene *s, mesh *m, uint32_t mtl_id)
+void mesh_finalize(scene *s, mesh *m)
 {
   // Set and update offset into tri buffer
   m->ofs = s->curr_ofs;
   s->curr_ofs += m->tri_cnt;
-
-  // Set flag for emissive material
-  m->is_emissive = mtl_is_emissive(&s->mtls[mtl_id]);
 
   // Flag to trigger bvh calculation
   scene_set_dirty(s, RT_MESH);
@@ -427,7 +424,10 @@ uint32_t scene_add_quad(scene *s, uint32_t subx, uint32_t suby, uint32_t mtl)
     z += dz;
   }
 
-  finalize_mesh(s, m, mtl);
+  // Set flag for emissive material
+  m->is_emissive = mtl_is_emissive(&s->mtls[mtl]);
+
+  mesh_finalize(s, m);
   return s->mesh_cnt++;
 }
 
@@ -517,7 +517,10 @@ uint32_t scene_add_icosphere(scene *s, uint8_t steps, uint32_t mtl, bool faceNor
 #endif
   }
 
-  finalize_mesh(s, m, mtl);
+  // Set flag for emissive material
+  m->is_emissive = mtl_is_emissive(&s->mtls[mtl]);
+
+  mesh_finalize(s, m);
   return s->mesh_cnt++;
 }
 
@@ -591,7 +594,10 @@ uint32_t scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby
     theta += dtheta;
   }
 
-  finalize_mesh(s, m, mtl);
+  // Set flag for emissive material
+  m->is_emissive = mtl_is_emissive(&s->mtls[mtl]);
+
+  mesh_finalize(s, m);
   return s->mesh_cnt++;
 }
 
@@ -672,7 +678,10 @@ uint32_t scene_add_uvcylinder(scene *s, float radius, float height, uint32_t sub
     h += dh;
   }
 
-  finalize_mesh(s, m, mtl);
+  // Set flag for emissive material
+  m->is_emissive = mtl_is_emissive(&s->mtls[mtl]);
+
+  mesh_finalize(s, m);
   return s->mesh_cnt++;
 }
 
@@ -733,6 +742,9 @@ uint32_t scene_add_mesh(scene *s, const uint8_t *data, uint32_t mtl, bool faceNo
     m->centers[i] = tri_calc_center(t);
   }
 
-  finalize_mesh(s, m, mtl);
+  // Set flag for emissive material
+  m->is_emissive = mtl_is_emissive(&s->mtls[mtl]);
+
+  mesh_finalize(s, m);
   return s->mesh_cnt++;
 }
