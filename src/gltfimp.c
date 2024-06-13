@@ -40,7 +40,7 @@ typedef struct gltf_mesh {
   uint32_t      suby;
   gltf_prim*    prims;
   uint32_t      prim_cnt;
-  int32_t       mesh_idx;   // Will be the index of the final mesh
+  int32_t       mesh_idx;   // Index of the final "engine mesh"
 } gltf_mesh;
 
 typedef struct gltf_accessor {
@@ -58,7 +58,19 @@ typedef struct gltf_bufview {
   uint32_t      byte_stride;
 } gltf_bufview;
 
+typedef struct gltf_node {
+  uint32_t      mesh_idx;   // Index to the gltf mesh
+  uint32_t      cam_idx;
+  vec3          trans;
+  vec3          scale;
+  mat4          rot;
+  obj_type      type;
+  // Not supporting node hierarchy (children) currently
+} gltf_node;
+
 typedef struct gltf_data {
+  gltf_node     *nodes;
+  uint32_t      node_cnt;
   gltf_mesh     *meshes;
   uint32_t      mesh_cnt;
   gltf_accessor *accessors;
@@ -811,13 +823,13 @@ uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     return 1;
   }
 
-  // First token is always an object
+  // First token should always be an object
   if(cnt < 1 || t[0].type != JSMN_OBJECT) {
     logc("Expected object as root token in gltf");
     return 1;
   }
 
-  // Temporary gltf data
+  // Temporary gltf parsing data
   gltf_data data;
   data.mesh_cnt = 0;
   data.accessor_cnt = 0;
