@@ -14,7 +14,9 @@ typedef struct mtl
   float pad0;
 } mtl;
 
+void  mtl_set_defaults(mtl *m);
 bool  mtl_is_emissive(const mtl *mtl);
+
 mtl   mtl_init(vec3 col);
 mtl   mtl_rand();
 

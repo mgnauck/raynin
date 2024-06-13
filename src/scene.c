@@ -42,7 +42,7 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt
 {
   s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
   s->meshes       = malloc(mesh_cnt * sizeof(*s->meshes));
-  s->bvhs         = malloc(mesh_cnt * sizeof(bvh));
+  s->bvhs         = malloc(mesh_cnt * sizeof(*s->bvhs));
   s->instances    = malloc(inst_cnt * sizeof(*s->instances));
   s->inst_info    = malloc(inst_cnt * sizeof(*s->inst_info));
   s->tlas_nodes   = malloc(2 * inst_cnt * sizeof(*s->tlas_nodes));

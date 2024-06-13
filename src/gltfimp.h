@@ -2,9 +2,11 @@
 #define GLTFIMP_H
 
 #include <stddef.h>
+#include <stdint.h>
+
 
 typedef struct scene scene;
 
-int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz);
+uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz);
 
 #endif

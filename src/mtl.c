@@ -1,6 +1,15 @@
 #include "mtl.h"
 #include "mutil.h"
 
+void mtl_set_defaults(mtl *m)
+{
+  m->col = (vec3){ 0.5f, 0.5f, 0.5f };
+  m->metallic = 0.0f;
+  m->roughness = 1.0f;
+  m->ior = 1.01f;
+  m->refractive = 0.0f;
+}
+
 bool mtl_is_emissive(const mtl *mtl)
 {
   return mtl->col.x > 1.0f || mtl->col.y > 1.0f || mtl->col.z > 1.0f;

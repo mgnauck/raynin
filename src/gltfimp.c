@@ -2,8 +2,10 @@
 #include "sutil.h"
 #include "mutil.h"
 #include "log.h"
-#include "mtl.h"
 #include "scene.h"
+#include "mtl.h"
+#include "mesh.h"
+#include "bvh.h"
 
 #define JSMN_PARENT_LINKS
 #include "jsmn.h"
@@ -19,15 +21,15 @@ typedef enum prim_type {
   PT_MESH
 } prim_type;
 
-typedef enum bufview_type {
-  BVT_SCALAR,
-  BVT_VEC3
-} bufview_type;
+typedef enum data_type {
+  DT_SCALAR,
+  DT_VEC3
+} data_type;
 
 typedef struct gltf_prim {
   uint32_t pos_idx;
   uint32_t nrm_idx;
-  uint32_t indices;
+  uint32_t ind_idx;
   uint32_t mtl_idx;
 } gltf_prim;
 
@@ -37,13 +39,14 @@ typedef struct gltf_mesh {
   uint32_t      suby;
   gltf_prim*    prims;
   uint32_t      prim_cnt;
+  int32_t       mesh_idx; // Will be the index of the final mesh
 } gltf_mesh;
 
 typedef struct gltf_accessor {
   uint32_t      bufview;
   uint32_t      comp_type;
+  data_type     data_type;
   uint32_t      count;
-  bufview_type  type;
 } gltf_accessor;
 
 typedef struct gltf_bufview {
@@ -214,6 +217,8 @@ int read_mtl(mtl *m, const char *s, jsmntok_t *t)
 {
   float emissive_strength = 1.0f;
   vec3 emissive_factor = (vec3){ 0.0f, 0.0f, 0.0f };
+
+  mtl_set_defaults(m);
 
   int j = 1;
   for(int i=0; i<t->size; i++) {
@@ -412,8 +417,8 @@ int read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
     }
 
     if(jsoneq(s, key, "indices") == 0) {
-      p->indices = atoi(toktostr(s, &t[j + 1]));
-      logc("indices: %i", p->indices);
+      p->ind_idx = atoi(toktostr(s, &t[j + 1]));
+      logc("indices: %i", p->ind_idx);
       j += 2;
       continue;
     }
@@ -457,6 +462,8 @@ int read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
 
 int read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
+  m->mesh_idx = -1; // No real mesh assigned yet
+
   int j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -551,15 +558,15 @@ int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
       char *type = toktostr(s, &t[j + 1]);
       bool err = false;
       if(strstr(type, "VEC3"))
-        a->type = BVT_VEC3;
+        a->data_type = DT_VEC3;
       else if(strstr(type, "SCALAR"))
-        a->type = BVT_SCALAR;
+        a->data_type = DT_SCALAR;
       else {
-        logc("Unknown buffer view type: %s", type);
+        logc("Accessor with unknown data type: %s", type);
         err = true;
       }
       if(!err) {
-        logc("type: %i (%s)", a->type, type);
+        logc("type: %i (%s)", a->data_type, type);
         j += 2;
       }
       continue;
@@ -667,7 +674,87 @@ int read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
   return j;
 }
 
-int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
+uint8_t read_byte(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
+{
+  return *(uint8_t *)(buf + byte_ofs + sizeof(uint8_t) * i);
+}
+
+uint16_t read_short(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
+{
+  return *(uint16_t *)(buf + byte_ofs + sizeof(uint16_t) * i);
+}
+
+float read_float(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
+{
+  return *(float *)(buf + byte_ofs + sizeof(float) * i);
+}
+
+void create_mesh(mesh *m, const uint8_t *bin, gltf_data *d, gltf_mesh *gm)
+{
+  // Calc triangle count from gltf mesh data
+  for(uint32_t j=0; j<gm->prim_cnt; j++) {
+    gltf_prim *p = &gm->prims[j];
+    gltf_accessor *a = &d->accessors[p->ind_idx];
+    if(a->data_type == DT_SCALAR)
+      // 3 indices to vertices = 1 triangle
+      m->tri_cnt += a->count / 3;
+    else
+      logc("Unexpected accessor data type found when creating a mesh");
+  }
+
+  logc("Mesh with %i triangles found", m->tri_cnt);
+
+  mesh_init(m, m->tri_cnt);
+
+  // Collect the data and copy to our actual mesh
+  uint32_t tri_cnt = 0;
+  for(uint32_t j=0; j<gm->prim_cnt; j++) {
+    
+    gltf_prim *p = &gm->prims[j];
+    
+    gltf_accessor *ind_acc = &d->accessors[p->ind_idx];
+    if(ind_acc->data_type != DT_SCALAR) {
+      logc("Ignoring primitive with non-scalar data type in index buffer");
+      continue;
+    }
+    if(ind_acc->comp_type != 5121 && ind_acc->comp_type != 5123 && ind_acc->comp_type != 5125) {
+      logc("Expected index buffer with component type of byte, short or int. Ignoring primitive.");
+      continue;
+    }
+
+    gltf_bufview *ind_bv = &d->bufviews[ind_acc->bufview];
+
+    gltf_accessor *pos_acc = &d->accessors[p->pos_idx];
+    if(pos_acc->data_type != DT_VEC3) {
+      logc("Ignoring primitive with non-VEC3 data type in position buffer.");
+      continue;
+    }
+    if(pos_acc->comp_type != 5126) {
+      logc("Expected position buffer with component type of float. Ignoring primitive.");
+      continue;
+    }
+
+    gltf_bufview *pos_bv = &d->bufviews[pos_acc->bufview];
+
+    gltf_accessor *nrm_acc = &d->accessors[p->nrm_idx];
+    if(nrm_acc->data_type != DT_VEC3) {
+      logc("Ignoring primitive with non-VEC3 data type in normal buffer.");
+      continue;
+    }
+    if(nrm_acc->comp_type != 5126) {
+      logc("Expected normal buffer with component type of float. Ignoring primitive.");
+      continue;
+    }
+
+    gltf_bufview *nrm_bv = &d->bufviews[nrm_acc->bufview];
+
+    for(uint32_t i=0; i<ind_acc->count / 3; i++) {
+
+    }
+  }
+}
+
+uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
 {
   jsmn_parser parser;
   jsmn_init(&parser);
@@ -739,6 +826,12 @@ int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char 
       continue;
     }
 
+    // Buffers. Check that we have a single buffer with mesh data. Something else is not supported ATM.
+    if(jsoneq(gltf, k, "buffers") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size != 1) {
+      logc("Expected gltf with only one buffer. Can not process file further.");
+      return 1;
+    }
+
     // Ignore
     logc("////////");
     j += dump(gltf, k);
@@ -748,9 +841,29 @@ int gltf_import(scene *s, const char *gltf, size_t gltf_sz, const unsigned char 
     logc("\\\\\\\\\\\\\\\\");
   }
 
-  // Combine meshes/accessors/bufviews to actual scene meshes
-  // Ignore primitives we can generate or built-intersect
-  // Do not ignore if mtl is emissive (these must be generated or loaded meshes)
+  // Identify actual meshes
+  for(uint32_t j=0; j<data.mesh_cnt; j++) {
+    gltf_mesh *m = &data.meshes[j];
+    for(uint32_t i=0; i<m->prim_cnt; i++) {
+      gltf_prim *p = &m->prims[i]; 
+      /*if(mtl_is_emissive(&s->mtls[p->mtl_idx]) || p->type == PT_MESH)*/ {
+        m->mesh_idx = s->mesh_cnt++;
+        break;
+      }
+    }
+  }
+
+  logc("Found %i actual meshes in the scene", s->mesh_cnt);
+
+  s->meshes = malloc(s->mesh_cnt * sizeof(*s->meshes));
+  s->bvhs = malloc(s->mesh_cnt * sizeof(*s->bvhs));
+
+  // Populate meshes with gltf mesh data
+  for(uint32_t i=0; i<data.mesh_cnt; i++) {
+    gltf_mesh *m = &data.meshes[i];
+    if(m->mesh_idx >= 0)
+      create_mesh(&s->meshes[m->mesh_idx], bin, &data, m);
+  }
 
   // Read nodes (instances)
 
