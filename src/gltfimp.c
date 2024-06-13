@@ -11,10 +11,12 @@
 #define JSMN_PARENT_LINKS
 #include "jsmn.h"
 
+// Fixed buffer for temporary string storage (bstrndup)
 #define SBUF_LEN 1024
 char sbuf[SBUF_LEN];
 
 typedef enum obj_type {
+  OT_CAMERA,
   OT_GRID,
   OT_CUBE,
   OT_SPHERE,
@@ -27,11 +29,15 @@ typedef enum data_type {
   DT_VEC3
 } data_type;
 
+typedef struct gltf_cam {
+  float         vert_fov;
+} gltf_cam;
+
 typedef struct gltf_prim {
-  uint32_t pos_idx;
-  uint32_t nrm_idx;
-  uint32_t ind_idx;
-  uint32_t mtl_idx;
+  uint32_t      pos_idx;
+  uint32_t      nrm_idx;
+  uint32_t      ind_idx;
+  uint32_t      mtl_idx;
 } gltf_prim;
 
 typedef struct gltf_mesh {
@@ -40,7 +46,7 @@ typedef struct gltf_mesh {
   uint32_t      suby;
   gltf_prim*    prims;
   uint32_t      prim_cnt;
-  int32_t       mesh_idx;   // Index of the final "engine mesh"
+  int32_t       mesh_idx;   // Index of the final "engine mesh", -1 if not set
 } gltf_mesh;
 
 typedef struct gltf_accessor {
@@ -59,24 +65,29 @@ typedef struct gltf_bufview {
 } gltf_bufview;
 
 typedef struct gltf_node {
-  uint32_t      mesh_idx;   // Index to the gltf mesh
-  uint32_t      cam_idx;
-  vec3          trans;
+  uint32_t      mesh_idx;   // Index of a gltf mesh
+  uint32_t      cam_idx;    // Index of a gltf cam
   vec3          scale;
-  mat4          rot;
+  float         rot[4];
+  vec3          trans;
   obj_type      type;
-  // Not supporting node hierarchy (children) currently
+  // Not supporting node hierarchy currently
 } gltf_node;
 
 typedef struct gltf_data {
+  mtl           *mtls;      // GLTF materials map directly to what we have as material
+  uint32_t      mtl_cnt;
   gltf_node     *nodes;
   uint32_t      node_cnt;
+  uint32_t      cam_node_cnt;
   gltf_mesh     *meshes;
   uint32_t      mesh_cnt;
   gltf_accessor *accessors;
   uint32_t      accessor_cnt;
   gltf_bufview  *bufviews;
   uint32_t      bufview_cnt;
+  gltf_cam      *cams;
+  uint32_t      cam_cnt;
 } gltf_data;
 
 char *bstrndup(const char *str, size_t len)
@@ -95,7 +106,7 @@ char *toktostr(const char *s, jsmntok_t *t)
   return NULL;
 }
 
-static int jsoneq(const char *json, jsmntok_t *tok, const char *s)
+int jsoneq(const char *json, jsmntok_t *tok, const char *s)
 {
   if(tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
       strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
@@ -104,7 +115,7 @@ static int jsoneq(const char *json, jsmntok_t *tok, const char *s)
   return -1;
 }
 
-int dump(const char *s, jsmntok_t *t)
+uint32_t dump(const char *s, jsmntok_t *t)
 {
   if(t->type == JSMN_PRIMITIVE || t->type == JSMN_STRING) {
     logc("// %.*s", t->end - t->start, s + t->start);
@@ -113,7 +124,7 @@ int dump(const char *s, jsmntok_t *t)
 
   if(t->type == JSMN_OBJECT) {
     //logc("o >>");
-    int j = 1;
+    uint32_t j = 1;
     for(int i=0; i<t->size; i++) {
       jsmntok_t *key = t + j;
       j += dump(s, key);
@@ -126,7 +137,7 @@ int dump(const char *s, jsmntok_t *t)
 
   if (t->type == JSMN_ARRAY) {
     //logc("a >>");
-    int j = 1;
+    uint32_t j = 1;
     for(int i=0; i<t->size; i++)
       j += dump(s, t + j);
     //logc("<< a");
@@ -144,9 +155,24 @@ uint32_t ignore(const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissive_strength)
+obj_type get_type(const char *name)
 {
-  int j = 1;
+  if(strstr(name, "Camera"))
+    return OT_CAMERA;
+  else if(strstr(name, "Grid"))
+    return OT_GRID;
+  else if(strstr(name, "Cube"))
+    return OT_CUBE;
+  else if(strstr(name, "Sphere"))
+    return OT_SPHERE;
+  else if(strstr(name, "Cylinder"))
+    return OT_CYLINDER;
+  return OT_MESH;
+}
+
+uint32_t read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissive_strength)
+{
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -178,18 +204,14 @@ int read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissive_str
     }
 
     j += ignore(s, key);
-    /*j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }*/
   }
 
   return j;
 }
 
-int read_pbr_metallic_roughness(mtl *m, const char *s, jsmntok_t *t)
+uint32_t read_pbr_metallic_roughness(mtl *m, const char *s, jsmntok_t *t)
 {
-  int j = 1;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -230,14 +252,14 @@ int read_pbr_metallic_roughness(mtl *m, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_mtl(mtl *m, const char *s, jsmntok_t *t)
+uint32_t read_mtl(mtl *m, const char *s, jsmntok_t *t)
 {
   float emissive_strength = 1.0f;
   vec3 emissive_factor = (vec3){ 0.0f, 0.0f, 0.0f };
 
   mtl_set_defaults(m);
 
-  int j = 1;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -272,30 +294,122 @@ int read_mtl(mtl *m, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_mtls(scene *scene, const char *s, jsmntok_t *t)
+uint32_t read_mtls(gltf_data *data, const char *s, jsmntok_t *t)
 {
   logc(">> mtls");
 
-  scene->mtls = malloc(t->size * sizeof(*scene->mtls));
-  scene->mtl_cnt = 0;
+  data->mtl_cnt = t->size;
+  data->mtls = malloc(data->mtl_cnt * sizeof(*data->mtls));
 
-  int j = 1;
+  uint32_t cnt = 0;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>> mtl %i", i);
-    mtl new_mtl;
-    j += read_mtl(&new_mtl, s, t + j);
-    scene_add_mtl(scene, &new_mtl);
+    j += read_mtl(&data->mtls[cnt++], s, t + j);
     logc("<<<< mtl %i", i);
   }
 
-  logc("<< mtls (total: %i)", scene->mtl_cnt);
+  logc("<< mtls (total: %i)", cnt);
 
   return j;
 }
 
-int read_cam_perspective(cam *c, const char *s, jsmntok_t *t)
+uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
 {
-  int j = 1;
+  uint32_t j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "name") == 0) {
+      char *name = toktostr(s, &t[j + 1]);
+      n->type = get_type(name);
+      logc("type: %i (%s)", n->type, name);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "mesh") == 0) {
+      n->mesh_idx = atoi(toktostr(s, &t[j + 1]));
+      logc("mesh: %i", n->mesh_idx);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "camera") == 0) {
+      n->cam_idx = atoi(toktostr(s, &t[j + 1]));
+      logc("camera: %i", n->cam_idx);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "translation") == 0) {
+      if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
+        n->trans = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
+        vec3_logc("translation: ", n->trans);
+        j += 5;
+        continue;
+      } else
+        logc("Failed to read translation. Expected vec3.");
+    }
+
+    if(jsoneq(s, key, "scale") == 0) {
+      if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
+        n->scale = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
+        vec3_logc("scale: ", n->scale);
+        j += 5;
+        continue;
+      } else
+        logc("Failed to read scale. Expected vec3.");
+    }
+
+    if(jsoneq(s, key, "rotation") == 0) {
+      if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 4) {
+        n->rot[0] = atof(toktostr(s, &t[j + 2]));
+        n->rot[1] = atof(toktostr(s, &t[j + 3]));
+        n->rot[2] = atof(toktostr(s, &t[j + 4]));
+        n->rot[3] = atof(toktostr(s, &t[j + 5]));
+        logc("rotation: %f, %f, %f, %f", n->rot[0], n->rot[1], n->rot[2], n->rot[3]);
+        j += 6;
+        continue;
+      } else
+        logc("Failed to read rotation. Expected quaternion (xyzw).");
+    }
+
+    j += ignore(s, key);
+  }
+
+  return j;
+}
+
+uint32_t read_nodes(gltf_data *data, const char *s, jsmntok_t *t)
+{
+  logc(">> nodes");
+
+  data->node_cnt = t->size;
+  data->nodes = malloc(data->node_cnt * sizeof(*data->nodes));
+
+  uint32_t cnt = 0;
+  uint32_t j = 1;
+  for(int i=0; i<t->size; i++) {
+    logc(">>>> node %i", i);
+    
+    gltf_node *n = &data->nodes[cnt++];
+    j += read_node(n, s, t + j);
+   
+    if(n->type == OT_CAMERA)
+      data->cam_node_cnt++;
+
+    logc("<<<< node %i", i);
+  }
+
+  logc("<< nodes (total: %i)", cnt);
+
+  return j;
+}
+
+uint32_t read_cam_perspective(gltf_cam *c, const char *s, jsmntok_t *t)
+{
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -312,9 +426,9 @@ int read_cam_perspective(cam *c, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_cam(cam *c, const char *s, jsmntok_t *t)
+uint32_t read_cam(gltf_cam *c, const char *s, jsmntok_t *t)
 {
-  int j = 1;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -329,30 +443,29 @@ int read_cam(cam *c, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_cams(scene *scene, const char *s, jsmntok_t *t)
+uint32_t read_cams(gltf_data *data, const char *s, jsmntok_t *t)
 {
   logc(">> cams");
 
-  int j = 1;
+  data->cam_cnt = t->size;
+  data->cams = malloc(data->cam_cnt * sizeof(*data->cams));
+
+  uint32_t cnt = 0;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>> cam %i", i);
-    if(i == 0) {
-      // Read parameters of first camera only
-      j += read_cam(&scene->cam, s, t + j);
-    } else {
-      j += dump(s, t + j);
-    }
+    j += read_cam(&data->cams[cnt++], s, t + j);
     logc("<<<< cam %i", i);
   }
 
-  logc("<< cams (total: %i)", t->size);
+  logc("<< cams (total: %i)", cnt);
 
   return j;
 }
 
-int read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
+uint32_t read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
-  int j = 1;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -376,9 +489,9 @@ int read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
+uint32_t read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
 {
-  int j = 1;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -402,9 +515,9 @@ int read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
+uint32_t read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
 {
-  int j = 1;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -433,44 +546,34 @@ int read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
   return j;
 }
 
-
-int read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
+uint32_t read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
   logc(">>>> primitives");
 
-  m->prims = malloc(t->size * sizeof(*m->prims));
-  m->prim_cnt = 0;
+  m->prim_cnt = t->size;
+  m->prims = malloc(m->prim_cnt * sizeof(*m->prims));
 
-  int j = 1;
+  uint32_t cnt = 0;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>>>> primitive %i", i);
-    j += read_primitive(&m->prims[m->prim_cnt++], s, &t[j]);
+    j += read_primitive(&m->prims[cnt++], s, &t[j]);
     logc("<<<<<< primitive %i", i);
   }
 
-  logc("<<<< primitives (total: %i)", m->prim_cnt);
+  logc("<<<< primitives (total: %i)", cnt);
 
   return j;
 }
 
-obj_type get_type(const char *name)
-{
-  if(strstr(name, "Grid"))
-    return OT_GRID;
-  else if(strstr(name, "Cube"))
-    return OT_CUBE;
-  else if(strstr(name, "Sphere"))
-    return OT_SPHERE;
-  else if(strstr(name, "Cylinder"))
-    return OT_CYLINDER;
-  return OT_MESH;
-}
-
-int read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
+uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
   m->mesh_idx = -1; // No real mesh assigned yet
 
-  int j = 1;
+  m->prims = NULL;
+  m->prim_cnt = 0;
+
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -501,31 +604,32 @@ int read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_meshes(gltf_data *data, const char *s, jsmntok_t *t)
+uint32_t read_meshes(gltf_data *data, const char *s, jsmntok_t *t)
 {
   logc(">> meshes");
 
-  data->meshes = malloc(t->size * sizeof(*data->meshes));
-  data->mesh_cnt = 0;
+  data->mesh_cnt = t->size;
+  data->meshes = malloc(data->mesh_cnt * sizeof(*data->meshes));
 
-  int j = 1;
+  uint32_t cnt = 0;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>> mesh %i", i);
-    j += read_mesh(&data->meshes[data->mesh_cnt++], s, t + j);
+    j += read_mesh(&data->meshes[cnt++], s, t + j);
     logc("<<<< mesh %i", i);
   }
 
-  logc("<< meshes (total: %i)", data->mesh_cnt);
+  logc("<< meshes (total: %i)", cnt);
 
   return j;
 }
 
-int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
+uint32_t read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
 {
   a->byte_ofs = 0;
 
-  int j = 1;
   bool bv_contained = false;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -585,31 +689,32 @@ int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_accessors(gltf_data *data, const char *s, jsmntok_t *t)
+uint32_t read_accessors(gltf_data *data, const char *s, jsmntok_t *t)
 {
   logc(">> accessors");
 
-  data->accessors = malloc(t->size * sizeof(*data->accessors));
-  data->accessor_cnt = 0;
+  data->accessor_cnt = t->size;
+  data->accessors = malloc(data->accessor_cnt * sizeof(*data->accessors));
 
-  int j = 1;
+  uint32_t cnt = 0;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>> accessor %i", i);
-    j += read_accessor(&data->accessors[data->accessor_cnt++], s, t + j);
+    j += read_accessor(&data->accessors[cnt++], s, t + j);
     logc("<<<< accessor %i", i);
   }
 
-  logc("<< accessors (total: %i)", data->accessor_cnt);
+  logc("<< accessors (total: %i)", cnt);
 
   return j;
 }
 
-int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
+uint32_t read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
 {
   b->byte_stride = 0;
   b->byte_ofs = 0;
 
-  int j = 1;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
@@ -647,36 +752,143 @@ int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
   return j;
 }
 
-int read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
+uint32_t read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
 {
   logc(">> bufviews");
 
-  data->bufviews = malloc(t->size * sizeof(*data->bufviews));
-  data->bufview_cnt = 0;
+  data->bufview_cnt = t->size;
+  data->bufviews = malloc(data->bufview_cnt * sizeof(*data->bufviews));
 
-  int j = 1;
+  uint32_t cnt = 0;
+  uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     logc(">>>> bufview %i", i);
-    j += read_bufview(&data->bufviews[data->bufview_cnt++], s, t + j);
+    j += read_bufview(&data->bufviews[cnt++], s, t + j);
     logc("<<<< bufview %i", i);
   }
 
-  logc("<< bufviews (total: %i)", data->bufview_cnt);
+  logc("<< bufviews (total: %i)", cnt);
 
   return j;
 }
 
-uint8_t read_byte(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
+uint8_t read_gltf(gltf_data *data, const char *gltf, size_t gltf_sz)
+{
+  jsmn_parser parser;
+  jsmn_init(&parser);
+
+  // Retrieve number of tokens
+  int cnt = jsmn_parse(&parser, gltf, gltf_sz, NULL, 0);
+  if(cnt < 0) {
+    logc("Something went wrong parsing the token count of the gltf: %i", cnt);
+    return 1;
+  }
+
+  // Parse all tokens
+  jsmntok_t *t = malloc(cnt * sizeof(*t));
+  jsmn_init(&parser);
+  cnt = jsmn_parse(&parser, gltf, gltf_sz, t, cnt);
+  if(cnt < 0) {
+    logc("Something went wrong parsing the gltf: %i", cnt);
+    free(t);
+    return 1;
+  }
+
+  // First token should always be an object
+  if(cnt < 1 || t[0].type != JSMN_OBJECT) {
+    logc("Expected object as root token in gltf");
+    free(t);
+    return 1;
+  }
+
+  // Read token/data
+  uint32_t j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+   // Materials
+    if(jsoneq(gltf, key, "materials") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_mtls(data, gltf, t + j);
+      continue;
+    }
+
+    // Nodes
+    if(jsoneq(gltf, key, "nodes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_nodes(data, gltf, t + j);
+      continue;
+    }
+
+    // Camera (read parameters of first camera only)
+    if(jsoneq(gltf, key, "cameras") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_cams(data, gltf, t + j);
+      continue;
+    }
+
+    // Meshes
+    if(jsoneq(gltf, key, "meshes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_meshes(data, gltf, t + j);
+      continue;
+    }
+
+    // Accessors
+    if(jsoneq(gltf, key, "accessors") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_accessors(data, gltf, t + j);
+      continue;
+    }
+
+    // Buffer views
+    if(jsoneq(gltf, key, "bufferViews") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_bufviews(data, gltf, t + j);
+      continue;
+    }
+
+    // Buffers. Check that we have a single buffer with mesh data. Something else is not supported ATM.
+    if(jsoneq(gltf, key, "buffers") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size != 1) {
+      logc("Expected gltf with one buffer only. Can not process file further.");
+      free(t);
+      return 1;
+    }
+
+    // Not reading/interpreting:
+    // - Assets, extensions
+    // - Default scene (expecting only one scene)
+    // - Root nodes or node hierarchy (expecting flat list of nodes)
+    // - Buffers (expecting only one buffer)
+    j += ignore(gltf, key);
+  }
+
+  return 0;
+}
+
+void release_gltf(gltf_data *data)
+{
+  for(uint32_t i=0; i<data->mesh_cnt; i++)
+    free(data->meshes[i].prims);
+
+  free(data->meshes);
+  free(data->mtls);
+  free(data->nodes);
+  free(data->accessors);
+  free(data->bufviews);
+}
+
+uint8_t read_ubyte(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
 {
   return *(uint8_t *)(buf + byte_ofs + sizeof(uint8_t) * i);
 }
 
-uint16_t read_short(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
+uint16_t read_ushort(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
 {
   return *(uint16_t *)(buf + byte_ofs + sizeof(uint16_t) * i);
 }
 
-uint32_t read_int(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
+uint32_t read_uint(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
 {
   return *(uint32_t *)(buf + byte_ofs + sizeof(uint32_t) * i);
 }
@@ -695,7 +907,7 @@ vec3 read_vec(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
   };
 }
 
-void create_mesh(scene *s, mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
+void create_mesh(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 {
   // Calc triangle count from gltf mesh data
   for(uint32_t j=0; j<gm->prim_cnt; j++) {
@@ -755,16 +967,16 @@ void create_mesh(scene *s, mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *
       uint32_t i = j * 3;
 
       uint32_t i0 = (ind_acc->comp_type == 5121) ?
-        read_byte(bin, ind_bv->byte_ofs, i + 0) : (ind_acc->comp_type == 5123) ?
-          read_short(bin, ind_bv->byte_ofs, i + 0) : read_int(bin, ind_bv->byte_ofs, i + 0);
+        read_ubyte(bin, ind_bv->byte_ofs, i + 0) : (ind_acc->comp_type == 5123) ?
+          read_ushort(bin, ind_bv->byte_ofs, i + 0) : /* 5125 */ read_uint(bin, ind_bv->byte_ofs, i + 0);
 
       uint32_t i1 = (ind_acc->comp_type == 5121) ?
-        read_byte(bin, ind_bv->byte_ofs, i + 1) : (ind_acc->comp_type == 5123) ?
-          read_short(bin, ind_bv->byte_ofs, i + 1) : read_int(bin, ind_bv->byte_ofs, i + 1);
+        read_ubyte(bin, ind_bv->byte_ofs, i + 1) : (ind_acc->comp_type == 5123) ?
+          read_ushort(bin, ind_bv->byte_ofs, i + 1) : /* 5125 */ read_uint(bin, ind_bv->byte_ofs, i + 1);
 
       uint32_t i2 = (ind_acc->comp_type == 5121) ?
-        read_byte(bin, ind_bv->byte_ofs, i + 2) : (ind_acc->comp_type == 5123) ?
-          read_short(bin, ind_bv->byte_ofs, i + 2) : read_int(bin, ind_bv->byte_ofs, i + 2);
+        read_ubyte(bin, ind_bv->byte_ofs, i + 2) : (ind_acc->comp_type == 5123) ?
+          read_ushort(bin, ind_bv->byte_ofs, i + 2) : /* 5125 */ read_uint(bin, ind_bv->byte_ofs, i + 2);
 
       //logc("Triangle %i with indices %i, %i, %i", j, i0, i1, i2);
 
@@ -789,132 +1001,59 @@ void create_mesh(scene *s, mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *
       tri_cnt++;
     }
 
-    m->is_emissive |= mtl_is_emissive(&s->mtls[p->mtl_idx]);
+    m->is_emissive |= mtl_is_emissive(&d->mtls[p->mtl_idx]);
   }
 
   logc("Created mesh with %i triangles", tri_cnt);
 
-  if(m->tri_cnt != tri_cnt)
-    logc("#### WARN: Mesh is missing some triangle data, i.e. skipped gltf primitve.");
-
   // In case we skipped a primitive, adjust the tri cnt of the mesh
-  m->tri_cnt = tri_cnt;
-  mesh_finalize(s, m);
+  if(m->tri_cnt != tri_cnt) {
+    m->tri_cnt = tri_cnt;
+    logc("#### WARN: Mesh is missing some triangle data, i.e. skipped gltf primitve.");
+  }
 }
 
 uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
 {
-  jsmn_parser parser;
-  jsmn_init(&parser);
-
-  // Retrieve number of tokens
-  int cnt = jsmn_parse(&parser, gltf, gltf_sz, NULL, 0);
-  if(cnt < 0) {
-    logc("Something went wrong parsing the token count of the gltf: %i", cnt);
+  // Parse the gltf
+  gltf_data data = (gltf_data){ .nodes = NULL };
+  if(read_gltf(&data, gltf, gltf_sz) != 0) {
+    release_gltf(&data);
     return 1;
-  }
-
-  // Parse all tokens
-  jsmntok_t *t = malloc(cnt * sizeof(*t));
-  jsmn_init(&parser);
-  cnt = jsmn_parse(&parser, gltf, gltf_sz, t, cnt);
-  if(cnt < 0) {
-    logc("Something went wrong parsing the gltf: %i", cnt);
-    return 1;
-  }
-
-  // First token should always be an object
-  if(cnt < 1 || t[0].type != JSMN_OBJECT) {
-    logc("Expected object as root token in gltf");
-    return 1;
-  }
-
-  // Temporary gltf parsing data
-  gltf_data data;
-  data.mesh_cnt = 0;
-  data.accessor_cnt = 0;
-  data.bufview_cnt = 0;
-
-  int j = 1;
-  for(int i=0; i<t->size; i++) {
-    jsmntok_t *key = t + j;
-
-    // Materials
-    if(jsoneq(gltf, key, "materials") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
-      j++;
-      j += read_mtls(s, gltf, t + j);
-      continue;
-    }
-
-    // Cameras (read parameters of first camera only)
-    if(jsoneq(gltf, key, "cameras") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
-      j++;
-      j += read_cams(s, gltf, t + j);
-      continue;
-    }
-
-    // Meshes
-    if(jsoneq(gltf, key, "meshes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
-      j++;
-      j += read_meshes(&data, gltf, t + j);
-      continue;
-    }
-
-    // Accessors
-    if(jsoneq(gltf, key, "accessors") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
-      j++;
-      j += read_accessors(&data, gltf, t + j);
-      continue;
-    }
-
-    // Buffer views
-    if(jsoneq(gltf, key, "bufferViews") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
-      j++;
-      j += read_bufviews(&data, gltf, t + j);
-      continue;
-    }
-
-    // Buffers. Check that we have a single buffer with mesh data. Something else is not supported ATM.
-    if(jsoneq(gltf, key, "buffers") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size != 1) {
-      logc("Expected gltf with only one buffer. Can not process file further.");
-      return 1;
-    }
-
-    j += ignore(gltf, key);
   }
 
   // Identify actual meshes
+  uint32_t mesh_cnt = 0;
   for(uint32_t j=0; j<data.mesh_cnt; j++) {
     gltf_mesh *gm = &data.meshes[j];
     for(uint32_t i=0; i<gm->prim_cnt; i++) {
       gltf_prim *gp = &gm->prims[i]; 
       /*if(mtl_is_emissive(&s->mtls[gp->mtl_idx]) || gm->type == OT_MESH)*/ {
-        gm->mesh_idx = s->mesh_cnt++;
+        gm->mesh_idx = mesh_cnt++;
         break;
       }
     }
   }
 
-  logc("Found %i actual meshes in the scene", s->mesh_cnt);
+  // TODO
+  // - Create instances
+  // - Defer ltri allocation (remove from scene_init())
+  // - Generated meshes, i.e. (gm->mesh_idx > 0 && gm->type != OT_MESH)
+  // - Stride handling
 
-  s->meshes = malloc(s->mesh_cnt * sizeof(*s->meshes));
-  s->bvhs = malloc(s->mesh_cnt * sizeof(*s->bvhs));
-
-  // TODO Stride handling
-  // TODO Generated meshes, i.e. (gm->mesh_idx > 0 && gm->type != OT_MESH)
+  scene_init(s, mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt, /* TODO ltri cnt */0);
 
   // Populate meshes with gltf mesh data
   for(uint32_t i=0; i<data.mesh_cnt; i++) {
     gltf_mesh *gm = &data.meshes[i];
-    if(gm->mesh_idx >= 0)
-      create_mesh(s, &s->meshes[gm->mesh_idx], &data, gm, bin);
+    if(gm->mesh_idx >= 0) {
+      mesh *m = &s->meshes[gm->mesh_idx];
+      create_mesh(m, &data, gm, bin);
+      mesh_finalize(s, m);
+    }
   }
 
-  // Read nodes (instances)
-
-  free(data.meshes);
-  free(data.accessors);
-  free(data.bufviews);
+  release_gltf(&data);
 
   return 0;
 }

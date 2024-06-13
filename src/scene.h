@@ -34,8 +34,6 @@ typedef struct scene {
   uint32_t    curr_ofs;
 } scene;
 
-void      scene_set_defaults(scene *s);
-
 void      scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt, uint32_t ltri_cnt);
 void      scene_release();
 

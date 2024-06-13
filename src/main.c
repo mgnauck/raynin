@@ -192,7 +192,6 @@ void init_scene_riow(scene *s)
 __attribute__((visibility("default")))
 void init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
 {
-  scene_set_defaults(cs);
   gltf_import(cs, gltf, gltf_sz, bin, bin_sz);
 }
 

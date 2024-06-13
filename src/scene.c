@@ -11,33 +11,6 @@
 #include "tlas.h"
 #include "log.h"
 
-void scene_set_defaults(scene *s)
-{
-  s->mtls         = NULL;
-  s->mtl_cnt      = 0;
-
-  s->meshes       = NULL;
-  s->mesh_cnt     = 0;
-
-  s->bvhs         = NULL;
-  s->bvh_cnt      = 0;
-
-  s->instances    = NULL;
-  s->inst_cnt     = 0;
-  s->inst_info    = NULL;
-  s->tlas_nodes   = NULL;
-
-  s->ltris        = NULL;
-  s->ltri_cnt     = 0;
-
-  s->curr_ofs     = 0;
-
-  s->cam = (cam){ .vert_fov = 40.0f, .foc_dist = 10.0f, .foc_angle = 0.0f };
-  cam_set(&s->cam, (vec3){ 10.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
-
-  scene_set_dirty(s, RT_CAM_VIEW);
-}
-
 void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt, uint32_t ltri_cnt)
 {
   s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
