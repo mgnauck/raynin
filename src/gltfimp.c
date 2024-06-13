@@ -124,6 +124,14 @@ int dump(const char *s, jsmntok_t *t)
   return 0;
 }
 
+uint32_t ignore(const char *s, jsmntok_t *t)
+{
+  uint32_t j = dump(s, t);
+  if(t->size > 0)
+    j += dump(s, t + j);
+  return j;
+}
+
 int read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissive_strength)
 {
   int j = 1;
@@ -157,11 +165,11 @@ int read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissive_str
       }
     }
 
-    // Ignore
-    j += dump(s, key);
+    j += ignore(s, key);
+    /*j += dump(s, key);
     if(key->size > 0) {
       j += dump(s, t + j);
-    }
+    }*/
   }
 
   return j;
@@ -204,11 +212,7 @@ int read_pbr_metallic_roughness(mtl *m, const char *s, jsmntok_t *t)
         logc("Failed to read roughnessFactor");
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   return j;
@@ -245,11 +249,7 @@ int read_mtl(mtl *m, const char *s, jsmntok_t *t)
       continue;
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   if(vec3_max_comp(vec3_scale(emissive_factor, emissive_strength)) > 1.0f) {
@@ -294,11 +294,7 @@ int read_cam_perspective(cam *c, const char *s, jsmntok_t *t)
       continue;
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   return j;
@@ -315,11 +311,7 @@ int read_cam(cam *c, const char *s, jsmntok_t *t)
       continue;
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   return j;
@@ -366,11 +358,7 @@ int read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
       continue;
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   return j;
@@ -396,11 +384,7 @@ int read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
       continue;
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   return j;
@@ -431,11 +415,7 @@ int read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
       continue;
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   return j;
@@ -503,11 +483,7 @@ int read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
         logc("Failed to read primitives");
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   return j;
@@ -588,11 +564,7 @@ int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
       continue;
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   if(!bv_contained)
@@ -657,11 +629,7 @@ int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
       continue;
     }
 
-    // Ignore
-    j += dump(s, key);
-    if(key->size > 0) {
-      j += dump(s, t + j);
-    }
+    j += ignore(s, key);
   }
 
   return j;
@@ -857,54 +825,50 @@ uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
   int j = 1;
   for(int i=0; i<t->size; i++) {
-    jsmntok_t *k = t + j;
+    jsmntok_t *key = t + j;
 
     // Materials
-    if(jsoneq(gltf, k, "materials") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "materials") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
       j++;
       j += read_mtls(s, gltf, t + j);
       continue;
     }
 
     // Cameras (read parameters of first camera only)
-    if(jsoneq(gltf, k, "cameras") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "cameras") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
       j++;
       j += read_cams(s, gltf, t + j);
       continue;
     }
 
     // Meshes
-    if(jsoneq(gltf, k, "meshes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "meshes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
       j++;
       j += read_meshes(&data, gltf, t + j);
       continue;
     }
 
     // Accessors
-    if(jsoneq(gltf, k, "accessors") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "accessors") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
       j++;
       j += read_accessors(&data, gltf, t + j);
       continue;
     }
 
     // Buffer views
-    if(jsoneq(gltf, k, "bufferViews") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "bufferViews") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
       j++;
       j += read_bufviews(&data, gltf, t + j);
       continue;
     }
 
     // Buffers. Check that we have a single buffer with mesh data. Something else is not supported ATM.
-    if(jsoneq(gltf, k, "buffers") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size != 1) {
+    if(jsoneq(gltf, key, "buffers") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size != 1) {
       logc("Expected gltf with only one buffer. Can not process file further.");
       return 1;
     }
 
-    // Ignore
-    j += dump(gltf, k);
-    if(k->size > 0) {
-      j += dump(gltf, t + j);
-    }
+    j += ignore(gltf, key);
   }
 
   // Identify actual meshes
