@@ -6,6 +6,7 @@
 
 typedef struct vec3 vec3;
 typedef struct tri tri;
+typedef struct scene scene;
 
 typedef struct mesh {
   uint32_t  tri_cnt;

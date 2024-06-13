@@ -14,13 +14,13 @@
 #define SBUF_LEN 1024
 char sbuf[SBUF_LEN];
 
-typedef enum prim_type {
-  PT_GRID,
-  PT_CUBE,
-  PT_SPHERE,
-  PT_CYLINDER,
-  PT_MESH
-} prim_type;
+typedef enum obj_type {
+  OT_GRID,
+  OT_CUBE,
+  OT_SPHERE,
+  OT_CYLINDER,
+  OT_MESH
+} obj_type;
 
 typedef enum data_type {
   DT_SCALAR,
@@ -35,7 +35,7 @@ typedef struct gltf_prim {
 } gltf_prim;
 
 typedef struct gltf_mesh {
-  prim_type     type;
+  obj_type      type;
   uint32_t      subx;
   uint32_t      suby;
   gltf_prim*    prims;
@@ -100,7 +100,7 @@ int dump(const char *s, jsmntok_t *t)
   }
 
   if(t->type == JSMN_OBJECT) {
-    logc("o >>");
+    //logc("o >>");
     int j = 1;
     for(int i=0; i<t->size; i++) {
       jsmntok_t *key = t + j;
@@ -108,16 +108,16 @@ int dump(const char *s, jsmntok_t *t)
       if(key->size > 0)
         j += dump(s, t + j);
     }
-    logc("<< o");
+    //logc("<< o");
     return j;
   }
 
   if (t->type == JSMN_ARRAY) {
-    logc("a >>");
+    //logc("a >>");
     int j = 1;
     for(int i=0; i<t->size; i++)
       j += dump(s, t + j);
-    logc("<< a");
+    //logc("<< a");
     return j;
   }
 
@@ -461,6 +461,19 @@ int read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
   return j;
 }
 
+obj_type get_type(const char *name)
+{
+  if(strstr(name, "Grid"))
+    return OT_GRID;
+  else if(strstr(name, "Cube"))
+    return OT_CUBE;
+  else if(strstr(name, "Sphere"))
+    return OT_SPHERE;
+  else if(strstr(name, "Cylinder"))
+    return OT_CYLINDER;
+  return OT_MESH;
+}
+
 int read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
   m->mesh_idx = -1; // No real mesh assigned yet
@@ -476,16 +489,7 @@ int read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "name") == 0) {
       char *name = toktostr(s, &t[j + 1]);
-      if(strstr(name, "Grid"))
-        m->type = PT_GRID;
-      else if(strstr(name, "Cube"))
-        m->type = PT_CUBE;
-      else if(strstr(name, "Sphere"))
-        m->type = PT_SPHERE;
-      else if(strstr(name, "Cylinder"))
-        m->type = PT_CYLINDER;
-      else
-        m->type = PT_MESH;
+      m->type = get_type(name);
       logc("type: %i (%s)", m->type, name);
       j += 2;
       continue;
@@ -592,7 +596,7 @@ int read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
   }
 
   if(!bv_contained)
-    logc(">>>> ERROR: Undefined buffer view found. This is not supported ATM.");
+    logc("#### ERROR: Undefined buffer view found. This is not supported.");
 
   return j;
 }
@@ -652,8 +656,6 @@ int read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
       j += 2;
       continue;
     }
-
-    // Ignore target, does not apply for our renderer
 
     // Ignore
     j += dump(s, key);
@@ -725,8 +727,6 @@ void create_mesh(scene *s, mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *
     else
       logc("Unexpected accessor data type found when creating a mesh. Ignoring primitive.");
   }
-
-  logc("Mesh with %i triangles found", m->tri_cnt);
 
   mesh_init(m, m->tri_cnt);
 
@@ -812,8 +812,10 @@ void create_mesh(scene *s, mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *
     m->is_emissive |= mtl_is_emissive(&s->mtls[p->mtl_idx]);
   }
 
+  logc("Created mesh with %i triangles", tri_cnt);
+
   if(m->tri_cnt != tri_cnt)
-    logc("WARN: Mesh is missing some triangle data, i.e. skipped gltf primitve.");
+    logc("#### WARN: Mesh is missing some triangle data, i.e. skipped gltf primitve.");
 
   // In case we skipped a primitive, adjust the tri cnt of the mesh
   m->tri_cnt = tri_cnt;
@@ -899,12 +901,10 @@ uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     }
 
     // Ignore
-    logc("////////");
     j += dump(gltf, k);
     if(k->size > 0) {
       j += dump(gltf, t + j);
     }
-    logc("\\\\\\\\\\\\\\\\");
   }
 
   // Identify actual meshes
@@ -912,7 +912,7 @@ uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     gltf_mesh *gm = &data.meshes[j];
     for(uint32_t i=0; i<gm->prim_cnt; i++) {
       gltf_prim *gp = &gm->prims[i]; 
-      /*if(mtl_is_emissive(&s->mtls[gp->mtl_idx]) || gm->type == PT_MESH)*/ {
+      /*if(mtl_is_emissive(&s->mtls[gp->mtl_idx]) || gm->type == OT_MESH)*/ {
         gm->mesh_idx = s->mesh_cnt++;
         break;
       }
@@ -923,6 +923,9 @@ uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
   s->meshes = malloc(s->mesh_cnt * sizeof(*s->meshes));
   s->bvhs = malloc(s->mesh_cnt * sizeof(*s->bvhs));
+
+  // TODO Stride handling
+  // TODO Generated meshes, i.e. (gm->mesh_idx > 0 && gm->type != OT_MESH)
 
   // Populate meshes with gltf mesh data
   for(uint32_t i=0; i<data.mesh_cnt; i++) {
