@@ -125,7 +125,7 @@ void init_scene_riow(scene *s)
   mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false);
   //mesh_create_uvcylinder(mesh, 1.0f, 2.0f, 20, 20, 1, false);
   //mesh_create_icosphere(mesh, 3, mtl_id, false);
-  //import_mesh_data(mesh, teapot, mtl_id, false);
+  //import_mesh(mesh, teapot, mtl_id, false);
   sid = scene_attach_mesh(s, mesh, false);
   */
   
@@ -146,29 +146,29 @@ void init_scene_riow(scene *s)
     mat4_trans(translation, (vec3){ 0.0f, 5.0f, -10.0f + (i * 10.0f) });
     //mat4_trans(translation, (vec3){ 0.0f, 5.0f, (i * 10.0f) });
     mat4_mul(transform, translation, transform);
-    scene_add_inst_mesh(s, lid + i, -1, transform);
+    scene_add_mesh_inst(s, lid + i, -1, transform);
   }
 
   // Floor instance
   mat4_scale(scale, 2.4f);
-  scene_add_inst_shape(s, ST_PLANE, mtl_id, scale);
-  //scene_add_inst_mesh(s, fid, -1, scale);
+  scene_add_shape_inst(s, ST_PLANE, mtl_id, scale);
+  //scene_add_mesh_inst(s, fid, -1, scale);
  
   // Reflecting sphere (black)
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
   m = mtl_init((vec3){ 0.0f, 0.0f, 0.0f });
   m.ior = 2.3f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_inst_mesh(s, sid, mtl_id, translation);
+  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Reflecting sphere (white)
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
   m.ior = 1.5f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_inst_mesh(s, sid, mtl_id, translation);
+  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Metallic sphere
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
@@ -176,8 +176,8 @@ void init_scene_riow(scene *s)
   m.metallic = 1.0f;
   m.roughness = 0.5f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_inst_shape(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_inst_mesh(s, sid, mtl_id, translation);
+  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   mat4_scale(scale, 0.2f);
   
@@ -194,8 +194,8 @@ void init_scene_riow(scene *s)
         mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_inst_shape(s, ST_SPHERE, mtl_id, transform);
-        //scene_add_inst_mesh(s, sid, mtl_id, transform);
+        scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
+        //scene_add_mesh_inst(s, sid, mtl_id, transform);
       }
     }
   }

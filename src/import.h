@@ -10,6 +10,6 @@ typedef struct scene scene;
 
 uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz);
 
-void    import_mesh_data(mesh *m, const uint8_t *data, uint32_t mtl, bool faceNormals);
+void    import_mesh(mesh *m, const uint8_t *data, uint32_t mtl, bool faceNormals);
 
 #endif

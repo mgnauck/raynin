@@ -219,19 +219,19 @@ void scene_prepare_render(scene *s)
   ///logc("Full update took: %ld", tlas_upd_end - start);
 }
 
-uint32_t scene_add_mtl(scene *s, mtl *mtl)
-{
-  scene_upd_mtl(s, s->mtl_cnt, mtl);
-  return s->mtl_cnt++;
-}
-
-// TODO Material updates can trigger light tri changes :(
+// Material updates can trigger light tri changes, so not exposing mtl update for now.
 void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
 {
   if(&s->mtls[mtl_id] != mtl)
     memcpy(&s->mtls[mtl_id], mtl, sizeof(*s->mtls));
 
   scene_set_dirty(s, RT_MTL);
+}
+
+uint32_t scene_add_mtl(scene *s, mtl *mtl)
+{
+  scene_upd_mtl(s, s->mtl_cnt, mtl);
+  return s->mtl_cnt++;
 }
 
 uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
@@ -263,13 +263,13 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
   return s->inst_cnt++;
 }
 
-uint32_t scene_add_inst_mesh(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
+uint32_t scene_add_mesh_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
 {
   // Bit 30 not set indicates mesh type
   return add_inst(s, mesh_id & MESH_SHAPE_MASK, mtl_id, transform);
 }
 
-uint32_t scene_add_inst_shape(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform)
+uint32_t scene_add_shape_inst(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform)
 {
   // Bit 30 set indicates shape type
   // Shape types are always using the material override
@@ -287,6 +287,7 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
   inst *inst = &s->instances[inst_id];
   inst_info *info = &s->inst_info[inst_id];
 
+  // Flag instances that were emissive before (in case this changes)
   if(info->state & IS_EMISSIVE)
     info->state |= IS_WAS_EMISSIVE;
 
@@ -298,7 +299,7 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
     // Set highest bit to enable the material override
     inst->data |= MTL_OVERRIDE_BIT;
 
-    // Flag mesh instance if override material is emissive
+    // For mesh inst only we want to know if mtl is now emissive or not
     if(!(inst->data & SHAPE_TYPE_BIT)) {
       if(mtl_is_emissive(&s->mtls[mtl_id]))
         info->state |= IS_EMISSIVE;

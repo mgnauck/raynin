@@ -44,14 +44,14 @@ void      scene_build_bvhs(scene *s);
 void      scene_prepare_render(scene *s);
 
 uint32_t  scene_add_mtl(scene *s, mtl *mtl);
-void      scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl);
 
-uint32_t  scene_add_inst_mesh(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform); // No material override for mtl_id < 0
-uint32_t  scene_add_inst_shape(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform);
+uint32_t  scene_add_mesh_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform); // mtl_id < 0 means no mtl override
+uint32_t  scene_add_shape_inst(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform);
 
 void      scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform);
 void      scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id);
 
+// Mainly for IS_DISABLED state updates for now. Everything else is done via scene_upd*().
 void      scene_set_inst_state(scene *s, uint32_t inst_id, uint32_t state);
 void      scene_clr_inst_state(scene *s, uint32_t inst_id, uint32_t state);
 uint32_t  scene_get_inst_state(scene *s, uint32_t inst_id);

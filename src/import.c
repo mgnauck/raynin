@@ -168,10 +168,8 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   }
 
   // TODO
-  // - Create instances
   // - Defer ltri allocation (remove from scene_init())
-  // - mesh_finalize() into scene?
-  // - Generator code separation
+  // - Create instances
   // - Generated meshes, i.e. (gm->mesh_idx > 0 && gm->type != OT_MESH)
   // - Stride handling
 
@@ -193,7 +191,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   return 0;
 }
 
-void import_mesh_data(mesh *m, const uint8_t *data, uint32_t mtl, bool faceNormals)
+void import_mesh(mesh *m, const uint8_t *data, uint32_t mtl, bool faceNormals)
 {
   uint32_t ofs = 0;
 
