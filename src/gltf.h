@@ -13,7 +13,8 @@ typedef enum obj_type {
   OT_CUBE,
   OT_SPHERE,
   OT_CYLINDER,
-  OT_MESH
+  OT_MESH,
+  OT_UNKNOWN
 } obj_type;
 
 typedef enum data_type {
@@ -27,10 +28,10 @@ typedef struct gltf_cam {
 } gltf_cam;
 
 typedef struct gltf_prim {
-  uint32_t      pos_idx;
-  uint32_t      nrm_idx;
-  uint32_t      ind_idx;
-  uint32_t      mtl_idx;
+  int32_t       pos_idx;
+  int32_t       nrm_idx;
+  int32_t       ind_idx;
+  int32_t       mtl_idx;
 } gltf_prim;
 
 typedef struct gltf_mesh {
@@ -43,7 +44,7 @@ typedef struct gltf_mesh {
 } gltf_mesh;
 
 typedef struct gltf_accessor {
-  uint32_t      bufview;    // TODO: When undefined, the data MUST be initialized with zeros.
+  int32_t       bufview;    // TODO: When undefined, the data MUST be initialized with zeros.
   uint32_t      count;
   uint32_t      byte_ofs;   // Optional
   uint32_t      comp_type;
@@ -58,8 +59,8 @@ typedef struct gltf_bufview {
 } gltf_bufview;
 
 typedef struct gltf_node {
-  uint32_t      mesh_idx;   // Index of a gltf mesh
-  uint32_t      cam_idx;    // Index of a gltf cam
+  int32_t       mesh_idx;   // Index of a gltf mesh
+  int32_t       cam_idx;    // Index of a gltf cam
   vec3          scale;
   float         rot[4];
   vec3          trans;

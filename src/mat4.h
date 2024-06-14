@@ -34,6 +34,7 @@ vec3 mat4_mul_dir(const mat4 m, const vec3 v);
 vec3 mat4_get_trans(const mat4 m);
 
 void mat4_from_row3x4(mat4 dst, const float* src);
+void mat4_from_quat(mat4 dst, float x, float y, float z, float w);
 
 void mat4_logc(mat4 m);
 

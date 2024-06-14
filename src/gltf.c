@@ -179,10 +179,10 @@ uint32_t read_pbr_metallic_roughness(mtl *m, const char *s, jsmntok_t *t)
 
 uint32_t read_mtl(mtl *m, const char *s, jsmntok_t *t)
 {
+  mtl_set_defaults(m);
+
   float emissive_strength = 1.0f;
   vec3 emissive_factor = (vec3){ 0.0f, 0.0f, 0.0f };
-
-  mtl_set_defaults(m);
 
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
@@ -241,6 +241,13 @@ uint32_t read_mtls(gltf_data *data, const char *s, jsmntok_t *t)
 
 uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
 {
+  n->type = OT_UNKNOWN;
+  n->mesh_idx = -1;
+  n->cam_idx = -1;
+  n->trans = (vec3){ 0.0f, 0.0f, 0.0f };
+  n->scale = (vec3){ 1.0f, 1.0f, 1.0f };
+  memcpy(n->rot, (float[]){ 0.0f, 0.0f, 0.0f, 1.0f }, sizeof(n->rot));
+
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -303,6 +310,14 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
     j += ignore(s, key);
   }
 
+  if(n->type == OT_UNKNOWN) {
+    if(n->cam_idx >= 0 || n->mesh_idx >= 0) {
+      n->type = (n->cam_idx >= 0) ? OT_CAMERA : OT_MESH;
+      logc("Failed to read node type. Falling back to %s", n->type == OT_CAMERA ? "camera" : "mesh");
+    } else
+      logc("Failed to read node type. No fallback available.");
+  }
+
   return j;
 }
 
@@ -334,6 +349,8 @@ uint32_t read_nodes(gltf_data *data, const char *s, jsmntok_t *t)
 
 uint32_t read_cam_perspective(gltf_cam *c, const char *s, jsmntok_t *t)
 {
+  c->vert_fov = 45.0f;
+
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -390,6 +407,9 @@ uint32_t read_cams(gltf_data *data, const char *s, jsmntok_t *t)
 
 uint32_t read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
+  m->subx = 0;
+  m->suby = 0;
+
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -416,6 +436,9 @@ uint32_t read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 
 uint32_t read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
 {
+  p->pos_idx = -1;
+  p->nrm_idx = -1;
+
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -442,6 +465,9 @@ uint32_t read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
 
 uint32_t read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
 {
+  p->ind_idx = -1;
+  p->mtl_idx = -1;
+
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -494,6 +520,7 @@ uint32_t read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
 uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
   m->mesh_idx = -1; // No real mesh assigned yet
+  m->type = OT_UNKNOWN;
 
   m->prims = NULL;
   m->prim_cnt = 0;
@@ -526,6 +553,11 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
     j += ignore(s, key);
   }
 
+  if(m->type == OT_UNKNOWN) {
+    logc("Failed to read mesh type. Falling back to mesh.");
+    m->type = OT_MESH;
+  }
+
   return j;
 }
 
@@ -551,16 +583,15 @@ uint32_t read_meshes(gltf_data *data, const char *s, jsmntok_t *t)
 
 uint32_t read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
 {
+  a->bufview = -1;
   a->byte_ofs = 0;
 
-  bool bv_contained = false;
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "bufferView") == 0) {
       a->bufview = atoi(toktostr(s, &t[j + 1]));
-      bv_contained = true;
       logc("bufferView: %i", a->bufview);
       j += 2;
       continue;
@@ -608,7 +639,7 @@ uint32_t read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
     j += ignore(s, key);
   }
 
-  if(!bv_contained)
+  if(a->bufview < 0)
     logc("#### ERROR: Undefined buffer view found. This is not supported.");
 
   return j;

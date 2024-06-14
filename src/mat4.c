@@ -211,6 +211,30 @@ void mat4_from_row3x4(mat4 dst, const float* src)
   memcpy(dst + 12, &(float[4]){ 0.0f, 0.0f, 0.0f, 1.0f }, 4 * sizeof(float));
 }
 
+void mat4_from_quat(mat4 dst, float x, float y, float z, float w)
+{
+  float xx = x * x;
+  float xy = x * y;
+  float xz = x * z;
+  float xw = x * w;
+  float yy = y * y;
+  float yz = y * z;
+  float yw = y * w;
+  float zz = z * z;
+  float zw = z * w;
+  dst[ 0] = 1.0f - 2.0f * (yy + zz);
+  dst[ 1] =        2.0f * (xy + zw);
+  dst[ 2] =        2.0f * (xz - yw);
+  dst[ 4] =        2.0f * (xy - zw);
+  dst[ 5] = 1.0f - 2.0f * (xx + zz);
+  dst[ 6] =        2.0f * (yz + xw);
+  dst[ 8] =        2.0f * (xz + yw);
+  dst[ 9] =        2.0f * (yz - xw);
+  dst[10] = 1.0f - 2.0f * (xx + yy);
+  dst[ 3] = dst[7] = dst[11] = dst[12] = dst[13] = dst[14] = 0.0f;
+  dst[15] = 1.0f;
+}
+
 void mat4_logc(mat4 m)
 {
   for(uint8_t i=0; i<4; i++)
