@@ -168,12 +168,11 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   }
 
   // TODO
-  // - Defer ltri allocation (remove from scene_init())
   // - Create instances
   // - Generated meshes, i.e. (gm->mesh_idx > 0 && gm->type != OT_MESH)
   // - Stride handling
 
-  scene_init(s, mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt, /* TODO ltri cnt */0);
+  scene_init(s, mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt);
 
   // Populate meshes with gltf mesh data
   for(uint32_t i=0; i<data.mesh_cnt; i++) {

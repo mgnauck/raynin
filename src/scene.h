@@ -34,13 +34,14 @@ typedef struct scene {
   uint32_t    curr_ofs;
 } scene;
 
-void      scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt, uint32_t ltri_cnt);
+void      scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt);
 void      scene_release();
 
 void      scene_set_dirty(scene *s, res_type r);
 void      scene_clr_dirty(scene *s, res_type r);
 
 void      scene_build_bvhs(scene *s);
+void      scene_prepare_ltris(scene *s);
 void      scene_prepare_render(scene *s);
 
 uint32_t  scene_add_mtl(scene *s, mtl *mtl);

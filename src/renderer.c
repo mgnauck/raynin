@@ -147,10 +147,11 @@ void renderer_update_static(render_data *rd)
 
   // Prepare bvhs
   if(s->dirty & RT_MESH) {
+    scene_prepare_ltris(s);
     scene_build_bvhs(s);
 
-  // Prepare ltris, instances and tlas
-  scene_prepare_render(s);
+    // Prepare ltris, instances and tlas
+    scene_prepare_render(s);
 
 #ifndef NATIVE_BUILD
     // Push tris, indices and bvh nodes

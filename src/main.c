@@ -94,7 +94,7 @@ void mouse_move(int32_t dx, int32_t dy)
 
 void init_scene_riow(scene *s)
 {
-  scene_init(s, MESH_CNT, MTL_CNT, INST_CNT, LTRI_CNT);
+  scene_init(s, MESH_CNT, MTL_CNT, INST_CNT);
 
   s->cam = (cam){ .vert_fov = 20.0f, .foc_dist = 11.0f, .foc_angle = 0.5f };
   cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });

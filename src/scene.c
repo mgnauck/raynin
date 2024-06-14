@@ -11,7 +11,7 @@
 #include "tlas.h"
 #include "log.h"
 
-void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt, uint32_t ltri_cnt)
+void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt)
 {
   s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
   s->meshes       = malloc(mesh_cnt * sizeof(*s->meshes));
@@ -19,7 +19,7 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt
   s->instances    = malloc(inst_cnt * sizeof(*s->instances));
   s->inst_info    = malloc(inst_cnt * sizeof(*s->inst_info));
   s->tlas_nodes   = malloc(2 * inst_cnt * sizeof(*s->tlas_nodes));
-  s->ltris        = malloc(ltri_cnt * sizeof(*s->ltris));
+  s->ltris        = NULL; // Ltris will be initialized once all meshes are attached
 
   s->mtl_cnt  = 0;
   s->mesh_cnt = 0;
@@ -65,6 +65,22 @@ void scene_build_bvhs(scene *s)
       }
       bvh_build(&s->bvhs[i]);
     }
+  }
+}
+
+void scene_prepare_ltris(scene *s)
+{
+  if(!s->ltris) {
+    // Count the triangles of all the messhes that can be emissive
+    uint32_t ltri_cnt = 0;
+    for(uint32_t i=0; i<s->mesh_cnt; i++) {
+      mesh *m = &s->meshes[i];
+      if(m->is_emissive)
+        ltri_cnt += m->tri_cnt;
+    }
+
+    // Allocate space for given ltri cnt
+    s->ltris = malloc(ltri_cnt * sizeof(*s->ltris));
   }
 }
 
@@ -203,6 +219,7 @@ void scene_prepare_render(scene *s)
     ltri_cnt += info->ltri_cnt;
   }
 
+  // Current ltri cnt in the scene
   s->ltri_cnt = ltri_cnt;
 
   ///uint64_t inst_upd_end = SDL_GetTicks64();
