@@ -145,14 +145,11 @@ void renderer_update_static(render_data *rd)
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
 #endif
 
+  // Update instances, build ltris and tlas
+  scene_prepare_render(s);
+
   // Prepare bvhs
   if(s->dirty & RT_MESH) {
-    scene_prepare_ltris(s);
-    scene_build_bvhs(s);
-
-    // Prepare ltris, instances and tlas
-    scene_prepare_render(s);
-
 #ifndef NATIVE_BUILD
     // Push tris, indices and bvh nodes
     uint32_t cnt = 0;
@@ -167,7 +164,6 @@ void renderer_update_static(render_data *rd)
       cnt += m->tri_cnt;
     }
 #endif
-  
     scene_clr_dirty(s, RT_MESH);
   } 
  

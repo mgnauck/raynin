@@ -14,19 +14,29 @@
 void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt)
 {
   s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
+  s->max_mtl_cnt  = mtl_cnt;
+  s->mtl_cnt      = 0;
+ 
   s->meshes       = malloc(mesh_cnt * sizeof(*s->meshes));
+  s->max_mesh_cnt = mesh_cnt;
+  s->mesh_cnt     = 0;
+ 
   s->bvhs         = malloc(mesh_cnt * sizeof(*s->bvhs));
+  s->bvh_cnt      = 0;
+  
   s->instances    = malloc(inst_cnt * sizeof(*s->instances));
   s->inst_info    = malloc(inst_cnt * sizeof(*s->inst_info));
   s->tlas_nodes   = malloc(2 * inst_cnt * sizeof(*s->tlas_nodes));
-  s->ltris        = NULL; // Ltris will be initialized once all meshes are attached
+  s->max_inst_cnt = inst_cnt;
+  s->inst_cnt     = 0;
+  
+  s->ltris        = NULL; // Attach all meshes before initializing ltris
+  s->max_ltri_cnt = 0;
+  s->ltri_cnt     = 0;
 
-  s->mtl_cnt  = 0;
-  s->mesh_cnt = 0;
-  s->bvh_cnt  = 0;
-  s->inst_cnt = 0;
-  s->ltri_cnt = 0;
-  s->curr_ofs = 0;
+  s->max_tri_cnt  = 0; // Attach all meshes before calculating this
+
+  s->curr_ofs     = 0;
 
   scene_set_dirty(s, RT_CAM_VIEW);
 }
@@ -71,17 +81,29 @@ void scene_build_bvhs(scene *s)
 void scene_prepare_ltris(scene *s)
 {
   if(!s->ltris) {
-    // Count the triangles of all the messhes that can be emissive
+    // Count the tris and ltris of all the meshes
     uint32_t ltri_cnt = 0;
+    uint32_t tri_cnt = 0;
     for(uint32_t i=0; i<s->mesh_cnt; i++) {
       mesh *m = &s->meshes[i];
       if(m->is_emissive)
         ltri_cnt += m->tri_cnt;
+      tri_cnt += m->tri_cnt;
     }
 
+    // Remeber total tri cnt (renderer needs to reserve gpu resources)
+    s->max_tri_cnt = tri_cnt;
+
     // Allocate space for given ltri cnt
+    s->max_ltri_cnt = ltri_cnt;
     s->ltris = malloc(ltri_cnt * sizeof(*s->ltris));
   }
+}
+
+void scene_finalize(scene *s)
+{
+  scene_build_bvhs(s);
+  scene_prepare_ltris(s);
 }
 
 void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)

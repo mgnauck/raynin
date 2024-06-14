@@ -16,16 +16,21 @@ typedef struct tlas_node tlas_node;
 typedef struct ltri ltri;
 
 typedef struct scene {
+  uint32_t    max_mtl_cnt;
   uint32_t    mtl_cnt;
   mtl         *mtls;
+  uint32_t    max_tri_cnt;
+  uint32_t    max_mesh_cnt;
   uint32_t    mesh_cnt;
   mesh        *meshes;
   uint32_t    bvh_cnt;
   bvh         *bvhs;
+  uint32_t    max_inst_cnt;
   uint32_t    inst_cnt;
   inst        *instances;
   inst_info   *inst_info;
   tlas_node   *tlas_nodes;
+  uint32_t    max_ltri_cnt;
   uint32_t    ltri_cnt;
   ltri        *ltris;
   view        view;
@@ -40,9 +45,8 @@ void      scene_release();
 void      scene_set_dirty(scene *s, res_type r);
 void      scene_clr_dirty(scene *s, res_type r);
 
-void      scene_build_bvhs(scene *s);
-void      scene_prepare_ltris(scene *s);
-void      scene_prepare_render(scene *s);
+void      scene_finalize(scene *s); // Call after loading the scene data
+void      scene_prepare_render(scene *s); // Call after each scene data update before render
 
 uint32_t  scene_add_mtl(scene *s, mtl *mtl);
 

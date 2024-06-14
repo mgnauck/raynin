@@ -9,6 +9,7 @@
 #include "renderer.h"
 #include "import.h"
 #include "settings.h"
+#include "log.h"
 
 #include "data/teapot.h"
 #include "data/dragon.h"
@@ -199,6 +200,8 @@ void init_scene_riow(scene *s)
       }
     }
   }
+
+  scene_finalize(s);
 }
 
 __attribute__((visibility("default")))
@@ -212,15 +215,15 @@ void init(uint32_t width, uint32_t height, uint8_t spp)
 {
   pcg_srand(42u, 303u);
 
-  init_scene_riow(cs);
+  //init_scene_riow(cs);
 
-  renderer_gpu_alloc(TRI_CNT, LTRI_CNT, MTL_CNT, INST_CNT);
-
+  logc("max tris: %i, max ltris: %i, max mtls: %i, max insts: %i",
+      cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
+  
+  renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
   rd = renderer_init(cs, width, height, spp);
-  renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
-  //renderer_set_bg_col(rd, (vec3){ 1.0f, 1.0f, 1.0f });
-  //renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
-  //renderer_set_bg_col(rd, (vec3){ 0.7f, 0.8f, 1.0f });
+  
+  renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
   renderer_update_static(rd);
 }
 

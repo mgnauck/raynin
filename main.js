@@ -63,6 +63,14 @@ function Wasm(module)
     atan2f: (y, x) => Math.atan2(y, x),
     powf: (b, e) => Math.pow(b, e),
     fracf: (v) => v % 1,
+    atof: (addr) => {
+      let s = "", c, i = 0;
+      while((c = String.fromCharCode(this.memUint8[addr + i])) != "\0") {
+        s += c;
+        i++;
+      }
+      return parseFloat(s); 
+    },
     gpu_create_res: (g, t, lt, idx, bn, tn, i, m) => createGpuResources(g, t, lt, idx, bn, tn, i, m),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
   };
@@ -325,7 +333,6 @@ async function main()
   wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength);
   //*/
 
-  /*
   // Init renderer
   wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP);
   

@@ -68,7 +68,7 @@ char *strstr(const char *str, const char *sub)
   return NULL;
 }
 
-float atof(const char* s)
+/*float atof(const char* s)
 {
   float res = 0.0f;
   float fact = 1;
@@ -91,7 +91,7 @@ float atof(const char* s)
     }
   }
   return res * fact;
-}
+}*/
 
 int atoi(const char *s)
 {

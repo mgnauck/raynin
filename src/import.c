@@ -170,7 +170,11 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   // Allocate scene
   scene_init(s, mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt);
 
-  // Populate meshes with gltf mesh data
+  // Set default camera (might be overwritten if there is a cam in the scene)
+  s->cam = (cam){ .vert_fov = 45.0f, .foc_dist = 10.0f, .foc_angle = 0.0f };
+  cam_set(&s->cam, (vec3){ 0.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+
+  // Convert gltf meshes to renderer meshes and attach to scene
   for(uint32_t i=0; i<data.mesh_cnt; i++) {
     gltf_mesh *gm = &data.meshes[i];
     if(gm->mesh_idx >= 0) {
@@ -181,13 +185,41 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     }
   }
 
-  // TODO
-  // - Create instances
-  // - Generated meshes, i.e. (gm->mesh_idx > 0 && gm->type != OT_MESH)
-  // - Stride handling
+  // Add materials to scene
+  for(uint32_t i=0; i<data.mtl_cnt; i++)
+    scene_add_mtl(s, &data.mtls[i]);
 
+  // Add nodes as scene instances
+  for(uint32_t i=0; i<data.node_cnt; i++) {
+    gltf_node *gn = &data.nodes[i];
+    if(gn->mesh_idx >= 0) {
+      gltf_mesh *gm = &data.meshes[gn->mesh_idx];
+      mat4 scale, rot, trans, final;
+      mat4_scale(scale, gn->scale.x); // TODO Apply non-uniform scaling
+      mat4_from_quat(rot, gn->rot[0], gn->rot[1], gn->rot[2], gn->rot[3]);
+      mat4_trans(trans, gn->trans);
+      mat4_mul(final, rot, scale);
+      mat4_mul(final, trans, final);
+      scene_add_mesh_inst(s, gm->mesh_idx, -1, final);
+    } else if(gn->cam_idx >= 0) {
+      // Last camera wins for now (our scene does not support multiple cams)
+      mat4 rot;
+      mat4_from_quat(rot, gn->rot[0], gn->rot[1], gn->rot[2], gn->rot[3]);
+      vec3 dir = vec3_unit(mat4_mul_dir(rot, (vec3){ 0.0f, 0.0f, -1.0f }));
+      s->cam = (cam){ .vert_fov = data.cams[gn->cam_idx].vert_fov * 180.0f / PI, .foc_dist = 10.0f, .foc_angle = 0.0f };
+      cam_set(&s->cam, gn->trans, vec3_add(gn->trans, dir));
+    }
+  }
 
+  // Generated meshes, i.e. (gm->mesh_idx > 0 && gm->type != OT_MESH)
+  // Stride handling
+
+  // Finalize the scene data (bvhs and ltris)
+  scene_finalize(s);
+  
   gltf_release(&data);
+
+  logc("Create scene with %i meshes, %i materials and %i instances", s->mesh_cnt, s->mtl_cnt, s->inst_cnt);
 
   return 0;
 }
