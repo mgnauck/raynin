@@ -19,8 +19,6 @@
 #define HEIGHT      600
 #endif
 
-#define SPP         2
-
 #define RIOW_SIZE   22
 #define TRI_CNT     1280 + 600
 #define LIGHT_CNT   3
@@ -196,7 +194,7 @@ void init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, size
 }
 
 __attribute__((visibility("default")))
-void init(uint32_t width, uint32_t height)
+void init(uint32_t width, uint32_t height, uint8_t spp)
 {
   pcg_srand(42u, 303u);
 
@@ -204,7 +202,7 @@ void init(uint32_t width, uint32_t height)
 
   renderer_gpu_alloc(TRI_CNT, LTRI_CNT, MTL_CNT, INST_CNT);
 
-  rd = renderer_init(cs, width, height, SPP);
+  rd = renderer_init(cs, width, height, spp);
   renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
   //renderer_set_bg_col(rd, (vec3){ 1.0f, 1.0f, 1.0f });
   //renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });

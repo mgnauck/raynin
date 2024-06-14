@@ -1,8 +1,13 @@
+const GLTF_SCENE_PATH = "scenes/scene.gltf";
+const GLTF_BIN_PATH = "scenes/scene.bin";
+
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 10.0;
 
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
+
+const SPP = 2;
 
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
@@ -25,7 +30,7 @@ function installEventHandler()
 {
   canvas.addEventListener("click", async () => {
     if(!document.pointerLockElement)
-      await canvas.requestPointerLock(); // { unadjustedMovement: true }
+      await canvas.requestPointerLock(); // On macOS/win enable: { unadjustedMovement: true }
   });
 
   document.addEventListener("keydown",
@@ -308,23 +313,20 @@ async function main()
   await wa.instantiate();
 
   // Create buffers with gltf text and binary data
-  let gltf = await (await fetch("scenes/scene.gltf")).arrayBuffer();
+  let gltf = await (await fetch(GLTF_SCENE_PATH)).arrayBuffer();
   let gltfPtr = wa.malloc(gltf.byteLength);
   wa.memUint8.set(new Uint8Array(gltf), gltfPtr);
 
-  let gltfBin = await (await fetch("scenes/scene.bin")).arrayBuffer();
+  let gltfBin = await (await fetch(GLTF_BIN_PATH)).arrayBuffer();
   let gltfBinPtr = wa.malloc(gltfBin.byteLength);
   wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
 
-  console.log("gltf txt size: " + gltf.byteLength);
-  console.log("gltf bin size: " + gltfBin.byteLength);
-
   // Init scene from gltf data
   wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength);
-  
+
 /*
-  // Init renderer and everything else
-  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT);
+  // Init renderer
+  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP);
   
   // Pipelines
   if(VISUAL_SHADER.includes("END_visual_wgsl"))
