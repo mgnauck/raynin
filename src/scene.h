@@ -48,6 +48,7 @@ void      scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl);
 
 uint32_t  scene_add_inst_mesh(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform); // No material override for mtl_id < 0
 uint32_t  scene_add_inst_shape(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform);
+
 void      scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform);
 void      scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id);
 
@@ -55,10 +56,7 @@ void      scene_set_inst_state(scene *s, uint32_t inst_id, uint32_t state);
 void      scene_clr_inst_state(scene *s, uint32_t inst_id, uint32_t state);
 uint32_t  scene_get_inst_state(scene *s, uint32_t inst_id);
 
-uint32_t  scene_add_quad(scene *s, uint32_t subx, uint32_t suby, uint32_t mtl);
-uint32_t  scene_add_icosphere(scene *s, uint8_t steps, uint32_t mtl, bool faceNormals);
-uint32_t  scene_add_uvsphere(scene *s, float radius, uint32_t subx, uint32_t suby, uint32_t mtl, bool faceNormals);
-uint32_t  scene_add_uvcylinder(scene *s, float radius, float height, uint32_t subx, uint32_t suby, uint32_t mtl, bool faceNormals);
-uint32_t  scene_add_mesh(scene *s, const uint8_t *data, uint32_t mtl, bool faceNormals);
+mesh      *scene_acquire_mesh(scene *s);
+uint32_t  scene_attach_mesh(scene *s, mesh *m, bool is_mesh_emissive);
 
 #endif

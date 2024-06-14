@@ -3,10 +3,11 @@
 #include "mutil.h"
 #include "vec3.h"
 #include "mtl.h"
+#include "mesh.h"
 #include "inst.h"
 #include "scene.h"
 #include "renderer.h"
-#include "gltfimp.h"
+#include "import.h"
 #include "settings.h"
 
 #include "data/teapot.h"
@@ -99,30 +100,43 @@ void init_scene_riow(scene *s)
   cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   uint16_t mtl_id = 0;
-  uint16_t lid = 0;
+  uint32_t lid = 0;
+  uint32_t sid = 0;
+  uint32_t fid = 0;
+  mesh *mesh = 0;
   mtl m;
   mat4 transform, translation, rotation, scale;
 
-  // Light meshes (need to be unique!)
+  // Light meshes (need to be unique)
   m = mtl_init((vec3){ 1.16f, 1.16, 1.16f });
   mtl_id = scene_add_mtl(s, &m);
-  lid = scene_add_quad(s, 1, 1, mtl_id);
-  for(uint8_t i=1; i<LIGHT_CNT; i++) { 
-    scene_add_quad(s, 1, 1, mtl_id);
+  mesh = scene_acquire_mesh(s);
+  mesh_create_quad(mesh, 1, 1, mtl_id);
+  lid = scene_attach_mesh(s, mesh, true);
+  for(uint8_t i=1; i<LIGHT_CNT; i++) {
+    mesh = scene_acquire_mesh(s);
+    mesh_create_quad(mesh, 1, 1, mtl_id);
+    scene_attach_mesh(s, mesh, true);
   }
 
+  /*
   // Sphere mesh
-  uint16_t sid = scene_add_uvsphere(s, 1.0f, 20, 20, mtl_id, false);
-  //uint16_t sid = scene_add_icosphere(s, 3, mtl_id, false);
-  //uint16_t sid = scene_add_mesh(s, teapot, mtl_id, false);
-  //uint16_t sid = scene_add_uvcylinder(s, 1.0f, 2.0f, 20, 20, 1, false);
+  mesh = scene_acquire_mesh(s);
+  mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false);
+  //mesh_create_uvcylinder(mesh, 1.0f, 2.0f, 20, 20, 1, false);
+  //mesh_create_icosphere(mesh, 3, mtl_id, false);
+  //import_mesh_data(mesh, teapot, mtl_id, false);
+  sid = scene_attach_mesh(s, mesh, false);
+  */
   
   // Floor mesh
   m = mtl_init((vec3){ 0.25f, 0.25f, 0.25f });
   m.metallic = 0.0f;
   m.roughness = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
-  uint16_t fid = scene_add_quad(s, 10, 10, mtl_id);
+  /*mesh = scene_acquire_mesh(s);
+  mesh_create_quad(mesh, 10, 10, mtl_id);
+  fid = scene_attach_mesh(s, mesh, false);*/
  
   // Light instances
   for(uint8_t i=0; i<LIGHT_CNT; i++) { 
@@ -190,7 +204,7 @@ void init_scene_riow(scene *s)
 __attribute__((visibility("default")))
 void init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
 {
-  gltf_import(cs, gltf, gltf_sz, bin, bin_sz);
+  import_gltf(cs, gltf, gltf_sz, bin, bin_sz);
 }
 
 __attribute__((visibility("default")))
@@ -292,7 +306,7 @@ int main(int argc, char *argv[])
     goto clean_window;
   }
 
-  init(WIDTH, HEIGHT);
+  init(WIDTH, HEIGHT, 1);
 
   bool      quit = false;
   bool      lock_mouse = false;

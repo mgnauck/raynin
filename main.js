@@ -323,8 +323,9 @@ async function main()
 
   // Init scene from gltf data
   wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength);
+  //*/
 
-/*
+  /*
   // Init renderer
   wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP);
   
@@ -339,7 +340,7 @@ async function main()
     document.addEventListener("click", startRender, { once: true });
   else
     startRender();
-*/
+  //*/
 }
 
 main();

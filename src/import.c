@@ -1,4 +1,4 @@
-#include "gltfimp.h"
+#include "import.h"
 #include "sutil.h"
 #include "mutil.h"
 #include "scene.h"
@@ -38,7 +38,7 @@ vec3 read_vec(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
   };
 }
 
-void create_mesh(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
+void create_mesh(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin, bool *is_emissive)
 {
   // Calc triangle count from gltf mesh data
   for(uint32_t j=0; j<gm->prim_cnt; j++) {
@@ -52,6 +52,7 @@ void create_mesh(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
   }
 
   mesh_init(m, m->tri_cnt);
+  *is_emissive = false;
 
   // Collect the data and copy to our actual mesh
   uint32_t tri_cnt = 0;
@@ -132,7 +133,7 @@ void create_mesh(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
       tri_cnt++;
     }
 
-    m->is_emissive |= mtl_is_emissive(&d->mtls[p->mtl_idx]);
+    *is_emissive |= mtl_is_emissive(&d->mtls[p->mtl_idx]);
   }
 
   logc("Created mesh with %i triangles", tri_cnt);
@@ -144,7 +145,7 @@ void create_mesh(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
   }
 }
 
-uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
+uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
 {
   // Parse the gltf
   gltf_data data = (gltf_data){ .nodes = NULL };
@@ -180,13 +181,71 @@ uint8_t gltf_import(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   for(uint32_t i=0; i<data.mesh_cnt; i++) {
     gltf_mesh *gm = &data.meshes[i];
     if(gm->mesh_idx >= 0) {
-      mesh *m = &s->meshes[gm->mesh_idx];
-      create_mesh(m, &data, gm, bin);
-      mesh_finalize(s, m);
+      mesh *m = scene_acquire_mesh(s);
+      bool is_emissive;
+      create_mesh(m, &data, gm, bin, &is_emissive);
+      scene_attach_mesh(s, m, is_emissive);
     }
   }
 
   gltf_release(&data);
 
   return 0;
+}
+
+void import_mesh_data(mesh *m, const uint8_t *data, uint32_t mtl, bool faceNormals)
+{
+  uint32_t ofs = 0;
+
+  uint32_t vertex_cnt = *(uint32_t *)(data + ofs);
+  ofs += sizeof(vertex_cnt);
+
+  uint32_t normal_cnt = *(uint32_t *)(data + ofs);
+  ofs += sizeof(normal_cnt);
+
+  uint32_t uv_cnt = *(uint32_t *)(data + ofs);
+  ofs += sizeof(uv_cnt);
+
+  uint32_t tri_cnt = *(uint32_t *)(data + ofs);
+  ofs += sizeof(tri_cnt);
+
+  float *vertices = (float *)(data + ofs);
+  ofs += vertex_cnt * 3 * sizeof(*vertices);
+
+  float *normals = (float *)(data + ofs);
+  ofs += normal_cnt * 3 * sizeof(*normals);
+
+  float *uvs = (float *)(data + ofs);
+  ofs += uv_cnt * 2 * sizeof(*uvs);
+
+  uint32_t *indices = (uint32_t *)(data + ofs);
+
+  mesh_init(m, tri_cnt);
+
+  uint32_t items = (1 + (uv_cnt > 0 ? 1 : 0) + (normal_cnt > 0 ? 1 : 0));
+
+  for(uint32_t i=0; i<tri_cnt; i++) {
+    tri *t = &m->tris[i];
+    uint32_t index = 3 * items * i;
+
+    memcpy(&t->v0, &vertices[3 * indices[index]], sizeof(t->v0));
+    memcpy(&t->v1, &vertices[3 * indices[index + items]], sizeof(t->v1));
+    memcpy(&t->v2, &vertices[3 * indices[index + items + items]], sizeof(t->v2));
+#ifdef TEXTURE_SUPPORT // Untested
+    if(uv_cnt > 0 ) {
+      memcpy(t->uv0, &uvs[2 * indices[index + 1]], 2 * sizeof(*t->uv0));
+      memcpy(t->uv1, &uvs[2 * indices[index + items + 1]], 2 * sizeof(*t->uv1));
+      memcpy(t->uv2, &uvs[2 * indices[index + items + items + 1]], 2 * sizeof(*t->uv2));
+    }
+#endif
+    if(!faceNormals && normal_cnt > 0) {
+      memcpy(&t->n0, &normals[3 * indices[index + 2]], sizeof(t->n0));
+      memcpy(&t->n1, &normals[3 * indices[index + items + 2]], sizeof(t->n1));
+      memcpy(&t->n2, &normals[3 * indices[index + items + items + 2]], sizeof(t->n2));
+    } else 
+      t->n0 = t->n1 = t->n2 = vec3_unit(vec3_cross(vec3_sub(t->v0, t->v1), vec3_sub(t->v2, t->v1)));
+
+    t->mtl = mtl;
+    m->centers[i] = tri_calc_center(t);
+  }
 }
