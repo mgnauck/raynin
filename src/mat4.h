@@ -22,7 +22,8 @@ void mat4_rot_x(mat4 dest, float radians);
 void mat4_rot_y(mat4 dest, float radians);
 void mat4_rot_z(mat4 dest, float radians);
 
-void mat4_scale(mat4 dest, float s);
+void mat4_scale(mat4 dest, vec3 s);
+void mat4_scale_u(mat4 dest, float s);
 
 bool mat4_inv(mat4 dest, const mat4 src);
 

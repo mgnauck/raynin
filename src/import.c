@@ -195,7 +195,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     if(gn->mesh_idx >= 0) {
       gltf_mesh *gm = &data.meshes[gn->mesh_idx];
       mat4 scale, rot, trans, final;
-      mat4_scale(scale, gn->scale.x); // TODO Apply non-uniform scaling
+      mat4_scale(scale, gn->scale);
       mat4_from_quat(rot, gn->rot[0], gn->rot[1], gn->rot[2], gn->rot[3]);
       mat4_trans(trans, gn->trans);
       mat4_mul(final, rot, scale);

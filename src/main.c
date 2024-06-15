@@ -135,13 +135,13 @@ void init_scene_riow(scene *s)
   m.metallic = 0.0f;
   m.roughness = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
-  /*mesh = scene_acquire_mesh(s);
+  mesh = scene_acquire_mesh(s);
   mesh_create_quad(mesh, 10, 10, mtl_id);
-  fid = scene_attach_mesh(s, mesh, false);*/
+  fid = scene_attach_mesh(s, mesh, false);
  
   // Light instances
   for(uint8_t i=0; i<LIGHT_CNT; i++) { 
-    mat4_scale(scale, 0.5f);
+    mat4_scale_u(scale, 0.5f);
     mat4_rot_x(rotation, PI);
     mat4_mul(transform, scale, rotation);
     mat4_trans(translation, (vec3){ 0.0f, 5.0f, -10.0f + (i * 10.0f) });
@@ -151,12 +151,14 @@ void init_scene_riow(scene *s)
   }
 
   // Floor instance
-  mat4_scale(scale, 2.4f);
-  scene_add_shape_inst(s, ST_PLANE, mtl_id, scale);
-  //scene_add_mesh_inst(s, fid, -1, scale);
+  mat4_scale_u(scale, 2.4f);
+  //scene_add_shape_inst(s, ST_PLANE, mtl_id, scale);
+  scene_add_mesh_inst(s, fid, -1, scale);
  
   // Reflecting sphere (black)
+  mat4_scale(scale, (vec3){ 1.0, 1.0, 0.5 });
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
+  mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 0.0f, 0.0f, 0.0f });
   m.ior = 2.3f;
   mtl_id = scene_add_mtl(s, &m);
@@ -164,7 +166,9 @@ void init_scene_riow(scene *s)
   //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Reflecting sphere (white)
+  mat4_scale(scale, (vec3){ 1.0, 0.5, 1.0 });
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
+  mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
   m.ior = 1.5f;
   mtl_id = scene_add_mtl(s, &m);
@@ -172,7 +176,9 @@ void init_scene_riow(scene *s)
   //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Metallic sphere
+  mat4_scale(scale, (vec3){ 0.2, 1.0, 1.0 });
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
+  mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 0.98f, 0.85f, 0.72f });
   m.metallic = 1.0f;
   m.roughness = 0.5f;
@@ -180,7 +186,7 @@ void init_scene_riow(scene *s)
   scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
   //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
-  mat4_scale(scale, 0.2f);
+  mat4_scale_u(scale, 0.2f);
   
   for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
     for(int b=-RIOW_SIZE/2; b<RIOW_SIZE/2; b++) {
@@ -223,7 +229,8 @@ void init(uint32_t width, uint32_t height, uint8_t spp)
   renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
   rd = renderer_init(cs, width, height, spp);
   
-  renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
+  //renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
+  renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
   renderer_update_static(rd);
 }
 
@@ -264,7 +271,7 @@ void update_scene(scene *s, float time)
     scene_upd_inst_trans(s, 4, translation);
     */
     mat4 scale, rotation, translation, transform;
-    mat4_scale(scale, 0.5f);
+    mat4_scale_u(scale, 0.5f);
     mat4_rot_x(rotation, PI);
     mat4_mul(transform, scale, rotation);
     mat4_trans(translation, (vec3){ 0.0f, 5.0f + sinf(time * 0.6f) * 2.0f, 0.0f });

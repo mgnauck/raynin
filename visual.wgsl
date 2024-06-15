@@ -716,16 +716,19 @@ fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
 {
   switch(inst.data & MESH_SHAPE_MASK) {
     case ST_BOX: {
+      // Bring hit pos to object space
       let pos = (vec4f(hitPos, 1.0) * toMat4x4(inst.invTransform)).xyz;
+      // Calc normal
       var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPS));
-      return normalize(nrm * toMat3x3(inst.transform));
+      // Transform nrm to world space with transpose of inverse
+      return normalize(nrm * transpose(toMat3x3(inst.invTransform))); // TODO Optimize with above
     }
     case ST_PLANE: {
-      return normalize(vec3f(0.0, 1.0, 0.0) * toMat3x3(inst.transform));
+      return normalize(vec3f(0.0, 1.0, 0.0) * transpose(toMat3x3(inst.invTransform)));
     }
     case ST_SPHERE: {
-      let m = inst.transform;
-      return normalize(hitPos - vec3f(m[0][3], m[1][3], m[2][3]));
+      let pos = (vec4f(hitPos, 1.0) * toMat4x4(inst.invTransform)).xyz; // TODO Optimize
+      return normalize(vec3f(pos) * transpose(toMat3x3(inst.invTransform)));
     }
     default: {
       // Error
@@ -737,7 +740,8 @@ fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
 fn calcTriNormal(h: Hit, inst: Inst, tri: Tri) -> vec3f
 {
   let nrm = tri.n1 * h.u + tri.n2 * h.v + tri.n0 * (1.0 - h.u - h.v);
-  return normalize(nrm * toMat3x3(inst.transform));
+  // Transform nrm to world space with transpose of inverse
+  return normalize(nrm * transpose(toMat3x3(inst.invTransform)));
 }
 
 fn isEmissive(mtl: Mtl) -> bool

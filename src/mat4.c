@@ -60,7 +60,15 @@ void mat4_rot_z(mat4 d, float rad)
   d[12] = 0.0f; d[13] = 0.0f; d[14] = 0.0f; d[15] = 1.0f;
 }
 
-void mat4_scale(mat4 d, float s)
+void mat4_scale(mat4 d, vec3 s)
+{
+  d[ 0] =  s.x; d[ 1] = 0.0f; d[ 2] = 0.0f; d[ 3] = 0.0f;
+  d[ 4] = 0.0f; d[ 5] =  s.y; d[ 6] = 0.0f; d[ 7] = 0.0f;
+  d[ 8] = 0.0f; d[ 9] = 0.0f; d[10] =  s.z; d[11] = 0.0f;
+  d[12] = 0.0f; d[13] = 0.0f; d[14] = 0.0f; d[15] = 1.0f;
+}
+
+void mat4_scale_u(mat4 d, float s)
 {
   d[ 0] =    s; d[ 1] = 0.0f; d[ 2] = 0.0f; d[ 3] = 0.0f;
   d[ 4] = 0.0f; d[ 5] =    s; d[ 6] = 0.0f; d[ 7] = 0.0f;
