@@ -288,16 +288,22 @@ function startRender()
 async function main()
 {
   // WebGPU
-  if(!navigator.gpu)
-    throw new Error("WebGPU is not supported on this browser.");
+  if(!navigator.gpu) {
+    alert("WebGPU is not supported on this browser.");
+    return;
+  }
 
   const gpuAdapter = await navigator.gpu.requestAdapter();
-  if(!gpuAdapter)
-    throw new Error("Can not use WebGPU. No GPU adapter available.");
+  if(!gpuAdapter) {
+    alert("Can not use WebGPU. No GPU adapter available.");
+    return;
+  }
 
   device = await gpuAdapter.requestDevice();
-  if(!device)
-    throw new Error("Failed to request logical device.");
+  if(!device) {
+    alert("Failed to request logical device.");
+    return;
+  }
 
   // Canvas/context
   document.body.innerHTML = "CLICK<canvas style='width:0;cursor:none'>";
@@ -306,8 +312,10 @@ async function main()
   canvas.height = CANVAS_HEIGHT;
 
   let presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-  if(presentationFormat !== "bgra8unorm")
-    throw new Error(`Expected canvas pixel format of bgra8unorm but was '${presentationFormat}'.`);
+  if(presentationFormat !== "bgra8unorm") {
+    alert(`Expected canvas pixel format of bgra8unorm but was '${presentationFormat}'.`);
+    return;
+  }
 
   context = canvas.getContext("webgpu");
   context.configure({ device, format: presentationFormat, alphaMode: "opaque" });
@@ -320,7 +328,7 @@ async function main()
   wa = new Wasm(module);
   await wa.instantiate();
 
-  // Create buffers with gltf text and binary data
+  // Create buffers with scene gltf text and binary data
   let gltf = await (await fetch(GLTF_SCENE_PATH)).arrayBuffer();
   let gltfPtr = wa.malloc(gltf.byteLength);
   wa.memUint8.set(new Uint8Array(gltf), gltfPtr);
@@ -330,8 +338,10 @@ async function main()
   wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
 
   // Init scene from gltf data
-  wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength);
-  //*/
+  if(wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength) == 0) {
+    alert("Failed to initialize scene");
+    return;
+  }
 
   // Init renderer
   wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP);
@@ -347,7 +357,6 @@ async function main()
     document.addEventListener("click", startRender, { once: true });
   else
     startRender();
-  //*/
 }
 
 main();
