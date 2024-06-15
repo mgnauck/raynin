@@ -229,8 +229,8 @@ void init(uint32_t width, uint32_t height, uint8_t spp)
   renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
   rd = renderer_init(cs, width, height, spp);
   
-  //renderer_set_bg_col(rd, (vec3){ 0.07f, 0.08f, 0.1f });
-  renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
+  renderer_set_bg_col(rd, (vec3){ 0.01f, 0.01f, 0.01f });
+  //renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
   renderer_update_static(rd);
 }
 

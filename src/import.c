@@ -211,9 +211,6 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     }
   }
 
-  // Generated meshes, i.e. (gm->mesh_idx > 0 && gm->type != OT_MESH)
-  // Stride handling
-
   // Finalize the scene data (bvhs and ltris)
   scene_finalize(s);
   

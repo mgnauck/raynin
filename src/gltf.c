@@ -84,9 +84,9 @@ obj_type get_type(const char *name)
 {
   if(strstr(name, "Camera"))
     return OT_CAMERA;
-  else if(strstr(name, "Grid"))
+  else if(strstr(name, "Grid") || strstr(name, "Plane"))
     return OT_GRID;
-  else if(strstr(name, "Cube"))
+  else if(strstr(name, "Cube") || strstr(name, "Box"))
     return OT_CUBE;
   else if(strstr(name, "Sphere"))
     return OT_SPHERE;
@@ -620,19 +620,16 @@ uint32_t read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "type") == 0) {
       char *type = toktostr(s, &t[j + 1]);
-      bool err = false;
       if(strstr(type, "VEC3"))
         a->data_type = DT_VEC3;
       else if(strstr(type, "SCALAR"))
         a->data_type = DT_SCALAR;
       else {
+        a->data_type = DT_UNKNOWN;
         logc("Accessor with unknown data type: %s", type);
-        err = true;
       }
-      if(!err) {
-        logc("type: %i (%s)", a->data_type, type);
-        j += 2;
-      }
+      logc("type: %i (%s)", a->data_type, type);
+      j += 2;
       continue;
     }
 
@@ -806,7 +803,7 @@ uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz)
 
     // Buffers. Check that we have a single buffer with mesh data. Something else is not supported ATM.
     if(jsoneq(gltf, key, "buffers") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size != 1) {
-      logc("Expected gltf with one buffer only. Can not process file further.");
+      logc("#### ERROR: Expected gltf with one buffer only. Can not process file further.");
       free(t);
       return 1;
     }
@@ -815,6 +812,8 @@ uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz)
     // - Assets, extensions
     // - Default scene (expecting only one scene)
     // - Root nodes or node hierarchy (expecting flat list of nodes)
+    // - All typs of animation/skinning etc.
+    // - Texture coords and textures of all types
     // - Buffers (expecting only one buffer)
     j += ignore(gltf, key);
   }

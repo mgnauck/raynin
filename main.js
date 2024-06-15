@@ -338,7 +338,7 @@ async function main()
   wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
 
   // Init scene from gltf data
-  if(wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength) == 0) {
+  if(wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength) > 0) {
     alert("Failed to initialize scene");
     return;
   }

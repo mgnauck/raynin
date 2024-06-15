@@ -7,7 +7,7 @@
 
 typedef struct mtl mtl;
 
-typedef enum obj_type {
+typedef enum obj_type { // Infer shape type from name
   OT_CAMERA,
   OT_GRID,
   OT_CUBE,
@@ -19,7 +19,8 @@ typedef enum obj_type {
 
 typedef enum data_type {
   DT_SCALAR,
-  DT_VEC3
+  DT_VEC3,
+  DT_UNKNOWN // All the unsupported ones
 } data_type;
 
 typedef struct gltf_cam {
