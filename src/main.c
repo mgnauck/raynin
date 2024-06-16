@@ -32,9 +32,8 @@
 scene         scn;
 scene         *cs = &scn;
 render_data   *rd;
-
+vec3          bg_col = { 0.0f, 0.0f, 0.0f };
 bool          orbit_cam = false;
-bool          paused = true;
 
   __attribute__((visibility("default")))
 void key_down(unsigned char key)
@@ -69,8 +68,9 @@ void key_down(unsigned char key)
     case 'o':
       orbit_cam = !orbit_cam;
       break;
-    case 'p':
-      paused = !paused;
+    case 'u':
+      bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, bg_col);
+      renderer_set_bg_col(rd, bg_col);
       break;
     case 'r':
       // TODO Call JS to reload shader
@@ -229,8 +229,7 @@ void init(uint32_t width, uint32_t height, uint8_t spp)
   renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
   rd = renderer_init(cs, width, height, spp);
   
-  renderer_set_bg_col(rd, (vec3){ 0.01f, 0.01f, 0.01f });
-  //renderer_set_bg_col(rd, (vec3){ 0.0f, 0.0f, 0.0f });
+  renderer_set_bg_col(rd, bg_col);
   renderer_update_static(rd);
 }
 
@@ -247,36 +246,6 @@ void update_scene(scene *s, float time)
     vec3 pos = (vec3){ r * sinf(time * v * v), 1.2f + h + h * sinf(time * v * 0.7f), r * cosf(time * v) };
     cam_set(&s->cam, pos, vec3_neg(pos));
     scene_set_dirty(s, RT_CAM_VIEW);
-  }
-
-  if(!paused) {
-    /*
-    // Randomly enable/disable instances
-    static float last = 0;
-    if(time - last > 0.05f) {
-      uint32_t idx = 2 + (uint32_t)(pcg_randf() * (s->inst_cnt - 2));
-      if(scene_get_inst_state(s, idx) & IS_DISABLED)
-        scene_clr_inst_state(s, idx, IS_DISABLED);
-      else
-        scene_set_inst_state(s, idx, IS_DISABLED);
-      last = time;
-    }
-    // Move some instances
-    mat4 translation;
-    mat4_trans(translation, (vec3){ 4.0f, 2.0f + sinf(time * 0.6f), 0.0f });
-    scene_upd_inst_trans(s, 2, translation);
-    mat4_trans(translation, (vec3){ 0.0f, 2.0f + sinf(time * 0.6f + 0.6f), 0.0f });
-    scene_upd_inst_trans(s, 3, translation);
-    mat4_trans(translation, (vec3){ -4.0f, 2.0f + sinf(time * 0.6f + 1.2f), 0.0f });
-    scene_upd_inst_trans(s, 4, translation);
-    */
-    mat4 scale, rotation, translation, transform;
-    mat4_scale_u(scale, 0.5f);
-    mat4_rot_x(rotation, PI);
-    mat4_mul(transform, scale, rotation);
-    mat4_trans(translation, (vec3){ 0.0f, 5.0f + sinf(time * 0.6f) * 2.0f, 0.0f });
-    mat4_mul(transform, translation, transform);
-    scene_upd_inst_trans(s, 1, transform);
   }
 }
 

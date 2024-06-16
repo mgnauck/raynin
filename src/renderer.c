@@ -109,6 +109,7 @@ void reset_samples(render_data *rd)
 void renderer_set_bg_col(render_data *rd, vec3 bg_col)
 {
   memcpy(&rd->bg_col, &bg_col, sizeof(rd->bg_col));
+  rd->gathered_spp = 0;
   scene_set_dirty(rd->scene, RT_CAM_VIEW);
 }
 
