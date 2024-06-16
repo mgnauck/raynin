@@ -3,14 +3,16 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include "vec3.h"
 
 typedef struct mtl mtl;
 
 typedef enum obj_type { // Infer shape type from name
   OT_CAMERA,
-  OT_GRID,
-  OT_CUBE,
+  OT_QUAD,
+  OT_BOX,
+  OT_ICOSPHERE,
   OT_SPHERE,
   OT_CYLINDER,
   OT_MESH,
@@ -37,8 +39,10 @@ typedef struct gltf_prim {
 
 typedef struct gltf_mesh {
   obj_type      type;
-  uint32_t      subx;
-  uint32_t      suby;
+  uint32_t      subx;       // Object generation (custom value)
+  uint32_t      suby;       // Object generation (custom value)
+  uint16_t      steps;      // Object generation (custom value)
+  bool          face_nrms;  // Object generation (custom value)
   gltf_prim*    prims;
   uint32_t      prim_cnt;
   int32_t       mesh_idx;   // Index of the final "engine mesh", -1 if not set

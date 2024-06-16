@@ -82,16 +82,19 @@ uint32_t ignore(const char *s, jsmntok_t *t)
 
 obj_type get_type(const char *name)
 {
-  if(strstr(name, "Camera"))
+  if(strstr_lower(name, "camera"))
     return OT_CAMERA;
-  else if(strstr(name, "Grid") || strstr(name, "Plane"))
-    return OT_GRID;
-  else if(strstr(name, "Cube") || strstr(name, "Box"))
-    return OT_CUBE;
-  else if(strstr(name, "Sphere"))
+  else if(strstr_lower(name, "grid") || strstr_lower(name, "plane") || strstr_lower(name, "quad"))
+    return OT_QUAD;
+  else if(strstr_lower(name, "cube") || strstr_lower(name, "box"))
+    return OT_BOX;
+  else if(strstr_lower(name, "icosphere"))
+    return OT_ICOSPHERE;
+  else if(strstr_lower(name, "sphere"))
     return OT_SPHERE;
-  else if(strstr(name, "Cylinder"))
+  else if(strstr_lower(name, "cylinder"))
     return OT_CYLINDER;
+  // Everything else is considered a mesh
   return OT_MESH;
 }
 
@@ -307,15 +310,19 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
         logc("Failed to read rotation. Expected quaternion (xyzw).");
     }
 
+    if(jsoneq(s, key, "children") == 0) {
+      logc("#### ERROR: Gltf nodes with children not supported. Most likely this gltf file will not be read correctly.");
+    }
+
     j += ignore(s, key);
   }
 
   if(n->type == OT_UNKNOWN) {
     if(n->cam_idx >= 0 || n->mesh_idx >= 0) {
       n->type = (n->cam_idx >= 0) ? OT_CAMERA : OT_MESH;
-      logc("Failed to read node type. Falling back to %s", n->type == OT_CAMERA ? "camera" : "mesh");
+      logc("#### WARN: Failed to read node type. Falling back to %s", n->type == OT_CAMERA ? "camera" : "mesh");
     } else
-      logc("Failed to read node type. No fallback available.");
+      logc("#### ERROR: Failed to read node type. No fallback available.");
   }
 
   return j;
@@ -409,6 +416,8 @@ uint32_t read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
   m->subx = 0;
   m->suby = 0;
+  m->steps = 0;
+  m->face_nrms = false;
 
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
@@ -424,6 +433,20 @@ uint32_t read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "suby") == 0) {
       m->suby = atoi(toktostr(s, &t[j + 1]));
       logc("suby: %i", m->suby);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "steps") == 0) {
+      m->steps = atoi(toktostr(s, &t[j + 1]));
+      logc("steps: %i", m->suby);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "facenormals") == 0) {
+      m->face_nrms = true;
+      logc("facenormals: %i (%s)", m->face_nrms, toktostr(s, &t[j + 1]));
       j += 2;
       continue;
     }
