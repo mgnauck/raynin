@@ -1,6 +1,5 @@
 /obj
 /output
-/scenes
 *.swp
 *.wasm
 main
