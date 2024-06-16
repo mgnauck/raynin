@@ -233,13 +233,9 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
       continue;
     }
     
-    /// DEBUG: Everything is a mesh
-    //gm->mesh_idx = mesh_cnt++;
-    //continue;
-
-    // Antyhing that is a cylinder, plane/grid or is already a mesh in gltf or has multiple primitives
-    // will also be a mesh in our renderer. We will generate mesh data for cylinders/planes but read the
-    // data from the gltf in case it is an arbitrary mesh or has multiple primitives.
+    // Anything that is an icosphere, cylinder, plane/grid or is already of type mesh or has multiple primitives
+    // will also be a mesh in our renderer. We will generate mesh data for icospheres/cylinders/planes but read the
+    // mesh data from the gltf in case it is an arbitrary mesh or has multiple primitives.
     if(gm->type == OT_MESH || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_QUAD || gm->prim_cnt > 1) {
       gm->mesh_idx = mesh_cnt++;
       logc("Gltf mesh %i will be a mesh in the scene.", j);
@@ -261,6 +257,8 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     // This leaves us with spheres and boxes which will be directly intersected as shape
     logc("Gltf mesh will be a shape of type %i.", gm->type);
   }
+
+  // TODO Resolve instances referenced by meshes with emissive materials. We need them as unique meshes.
 
   // Allocate scene
   scene_init(s, mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt);

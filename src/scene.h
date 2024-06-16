@@ -40,7 +40,7 @@ typedef struct scene {
 } scene;
 
 void      scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt);
-void      scene_release();
+void      scene_release(scene *s);
 
 void      scene_set_dirty(scene *s, res_type r);
 void      scene_clr_dirty(scene *s, res_type r);
