@@ -446,7 +446,7 @@ uint32_t read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "facenormals") == 0) {
       m->face_nrms = true;
-      logc("facenormals: %i (%s)", m->face_nrms, toktostr(s, &t[j + 1]));
+      logc("facenormals: %i", m->face_nrms);
       j += 2;
       continue;
     }
@@ -542,7 +542,7 @@ uint32_t read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
 
 uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
-  m->mesh_idx = -1; // No real mesh assigned yet
+  m->mesh_idx = -1; // Will be index of scene mesh. No real mesh assigned yet.
   m->type = OT_UNKNOWN;
 
   m->prims = NULL;
