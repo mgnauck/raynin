@@ -45,7 +45,6 @@ typedef struct gltf_mesh {
   bool          face_nrms;  // Object generation (custom value)
   gltf_prim*    prims;
   uint32_t      prim_cnt;
-  int32_t       mesh_idx;   // Index of the final "engine mesh", -1 if not set
 } gltf_mesh;
 
 typedef struct gltf_accessor {

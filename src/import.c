@@ -170,11 +170,9 @@ void create_mesh(mesh *m, gltf_data *d, gltf_mesh *gm, bool *is_emissive)
   *is_emissive = mtl_is_emissive(&d->mtls[gm->prims[0].mtl_idx]);
 }
 
-void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn)
+void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn, int32_t *mesh_indices)
 {
-  gltf_mesh *gm = &d->meshes[gn->mesh_idx];
-  
-  // Retrieve transformation
+  // Get node transformation
   mat4 scale, rot, trans, final;
   mat4_scale(scale, gn->scale);
   mat4_from_quat(rot, gn->rot[0], gn->rot[1], gn->rot[2], gn->rot[3]);
@@ -182,10 +180,14 @@ void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn)
   mat4_mul(final, rot, scale);
   mat4_mul(final, trans, final);
 
+  // Get mesh data
+  gltf_mesh *gm = &d->meshes[gn->mesh_idx];
+  int32_t mesh_idx = mesh_indices[gn->mesh_idx]; // scene mesh index
+
   // Create instance
-  if(gm->mesh_idx >= 0) {
-    // Mesh isntance (mesh was either loaded or generated)
-    scene_add_mesh_inst(s, gm->mesh_idx, -1, final);
+  if(mesh_idx >= 0) {
+    // Mesh instance (mesh was either loaded or generated)
+    scene_add_mesh_inst(s, mesh_idx, -1, final);
     logc("Created mesh instance of mesh %i.", gn->mesh_idx);
   } else {
     // Shape instance
@@ -215,6 +217,7 @@ void process_cam_node(scene *s, gltf_data *d, gltf_node *gn)
 uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
 {
   // Parse the gltf
+  logc(">>>> Loading gltf");
   gltf_data data = (gltf_data){ .nodes = NULL };
   if(gltf_read(&data, gltf, gltf_sz) != 0) {
     gltf_release(&data);
@@ -222,11 +225,15 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     return 1;
   }
 
+  // Prepare list of indices to scene meshes
+  int32_t *mesh_indices = malloc(data.mesh_cnt * sizeof(mesh_indices));
+
   // Identify actual meshes
   logc(">>>> Mesh identification");
   uint32_t mesh_cnt = 0;
   for(uint32_t j=0; j<data.mesh_cnt; j++) {
     gltf_mesh *gm = &data.meshes[j];
+    mesh_indices[j] = -1;
 
     if(gm->type == OT_UNKNOWN) {
       logc("#### WARN: Can not identify mesh %i because it has an unknown object type. Ignoring.", j);
@@ -237,7 +244,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     // will also be a mesh in our renderer. We will generate mesh data for icospheres/cylinders/planes but read the
     // mesh data from the gltf in case it is an arbitrary mesh or has multiple primitives.
     if(gm->type == OT_MESH || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_QUAD || gm->prim_cnt > 1) {
-      gm->mesh_idx = mesh_cnt++;
+      mesh_indices[j] = mesh_cnt++;
       logc("Gltf mesh %i will be a mesh in the scene.", j);
       continue;
     } else {
@@ -247,7 +254,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
         gltf_prim *gp = &gm->prims[i]; 
         if(mtl_is_emissive(&data.mtls[gp->mtl_idx])) {
           logc("Gltf mesh %i will be a mesh in the scene because its primitive %i is emissive.", j, i);
-          gm->mesh_idx = mesh_cnt++;
+          mesh_indices[j] = mesh_cnt++;
           break;
         }
       }
@@ -277,7 +284,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
       continue;
     }
 
-    if(gm->mesh_idx >= 0) {
+    if(mesh_indices[i] >= 0) {
       bool is_emissive;
 
       // Acquire an empty mesh from the scene
@@ -307,7 +314,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   for(uint32_t i=0; i<data.node_cnt; i++) {
     gltf_node *gn = &data.nodes[i];
     if(gn->mesh_idx >= 0)
-      process_mesh_node(s, &data, gn);
+      process_mesh_node(s, &data, gn, mesh_indices);
     else if(gn->cam_idx >= 0) 
       process_cam_node(s, &data, gn); // TODO Last cam wins for now
     else
@@ -316,7 +323,8 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
   // Finalize the scene data (bvhs and ltris)
   scene_finalize(s);
-  
+ 
+  free(mesh_indices);
   gltf_release(&data);
 
   logc("Created scene with %i meshes, %i materials and %i instances.", s->mesh_cnt, s->mtl_cnt, s->inst_cnt);

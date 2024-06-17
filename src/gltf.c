@@ -542,7 +542,6 @@ uint32_t read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
 
 uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
-  m->mesh_idx = -1; // Will be index of scene mesh. No real mesh assigned yet.
   m->type = OT_UNKNOWN;
 
   m->prims = NULL;
