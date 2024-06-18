@@ -138,13 +138,13 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
     }
   }
 
-  logc("Created mesh from gltf with %i triangles.", tri_cnt);
-
   // In case we skipped a primitive, adjust the tri cnt of the mesh
   if(m->tri_cnt != tri_cnt) {
     m->tri_cnt = tri_cnt;
     logc("#### WARN: Mesh is missing some triangle data, i.e. skipped gltf primitve.");
   }
+
+  logc("Loaded mesh from gltf data with %i triangles.", m->tri_cnt);
 }
 
 void generate_mesh_data(mesh *m, gltf_mesh *gm)
@@ -188,15 +188,15 @@ void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn, mesh_ref *mesh_map
   if(mesh_idx >= 0) {
     // Mesh instance (mesh was either loaded or generated)
     scene_add_mesh_inst(s, mesh_idx, -1, final);
-    logc("Created mesh instance of mesh %i.", gn->mesh_idx);
+    logc("Created mesh instance of gltf mesh %i.", gn->mesh_idx);
   } else {
     // Shape instance
     if(gm->type == OT_BOX) {
       scene_add_shape_inst(s, ST_BOX, gm->prims[0].mtl_idx, final);
-      logc("Created box shape instance of mesh %i.", gn->mesh_idx);
+      logc("Created box shape instance of gltf mesh %i.", gn->mesh_idx);
     } else if(gm->type == OT_SPHERE) {
       scene_add_shape_inst(s, ST_SPHERE, gm->prims[0].mtl_idx, final);
-      logc("Created sphere shape instance of mesh %i.", gn->mesh_idx);
+      logc("Created sphere shape instance of gltf mesh %i.", gn->mesh_idx);
     }
   }
 }
@@ -222,10 +222,15 @@ bool check_is_emissive(gltf_mesh *gm, gltf_data* d)
   return false;
 }
 
+bool check_is_custom(gltf_mesh *gm)
+{
+  return gm->subx > 0 || gm->suby > 0 || gm->face_nrms;
+}
+
 uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
 {
   // Parse the gltf
-  logc("-------- Reading gltf");
+  logc("-------- Reading gltf:");
   gltf_data data = (gltf_data){ .nodes = NULL };
   if(gltf_read(&data, gltf, gltf_sz) != 0) {
     gltf_release(&data);
@@ -238,16 +243,16 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   uint32_t mesh_cnt = 0;
 
   // Identify actual meshes
-  logc("-------- Identifying meshes");
+  logc("-------- Identifying meshes:");
   for(uint32_t j=0; j<data.mesh_cnt; j++) {
     gltf_mesh *gm = &data.meshes[j];
     mesh_ref *mr = &mesh_map[j];
     bool is_emissive = check_is_emissive(gm, &data);
-    if(is_emissive || gm->type == OT_MESH || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_QUAD || gm->prim_cnt > 1) {
+    if(is_emissive || check_is_custom(gm) || gm->type == OT_MESH || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_QUAD || gm->prim_cnt > 1) {
       // Meshes that are emissive or need to be loaded or generated will end up as an actual renderer mesh
       mr->mesh_idx = mesh_cnt++;
       mr->is_emissive = is_emissive;
-      logc("Gltf mesh %i will be mesh %i in the scene. This mesh is emissive: %i", j, mr->mesh_idx, is_emissive);
+      logc("Gltf mesh %i will be render mesh %i in the scene. This mesh is %semissive.", j, mr->mesh_idx, is_emissive ? "" : "not ");
     } else {
       // Everything else will be represented as a shape, i.e. boxes/spheres
       mr->mesh_idx = -1; // No mesh required
@@ -257,7 +262,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   }
 
   // Allocate scene
-  logc("-------- Allocating %i meshes, %i materials and %i instances", mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt);
+  logc("-------- Allocating %i meshes, %i materials and %i instances.", mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt);
   scene_init(s, mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt);
 
   // Set default camera (might be overwritten if there is a cam in the scene)
@@ -265,28 +270,29 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   cam_set(&s->cam, (vec3){ 0.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   // Convert gltf meshes to renderer meshes and attach to scene
-  logc("-------- Creating meshes");
+  logc("-------- Creating meshes:");
   for(uint32_t i=0; i<data.mesh_cnt; i++) {
     gltf_mesh *gm = &data.meshes[i];
     mesh_ref *mr = &mesh_map[i];
     if(mr->mesh_idx >= 0) {
       mesh *m = scene_acquire_mesh(s);
-      if(gm->type == OT_MESH || gm->type == OT_BOX || gm->prim_cnt > 1)
+      if(gm->type == OT_MESH || gm->type == OT_BOX || gm->prim_cnt > 1) {
         load_mesh_data(m, &data, gm, bin);
-      else
+      } else
         generate_mesh_data(m, gm); // TODO Add box generator and remove above
       scene_attach_mesh(s, m, mr->is_emissive);
+      logc("Created render mesh %i from gltf mesh %i.", mr->mesh_idx, i);
     } else
-      logc("Skipping gltf mesh %i from mesh generation because it will be a shape.", i);
+      logc("Skipping gltf mesh %i from mesh creation because it will be a shape.", i);
   }
 
   // Add materials to scene
-  logc("-------- Creating materials");
+  logc("-------- Creating materials.");
   for(uint32_t i=0; i<data.mtl_cnt; i++)
     scene_add_mtl(s, &data.mtls[i]);
 
   // Add nodes as scene instances
-  logc("-------- Creating instances");
+  logc("-------- Creating instances:");
   for(uint32_t i=0; i<data.node_cnt; i++) {
     gltf_node *gn = &data.nodes[i];
     if(gn->mesh_idx >= 0)
@@ -298,7 +304,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   }
 
   // Finalize the scene data (bvhs and ltris)
-  logc("-------- Creating bvhs and preparing ltris");
+  logc("-------- Creating bvhs and preparing ltris.");
   scene_finalize(s);
  
   free(mesh_map);

@@ -5,6 +5,7 @@
 #include "mtl.h"
 #include "mesh.h"
 #include "inst.h"
+#include "tlas.h"
 #include "scene.h"
 #include "renderer.h"
 #include "import.h"
@@ -241,7 +242,7 @@ void update_scene(scene *s, float time)
   // Update camera
   if(orbit_cam) {
     float v = 0.5f;
-    float r = 16.0f;
+    float r = vec3_max_comp(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min)) * 0.5f;
     float h = 2.0f;
     vec3 pos = (vec3){ r * sinf(time * v * v), 1.2f + h + h * sinf(time * v * 0.7f), r * cosf(time * v) };
     cam_set(&s->cam, pos, vec3_neg(pos));
