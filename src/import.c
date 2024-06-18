@@ -160,7 +160,7 @@ void generate_mesh_data(mesh *m, gltf_mesh *gm)
   } else if(gm->type == OT_CYLINDER) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : CYLINDER_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : CYLINDER_DEFAULT_SUBY;
-    mesh_create_uvcylinder(m, 1.0f, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms);
+    mesh_create_uvcylinder(m, 1.0f, 2.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms);
     logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
   } else if(gm->type == OT_QUAD) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : QUAD_DEFAULT_SUBX;
