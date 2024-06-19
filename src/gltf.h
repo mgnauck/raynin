@@ -8,8 +8,6 @@
 
 #define NAME_STR_LEN  256
 
-typedef struct mtl mtl;
-
 typedef enum obj_type { // Infer shape type from name
   OT_CAMERA,
   OT_QUAD,
@@ -27,7 +25,18 @@ typedef enum data_type {
   DT_UNKNOWN // All the unsupported ones
 } data_type;
 
+typedef struct gltf_mtl {
+  char          name[NAME_STR_LEN];
+  vec3          col;
+  float         metallic;
+  float         roughness;
+  float         ior;
+  float         refractive;
+  vec3          emission;
+} gltf_mtl;
+
 typedef struct gltf_cam {
+  char          name[NAME_STR_LEN];
   float         vert_fov;
   // Other properties not needed for now
 } gltf_cam;
@@ -77,7 +86,7 @@ typedef struct gltf_node {
 } gltf_node;
 
 typedef struct gltf_data {
-  mtl           *mtls;      // GLTF materials map directly to what we have as material
+  gltf_mtl      *mtls;
   uint32_t      mtl_cnt;
   gltf_node     *nodes;
   uint32_t      node_cnt;

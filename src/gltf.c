@@ -1,32 +1,27 @@
 #include "gltf.h"
 #include "sutil.h"
 #include "mutil.h"
-#include "scene.h"
-#include "mesh.h"
-#include "bvh.h"
-#include "mtl.h"
-#include "tri.h"
 #include "log.h"
 
 #define JSMN_PARENT_LINKS
 #include "jsmn.h"
 
-// Fixed buffer for temporary string storage (bstrndup)
-#define SBUF_LEN 1024
+#define SBUF_LEN 1024 // Fixed buffer for temporary string storage
 char sbuf[SBUF_LEN];
 
-char *bstrndup(const char *str, size_t len)
+char *bstrndup(char *dest, const char *src, size_t len, size_t max_len)
 {
-  for(int i=0; i<(int)min(len, SBUF_LEN - 1); i++)
-    sbuf[i] = *str++;
-  sbuf[min(len, SBUF_LEN - 1)] = '\0';
-  return sbuf;
+  uint32_t l = min(len, max_len - 1);
+  for(uint32_t i=0; i<l; i++)
+    dest[i] = *src++;
+  dest[l] = '\0';
+  return dest;
 }
 
 char *toktostr(const char *s, jsmntok_t *t)
 {
   if(t->type == JSMN_STRING || t->type == JSMN_PRIMITIVE)
-    return bstrndup(s + t->start, t->end - t->start);
+    return bstrndup(sbuf, s + t->start, t->end - t->start, SBUF_LEN);
   logc("Expected token with type string");
   return NULL;
 }
@@ -80,14 +75,6 @@ uint32_t ignore(const char *s, jsmntok_t *t)
   return j;
 }
 
-void cpy_name_token(char *name, char *tok_name, size_t len)
-{
-  // Token name is not null terminated
-  for(size_t i=0; i<min(NAME_STR_LEN - 1, len); i++)
-    name[i] = tok_name[i];
-  name[min(NAME_STR_LEN - 1, len) + 1] = '\0';
-}
-
 obj_type get_type(const char *name)
 {
   if(strstr_lower(name, "camera"))
@@ -106,7 +93,7 @@ obj_type get_type(const char *name)
   return OT_MESH;
 }
 
-uint32_t read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissive_strength)
+uint32_t read_mtl_extensions(gltf_mtl *m, const char *s, jsmntok_t *t, float *emissive_strength)
 {
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
@@ -123,11 +110,8 @@ uint32_t read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissiv
 
     if(jsoneq(s, key, "KHR_materials_transmission") == 0) {
       if(jsoneq(s, t + j + 2, "transmissionFactor") == 0) {
-        // Only values of 1.0 will make the material refractive.
-        // Used as workaround for Blender to export below IOR value (which only gets
-        // exported if a transmissionFactor value is specified).
-        m->refractive = atof(toktostr(s, t + j + 3)) > 0.99 ? 1.0f : 0.0f;
-        logc("transmissionFactor: %f", m->refractive);
+        m->refractive = atof(toktostr(s, t + j + 3));
+        logc("transmissionFactor (refractive): %f", m->refractive);
         j += 4;
         continue;
       }
@@ -148,7 +132,7 @@ uint32_t read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissiv
   return j;
 }
 
-uint32_t read_pbr_metallic_roughness(mtl *m, const char *s, jsmntok_t *t)
+uint32_t read_pbr_metallic_roughness(gltf_mtl *m, const char *s, jsmntok_t *t)
 {
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
@@ -191,16 +175,29 @@ uint32_t read_pbr_metallic_roughness(mtl *m, const char *s, jsmntok_t *t)
   return j;
 }
 
-uint32_t read_mtl(mtl *m, const char *s, jsmntok_t *t)
+uint32_t read_mtl(gltf_mtl *m, const char *s, jsmntok_t *t)
 {
-  mtl_set_defaults(m);
+  m->col = (vec3){ 0.5f, 0.5f, 0.5f };
+  m->metallic = 0.0f;
+  m->roughness = 1.0f;
+  m->ior = 1.01f;
+  m->refractive = 0.0f;
+  m->emission = (vec3){ 0.0f, 0.0f, 0.0f };
 
-  float emissive_strength = 1.0f;
+  float emissive_strength = 0.0f;
   vec3 emissive_factor = (vec3){ 0.0f, 0.0f, 0.0f };
 
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "name") == 0) {
+      char *name = toktostr(s, &t[j + 1]);
+      bstrndup(m->name, name, t[j + 1].end - t[j + 1].start, NAME_STR_LEN);
+      logc("name: %s", m->name);
+      j += 2;
+      continue;
+    }
 
     if(jsoneq(s, key, "emissiveFactor") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
@@ -225,10 +222,7 @@ uint32_t read_mtl(mtl *m, const char *s, jsmntok_t *t)
     j += ignore(s, key);
   }
 
-  if(vec3_max_comp(vec3_scale(emissive_factor, emissive_strength)) > 1.0f) {
-    m->col = vec3_scale(emissive_factor, emissive_strength);
-    vec3_logc("Adjusted mtl base col to emissive: ", m->col);
-  }
+  m->emission = vec3_scale(emissive_factor, emissive_strength);
 
   return j;
 }
@@ -268,7 +262,7 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "name") == 0) {
       char *name = toktostr(s, &t[j + 1]);
-      cpy_name_token(n->name, name, t[j + 1].end - t[j + 1].start);
+      bstrndup(n->name, name, t[j + 1].end - t[j + 1].start, NAME_STR_LEN);
       n->type = get_type(name);
       logc("type: %i (%s)", n->type, name);
       j += 2;
@@ -392,6 +386,14 @@ uint32_t read_cam(gltf_cam *c, const char *s, jsmntok_t *t)
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "name") == 0) {
+      char *name = toktostr(s, &t[j + 1]);
+      bstrndup(c->name, name, t[j + 1].end - t[j + 1].start, NAME_STR_LEN);
+      logc("name: %s", c->name);
+      j += 2;
+      continue;
+    }
 
     if(jsoneq(s, key, "perspective") == 0) {
       j += 1 + read_cam_perspective(c, s, t + j + 1);
@@ -570,7 +572,7 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "name") == 0) {
       char *name = toktostr(s, &t[j + 1]);
-      cpy_name_token(m->name, name, t[j + 1].end - t[j + 1].start);
+      bstrndup(m->name, name, t[j + 1].end - t[j + 1].start, NAME_STR_LEN);
       m->type = get_type(name);
       logc("type: %i (%s)", m->type, name);
       j += 2;
@@ -808,7 +810,7 @@ uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz)
       continue;
     }
 
-    // Camera (read parameters of first camera only)
+    // Camera
     if(jsoneq(gltf, key, "cameras") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
       j++;
       j += read_cams(data, gltf, t + j);

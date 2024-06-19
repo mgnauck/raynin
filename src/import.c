@@ -207,17 +207,23 @@ void process_cam_node(scene *s, gltf_data *d, gltf_node *gn)
   mat4_from_quat(rot, gn->rot[0], gn->rot[1], gn->rot[2], gn->rot[3]);
   
   vec3 dir = vec3_unit(mat4_mul_dir(rot, (vec3){ 0.0f, 0.0f, -1.0f }));
-  
-  s->cam = (cam){ .vert_fov = d->cams[gn->cam_idx].vert_fov * 180.0f / PI, .foc_dist = 10.0f, .foc_angle = 0.0f };
+ 
+  gltf_cam *gc = &d->cams[gn->cam_idx];
+  s->cam = (cam){ .vert_fov = gc->vert_fov * 180.0f / PI, .foc_dist = 10.0f, .foc_angle = 0.0f };
   cam_set(&s->cam, gn->trans, vec3_add(gn->trans, dir));
 
-  logc("Initialized default camera from node %i (%s).", gn->cam_idx, gn->name);
+  logc("Initialized default camera from node %s pointing at gltf cam %i (%s).", gn->name, gn->cam_idx, gc->name);
 }
 
-bool check_is_emissive(gltf_mesh *gm, gltf_data* d)
+bool check_is_emissive_mtl(gltf_mtl *gm)
+{
+  return vec3_max_comp(gm->emission) > 1.0f;
+}
+
+bool check_is_emissive_mesh(gltf_mesh *gm, gltf_data* d)
 {
   for(uint32_t i=0; i<gm->prim_cnt; i++)
-    if(mtl_is_emissive(&d->mtls[gm->prims[i].mtl_idx]))
+    if(check_is_emissive_mtl(&d->mtls[gm->prims[i].mtl_idx]))
       return true;
   return false;
 }
@@ -247,7 +253,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   for(uint32_t j=0; j<data.mesh_cnt; j++) {
     gltf_mesh *gm = &data.meshes[j];
     mesh_ref *mr = &mesh_map[j];
-    bool is_emissive = check_is_emissive(gm, &data);
+    bool is_emissive = check_is_emissive_mesh(gm, &data);
     if(is_emissive || check_is_custom(gm) || gm->type == OT_MESH || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_QUAD || gm->prim_cnt > 1) {
       // Meshes that are emissive or need to be loaded or generated will end up as an actual renderer mesh
       mr->mesh_idx = mesh_cnt++;
@@ -289,8 +295,14 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
   // Add materials to scene
   logc("-------- Creating materials.");
-  for(uint32_t i=0; i<data.mtl_cnt; i++)
-    scene_add_mtl(s, &data.mtls[i]);
+  for(uint32_t i=0; i<data.mtl_cnt; i++) {
+    gltf_mtl *gm = &data.mtls[i];
+    mtl m = (mtl){ .metallic = gm->metallic, .roughness = gm->roughness, .ior = gm->ior, .refractive = gm->refractive > 0.99f ? 1.0f : 0.0f };
+    bool is_emissive = check_is_emissive_mtl(gm);
+    m.col = is_emissive ? gm->emission : gm->col;
+    scene_add_mtl(s, &m);
+    logc("Created material %s (emissive: %i, refractive: %i)", gm->name, is_emissive, m.refractive == 1.0f);
+  }
 
   // Add nodes as scene instances
   logc("-------- Creating instances:");
