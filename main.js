@@ -9,6 +9,9 @@ const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
 const SPP = 2;
 
+const CAM_LOOK_VELOCITY = 0.005;
+const CAM_MOVE_VELOCITY = 0.1;
+
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
 
@@ -23,19 +26,19 @@ let start, last;
 
 function handleMouseMoveEvent(e)
 {
-  wa.mouse_move(e.movementX, e.movementY);
+  wa.mouse_move(e.movementX, e.movementY, CAM_LOOK_VELOCITY);
 }
 
 function installEventHandler()
 {
   canvas.addEventListener("click", async () => {
     if(!document.pointerLockElement)
-      await canvas.requestPointerLock(); // On macOS/win enable: { unadjustedMovement: true }
+      await canvas.requestPointerLock({ unadjustedMovement: true });
   });
 
   document.addEventListener("keydown",
     // Key codes do not map well to UTF-8. Use A-Z and 0-9 only. Convert A-Z to lower case.
-    e => wa.key_down((e.keyCode >= 65 && e.keyCode <= 90) ? e.keyCode + 32 : e.keyCode));
+    e => wa.key_down((e.keyCode >= 65 && e.keyCode <= 90) ? e.keyCode + 32 : e.keyCode, CAM_MOVE_VELOCITY));
 
   document.addEventListener("pointerlockchange", () => {
     if(document.pointerLockElement === canvas)

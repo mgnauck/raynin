@@ -37,22 +37,22 @@ vec3          bg_col = { 0.0f, 0.0f, 0.0f };
 bool          orbit_cam = false;
 
   __attribute__((visibility("default")))
-void key_down(unsigned char key)
+void key_down(unsigned char key, float move_vel)
 {
-#define MOVE_VEL 0.1f
+  float speed = vec3_max_comp(vec3_scale(vec3_sub(cs->tlas_nodes[0].max, cs->tlas_nodes[0].min), 0.2f));
 
   switch(key) {
     case 'a':
-      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.right, -MOVE_VEL));
+      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.right, -speed * move_vel));
       break;
     case 'd':
-      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.right, MOVE_VEL));
+      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.right, speed * move_vel));
       break;
     case 'w':
-      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.fwd, -MOVE_VEL));
+      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.fwd, -speed * move_vel));
      break;
     case 's':
-      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.fwd, MOVE_VEL));
+      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.fwd, speed * move_vel));
       break;
     case 'i':
       cs->cam.foc_dist += 0.1f;
@@ -82,12 +82,10 @@ void key_down(unsigned char key)
 }
 
 __attribute__((visibility("default")))
-void mouse_move(int32_t dx, int32_t dy)
+void mouse_move(int32_t dx, int32_t dy, float look_vel)
 {
-#define LOOK_VEL 0.015f
-  
-  float theta = min(max(acosf(-cs->cam.fwd.y) + (float)dy * LOOK_VEL, 0.01f), 0.99f * PI);
-  float phi = fmodf(atan2f(-cs->cam.fwd.z, cs->cam.fwd.x) + PI - (float)dx * LOOK_VEL, 2.0f * PI);
+  float theta = min(max(acosf(-cs->cam.fwd.y) + (float)dy * look_vel, 0.01f), 0.99f * PI);
+  float phi = fmodf(atan2f(-cs->cam.fwd.z, cs->cam.fwd.x) + PI - (float)dx * look_vel, 2.0f * PI);
   
   cam_set_dir(&cs->cam, vec3_spherical(theta, phi));
   
@@ -241,10 +239,8 @@ void update_scene(scene *s, float time)
 
   // Update camera
   if(orbit_cam) {
-    float v = 0.5f;
-    float r = vec3_max_comp(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min)) * 0.5f;
-    float h = 2.0f;
-    vec3 pos = (vec3){ r * sinf(time * v * v), 1.2f + h + h * sinf(time * v * 0.7f), r * cosf(time * v) };
+    vec3  e = vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.5f);
+    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.5f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
     cam_set(&s->cam, pos, vec3_neg(pos));
     scene_set_dirty(s, RT_CAM_VIEW);
   }
