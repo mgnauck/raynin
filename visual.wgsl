@@ -1131,7 +1131,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
   (*ia).faceDir = select(-1.0, 1.0, dot((*ia).wo, (*ia).nrm) > 0);
 
   // Flip normal if backside, except if we hit a ltri
-  //(*ia).nrm *= select((*ia).faceDir, 1.0, isEmissive(*mtl));
+  (*ia).nrm *= select((*ia).faceDir, 1.0, isEmissive(*mtl));
 }
 
 fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
