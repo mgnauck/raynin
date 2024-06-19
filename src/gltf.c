@@ -80,6 +80,14 @@ uint32_t ignore(const char *s, jsmntok_t *t)
   return j;
 }
 
+void cpy_name_token(char *name, char *tok_name, size_t len)
+{
+  // Token name is not null terminated
+  for(size_t i=0; i<min(NAME_STR_LEN - 1, len); i++)
+    name[i] = tok_name[i];
+  name[min(NAME_STR_LEN - 1, len) + 1] = '\0';
+}
+
 obj_type get_type(const char *name)
 {
   if(strstr_lower(name, "camera"))
@@ -260,6 +268,7 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "name") == 0) {
       char *name = toktostr(s, &t[j + 1]);
+      cpy_name_token(n->name, name, t[j + 1].end - t[j + 1].start);
       n->type = get_type(name);
       logc("type: %i (%s)", n->type, name);
       j += 2;
@@ -561,6 +570,7 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "name") == 0) {
       char *name = toktostr(s, &t[j + 1]);
+      cpy_name_token(m->name, name, t[j + 1].end - t[j + 1].start);
       m->type = get_type(name);
       logc("type: %i (%s)", m->type, name);
       j += 2;

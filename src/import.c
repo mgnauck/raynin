@@ -188,15 +188,15 @@ void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn, mesh_ref *mesh_map
   if(mesh_idx >= 0) {
     // Mesh instance (mesh was either loaded or generated)
     scene_add_mesh_inst(s, mesh_idx, -1, final);
-    logc("Created mesh instance of gltf mesh %i.", gn->mesh_idx);
+    logc("Created mesh instance of gltf mesh %i (%s).", gn->mesh_idx, gn->name);
   } else {
     // Shape instance
     if(gm->type == OT_BOX) {
       scene_add_shape_inst(s, ST_BOX, gm->prims[0].mtl_idx, final);
-      logc("Created box shape instance of gltf mesh %i.", gn->mesh_idx);
+      logc("Created box shape instance of gltf mesh %i (%s).", gn->mesh_idx, gn->name);
     } else if(gm->type == OT_SPHERE) {
       scene_add_shape_inst(s, ST_SPHERE, gm->prims[0].mtl_idx, final);
-      logc("Created sphere shape instance of gltf mesh %i.", gn->mesh_idx);
+      logc("Created sphere shape instance of gltf mesh %i (%s).", gn->mesh_idx, gn->name);
     }
   }
 }
@@ -211,7 +211,7 @@ void process_cam_node(scene *s, gltf_data *d, gltf_node *gn)
   s->cam = (cam){ .vert_fov = d->cams[gn->cam_idx].vert_fov * 180.0f / PI, .foc_dist = 10.0f, .foc_angle = 0.0f };
   cam_set(&s->cam, gn->trans, vec3_add(gn->trans, dir));
 
-  logc("Initialized default camera from node %i.", gn->cam_idx);
+  logc("Initialized default camera from node %i (%s).", gn->cam_idx, gn->name);
 }
 
 bool check_is_emissive(gltf_mesh *gm, gltf_data* d)
@@ -252,12 +252,13 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
       // Meshes that are emissive or need to be loaded or generated will end up as an actual renderer mesh
       mr->mesh_idx = mesh_cnt++;
       mr->is_emissive = is_emissive;
-      logc("Gltf mesh %i will be render mesh %i in the scene. This mesh is %semissive.", j, mr->mesh_idx, is_emissive ? "" : "not ");
+      logc("Gltf mesh %i (%s) will be render mesh %i in the scene. This mesh is %semissive.",
+          j, gm->name, mr->mesh_idx, is_emissive ? "" : "not ");
     } else {
       // Everything else will be represented as a shape, i.e. boxes/spheres
       mr->mesh_idx = -1; // No mesh required
       mr->is_emissive = false;
-      logc("Gltf mesh %i will be a shape of type %i.", j, gm->type);
+      logc("Gltf mesh %i (%s) will be a shape of type %i.", j, gm->name, gm->type);
     }
   }
 
@@ -281,9 +282,9 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
       } else
         generate_mesh_data(m, gm); // TODO Add box generator and remove above
       scene_attach_mesh(s, m, mr->is_emissive);
-      logc("Created render mesh %i from gltf mesh %i.", mr->mesh_idx, i);
+      logc("Created render mesh %i from gltf mesh %i (%s).", mr->mesh_idx, i, gm->name);
     } else
-      logc("Skipping gltf mesh %i from mesh creation because it will be a shape.", i);
+      logc("Skipping gltf mesh %i (%s) from mesh creation because it will be a shape.", i, gm->name);
   }
 
   // Add materials to scene
@@ -300,7 +301,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     else if(gn->cam_idx >= 0) 
       process_cam_node(s, &data, gn); // TODO Last cam wins for now
     else
-      logc("#### WARN: Found unknown node. Expected camera or mesh. Skipping.");
+      logc("#### WARN: Found unknown node %i (%s). Expected camera or mesh. Skipping.", i, gn->name);
   }
 
   // Finalize the scene data (bvhs and ltris)

@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include "vec3.h"
 
+#define NAME_STR_LEN  256
+
 typedef struct mtl mtl;
 
 typedef enum obj_type { // Infer shape type from name
@@ -38,6 +40,7 @@ typedef struct gltf_prim {
 } gltf_prim;
 
 typedef struct gltf_mesh {
+  char          name[NAME_STR_LEN];
   obj_type      type;
   uint32_t      subx;       // Object generation (custom value)
   uint32_t      suby;       // Object generation (custom value)
@@ -63,12 +66,13 @@ typedef struct gltf_bufview {
 } gltf_bufview;
 
 typedef struct gltf_node {
+  char          name[NAME_STR_LEN];
+  obj_type      type;
   int32_t       mesh_idx;   // Index of a gltf mesh
   int32_t       cam_idx;    // Index of a gltf cam
   vec3          scale;
   float         rot[4];
   vec3          trans;
-  obj_type      type;
   // Not supporting node hierarchy currently
 } gltf_node;
 
