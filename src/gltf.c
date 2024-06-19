@@ -115,7 +115,10 @@ uint32_t read_mtl_extensions(mtl *m, const char *s, jsmntok_t *t, float *emissiv
 
     if(jsoneq(s, key, "KHR_materials_transmission") == 0) {
       if(jsoneq(s, t + j + 2, "transmissionFactor") == 0) {
-        m->refractive = atof(toktostr(s, t + j + 3));
+        // Only values of 1.0 will make the material refractive.
+        // Used as workaround for Blender to export below IOR value (which only gets
+        // exported if a transmissionFactor value is specified).
+        m->refractive = atof(toktostr(s, t + j + 3)) > 0.99 ? 1.0f : 0.0f;
         logc("transmissionFactor: %f", m->refractive);
         j += 4;
         continue;
