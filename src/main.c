@@ -140,7 +140,7 @@ void init_scene_riow(scene *s)
  
   // Light instances
   for(uint8_t i=0; i<LIGHT_CNT; i++) { 
-    mat4_scale_u(scale, 0.5f);
+    mat4_scale_u(scale, 2.5f);
     mat4_rot_x(rotation, PI);
     mat4_mul(transform, scale, rotation);
     mat4_trans(translation, (vec3){ 0.0f, 5.0f, -10.0f + (i * 10.0f) });
@@ -150,12 +150,12 @@ void init_scene_riow(scene *s)
   }
 
   // Floor instance
-  mat4_scale_u(scale, 2.4f);
+  mat4_scale_u(scale, 12.0f);
   //scene_add_shape_inst(s, ST_PLANE, mtl_id, scale);
   scene_add_mesh_inst(s, fid, -1, scale);
  
   // Reflecting sphere (black)
-  mat4_scale(scale, (vec3){ 1.0, 1.0, 0.5 });
+  mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
   mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 0.0f, 0.0f, 0.0f });
@@ -165,7 +165,7 @@ void init_scene_riow(scene *s)
   //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Reflecting sphere (white)
-  mat4_scale(scale, (vec3){ 1.0, 0.5, 1.0 });
+  mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
   mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
   mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
@@ -175,7 +175,7 @@ void init_scene_riow(scene *s)
   //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Metallic sphere
-  mat4_scale(scale, (vec3){ 0.2, 1.0, 1.0 });
+  mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
   mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
   mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 0.98f, 0.85f, 0.72f });
