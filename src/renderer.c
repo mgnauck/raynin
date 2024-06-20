@@ -24,7 +24,7 @@
 #define GLOB_BUF_OFS_VIEW   96
 #define GLOB_BUF_SIZE       144
 
-#define MAX_BOUNCES         5
+#define MAX_BOUNCES         50
 
 // GPU buffer types
 typedef enum buf_type {
