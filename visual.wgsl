@@ -1130,8 +1130,8 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
   // Backside hit
   (*ia).faceDir = select(-1.0, 1.0, dot((*ia).wo, (*ia).nrm) > 0);
 
-  // Flip normal if backside, except if we hit a ltri
-  (*ia).nrm *= select((*ia).faceDir, 1.0, isEmissive(*mtl));
+  // Flip normal if backside, except if we hit a ltri or have refractive mtl
+  (*ia).nrm *= select((*ia).faceDir, 1.0, isEmissive(*mtl) || (*mtl).refractive > 0.0);
 }
 
 fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
@@ -1173,7 +1173,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, &fres);
       let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, fres);
       let weight = ltriPdf / (ltriPdf + bsdfPdf * gsa);
-      if(any(bsdf * gsa * weight > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
+      if(any(bsdf * gsa * weight > vec3f(0)) && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
         col += throughput * bsdf * gsa * weight * emission * abs(dot(ia.nrm, ltriWi)) / ltriPdf;
       }
     }
@@ -1187,7 +1187,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
 
     // Trace indirect light direction
-    let ori = posOfs(ia.pos, ia.nrm);
+    let ori = ia.pos;
     let dir = wi;
     hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
@@ -1276,7 +1276,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
       var fres: vec3f;
       let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ia.faceDir, ltriWi, &fres);
-      if(any(bsdf > vec3f(0)) && !intersectTlasAnyHit(posOfs(ia.pos, ia.nrm), posOfs(ltriPos, ltriNrm))) {
+      if(any(bsdf > vec3f(0)) && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
         col += throughput * bsdf * gsa * emission * abs(dot(ia.nrm, ltriWi)) / ltriPdf;
       }
     }
@@ -1301,7 +1301,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     throughput *= 1.0 / p;
     
     // Next ray
-    ori = posOfs(ia.pos, ia.nrm);
+    ori = ia.pos;
     dir = wi;
   }
 
@@ -1356,7 +1356,7 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     throughput *= 1.0 / p;
 
     // Next ray
-    ori = posOfs(ia.pos, ia.nrm);
+    ori = ia.pos;
     dir = wi;
   }
 
