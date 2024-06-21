@@ -117,7 +117,6 @@ void init_scene_riow(scene *s)
     scene_attach_mesh(s, mesh, true);
   }
 
-  /*
   // Sphere mesh
   mesh = scene_acquire_mesh(s);
   mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false);
@@ -125,7 +124,6 @@ void init_scene_riow(scene *s)
   //mesh_create_icosphere(mesh, 3, mtl_id, false);
   //import_mesh(mesh, teapot, mtl_id, false);
   sid = scene_attach_mesh(s, mesh, false);
-  */
   
   // Floor mesh
   m = mtl_init((vec3){ 0.25f, 0.25f, 0.25f });
@@ -159,8 +157,8 @@ void init_scene_riow(scene *s)
   m = mtl_init((vec3){ 0.0f, 0.0f, 0.0f });
   m.ior = 2.3f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_mesh_inst(s, sid, mtl_id, translation);
+  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Reflecting sphere (white)
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -169,8 +167,8 @@ void init_scene_riow(scene *s)
   m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
   m.ior = 1.5f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_mesh_inst(s, sid, mtl_id, translation);
+  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Metallic sphere
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -180,8 +178,8 @@ void init_scene_riow(scene *s)
   m.metallic = 1.0f;
   m.roughness = 0.5f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_mesh_inst(s, sid, mtl_id, translation);
+  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   mat4_scale_u(scale, 0.2f);
   
@@ -198,8 +196,8 @@ void init_scene_riow(scene *s)
         mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
-        //scene_add_mesh_inst(s, sid, mtl_id, transform);
+        //scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
+        scene_add_mesh_inst(s, sid, mtl_id, transform);
       }
     }
   }
@@ -237,7 +235,7 @@ void update_scene(scene *s, float time)
   // Update camera
   if(orbit_cam) {
     vec3  e = vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.4f);
-    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
+    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
     cam_set(&s->cam, pos, vec3_neg(pos));
     scene_set_dirty(s, RT_CAM_VIEW);
   }
