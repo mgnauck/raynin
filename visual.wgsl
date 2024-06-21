@@ -150,7 +150,7 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(7) var<storage, read> materials: array<Mtl>;
 @group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
-const MAX_LTRIS     = 64u;
+const MAX_LTRIS     = 256u;
 const MAX_NODE_CNT  = 32u;
 
 // Traversal stacks for bvhs
@@ -1185,6 +1185,8 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(!sampleMaterial(mtl, ia.wo, ia.nrm, ia.faceDir, r1.xyz, &wi, &fres, &wasSpecular, &pdf)) {
       break;
     }
+    // Scale indirect light contribution by material
+    throughput *= evalMaterial(mtl, ia.wo, ia.nrm, ia.faceDir, wi, fres, wasSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
     // Trace indirect light direction
     let ori = ia.pos;
@@ -1194,9 +1196,6 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       col += throughput * globals.bgColor;
       break;
     }
-
-    // Scale indirect light contribution by material
-    throughput *= evalMaterial(mtl, ia.wo, ia.nrm, ia.faceDir, wi, fres, wasSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
     // Save for light hit MIS calculation
     let lastPos = ia.pos;
