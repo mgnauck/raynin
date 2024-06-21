@@ -65,6 +65,66 @@ void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl)
   }
 }
 
+void mesh_create_box(mesh *m, uint32_t mtl)
+{
+  mesh_init(m, 12);
+
+  m->tris[ 0] = (tri){ // front
+    .v0 = (vec3){ -1.0f, 1.0f, 1.0f }, .v1 = (vec3){ -1.0f, -1.0f, 1.0f }, .v2 = (vec3){ 1.0f, -1.0f, 1.0f },
+    .n0 = (vec3){ 0.0f, 0.0, 1.0f }, .n1 = (vec3){ 0.0f, 0.0f, 1.0f }, .n2 = (vec3){ 0.0f, 0.0f, 1.0f },
+  };
+  m->tris[ 1] = (tri){ // front
+    .v0 = (vec3){ -1.0f, 1.0f, 1.0f }, .v1 = (vec3){ 1.0f, -1.0f, 1.0f }, .v2 = (vec3){ 1.0f, 1.0f, 1.0f },
+    .n0 = (vec3){ 0.0f, 0.0, 1.0f }, .n1 = (vec3){ 0.0f, 0.0f, 1.0f }, .n2 = (vec3){ 0.0f, 0.0f, 1.0f },
+  };
+  m->tris[ 2] = (tri){ // back
+    .v0 = (vec3){ 1.0f, 1.0f, -1.0f }, .v1 = (vec3){ 1.0f, -1.0f, -1.0f }, .v2 = (vec3){ -1.0f, -1.0f, -1.0f },
+    .n0 = (vec3){ 0.0f, 0.0, -1.0f }, .n1 = (vec3){ 0.0f, 0.0f, -1.0f }, .n2 = (vec3){ 0.0f, 0.0f, -1.0f },
+  };
+  m->tris[ 3] = (tri){ // back
+    .v0 = (vec3){ 1.0f, 1.0f, -1.0f }, .v1 = (vec3){ -1.0f, -1.0f, -1.0f }, .v2 = (vec3){ -1.0f, 1.0f, -1.0f },
+    .n0 = (vec3){ 0.0f, 0.0, -1.0f }, .n1 = (vec3){ 0.0f, 0.0f, -1.0f }, .n2 = (vec3){ 0.0f, 0.0f, -1.0f },
+  };
+  m->tris[ 4] = (tri){ // left
+    .v0 = (vec3){ -1.0f, 1.0f, -1.0f }, .v1 = (vec3){ -1.0f, -1.0f, -1.0f }, .v2 = (vec3){ -1.0f, -1.0f, 1.0f },
+    .n0 = (vec3){ -1.0f, 0.0, 0.0f }, .n1 = (vec3){ -1.0f, 0.0f, 0.0f }, .n2 = (vec3){ -1.0f, 0.0f, 0.0f },
+  };
+  m->tris[ 5] = (tri){ // left
+    .v0 = (vec3){ -1.0f, 1.0f, -1.0f }, .v1 = (vec3){ -1.0f, -1.0f, 1.0f }, .v2 = (vec3){ -1.0f, 1.0f, 1.0f },
+    .n0 = (vec3){ -1.0f, 0.0, 0.0f }, .n1 = (vec3){ -1.0f, 0.0f, 0.0f }, .n2 = (vec3){ -1.0f, 0.0f, 0.0f },
+  };
+  m->tris[ 6] = (tri){ // right
+    .v0 = (vec3){ 1.0f, 1.0f, 1.0f }, .v1 = (vec3){ 1.0f, -1.0f, 1.0f }, .v2 = (vec3){ 1.0f, -1.0f, -1.0f },
+    .n0 = (vec3){ 1.0f, 0.0, 0.0f }, .n1 = (vec3){ 1.0f, 0.0f, 0.0f }, .n2 = (vec3){ 1.0f, 0.0f, 0.0f },
+  };
+  m->tris[ 7] = (tri){ // right
+    .v0 = (vec3){ 1.0f, 1.0f, 1.0f }, .v1 = (vec3){ 1.0f, -1.0f, -1.0f }, .v2 = (vec3){ 1.0f, 1.0f, -1.0f },
+    .n0 = (vec3){ 1.0f, 0.0, 0.0f }, .n1 = (vec3){ 1.0f, 0.0f, 0.0f }, .n2 = (vec3){ 1.0f, 0.0f, 0.0f },
+  };
+  m->tris[ 8] = (tri){ // top
+    .v0 = (vec3){ -1.0f, 1.0f, -1.0f }, .v1 = (vec3){ -1.0f, 1.0f, 1.0f }, .v2 = (vec3){ 1.0f, 1.0f, 1.0f },
+    .n0 = (vec3){ 0.0f, 1.0, 0.0f }, .n1 = (vec3){ 0.0f, 1.0f, 0.0f }, .n2 = (vec3){ 0.0f, 1.0f, 0.0f },
+  };
+  m->tris[ 9] = (tri){ // top
+    .v0 = (vec3){ -1.0f, 1.0f, -1.0f }, .v1 = (vec3){ 1.0f, 1.0f, 1.0f }, .v2 = (vec3){ 1.0f, 1.0f, -1.0f },
+    .n0 = (vec3){ 0.0f, 1.0, 0.0f }, .n1 = (vec3){ 0.0f, 1.0f, 0.0f }, .n2 = (vec3){ 0.0f, 1.0f, 0.0f },
+  };
+  m->tris[10] = (tri){ // bottom
+    .v0 = (vec3){ 1.0f, -1.0f, -1.0f }, .v1 = (vec3){ 1.0f, -1.0f, 1.0f }, .v2 = (vec3){ -1.0f, -1.0f, 1.0f },
+    .n0 = (vec3){ 0.0f, -1.0, 0.0f }, .n1 = (vec3){ 0.0f, -1.0f, 0.0f }, .n2 = (vec3){ 0.0f, -1.0f, 0.0f },
+  };
+  m->tris[11] = (tri){ // bottom
+    .v0 = (vec3){ 1.0f, -1.0f, -1.0f }, .v1 = (vec3){ -1.0f, -1.0f, 1.0f }, .v2 = (vec3){ -1.0f, -1.0f, -1.0f },
+    .n0 = (vec3){ 0.0f, -1.0, 0.0f }, .n1 = (vec3){ 0.0f, -1.0f, 0.0f }, .n2 = (vec3){ 0.0f, -1.0f, 0.0f },
+  };
+
+  for(uint32_t i=0; i<m->tri_cnt; i++) {
+    tri *t = &m->tris[i];
+    m->centers[i] = tri_calc_center(t);
+    t->mtl = mtl;
+  }
+}
+
 void mesh_create_icosphere(mesh *m, uint8_t steps, uint32_t mtl, bool faceNormals)
 {
   mesh_init(m, 20 * (1 << (2 * steps)));

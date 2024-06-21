@@ -19,6 +19,7 @@ void mesh_init(mesh *m, uint32_t tri_cnt);
 void mesh_release(mesh *m);
 
 void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl);
+void mesh_create_box(mesh *m, uint32_t mtl);
 void mesh_create_icosphere(mesh *m, uint8_t steps, uint32_t mtl, bool faceNormals);
 void mesh_create_uvsphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uint32_t mtl, bool faceNormals);
 void mesh_create_uvcylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, uint32_t mtl, bool faceNormals);

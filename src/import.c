@@ -163,6 +163,9 @@ void generate_mesh_data(mesh *m, gltf_mesh *gm)
     uint32_t suby = (gm->suby > 0) ? gm->suby : CYLINDER_DEFAULT_SUBY;
     mesh_create_uvcylinder(m, 1.0f, 2.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms);
     logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
+  } else if(gm->type == OT_BOX) {
+    mesh_create_box(m, gm->prims[0].mtl_idx);
+    logc("Generated box with %i triangles.", m->tri_cnt);
   } else if(gm->type == OT_QUAD) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : QUAD_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : QUAD_DEFAULT_SUBY;
@@ -259,7 +262,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     mesh_ref *mr = &mesh_map[j];
     mr->inst_cnt = 0; // Init for duplicate identification
     bool is_emissive = check_is_emissive_mesh(gm, &data);
-    if(is_emissive || check_is_custom(gm) || gm->type == OT_MESH || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_QUAD || gm->prim_cnt > 1) {
+    if(is_emissive || check_is_custom(gm) || gm->type == OT_MESH || gm->type == OT_BOX || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_QUAD || gm->prim_cnt > 1) {
       // Meshes that are emissive or need to be loaded or generated will end up as an actual renderer mesh
       mr->mesh_idx = 1; // Assign something that is not -1 ot indicate it is a mesh, actual index will follow during mesh creation
       mr->is_emissive = is_emissive;
@@ -311,10 +314,10 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
         if(++mr->inst_cnt == 1 || mr->is_emissive) {
           gltf_mesh *gm = &data.meshes[gn->mesh_idx];
           mesh *m = scene_acquire_mesh(s);
-          if(gm->type == OT_MESH || gm->type == OT_BOX || gm->prim_cnt > 1)
+          if(gm->type == OT_MESH || gm->prim_cnt > 1)
             load_mesh_data(m, &data, gm, bin);
           else
-            generate_mesh_data(m, gm); // TODO Add box generator and remove above
+            generate_mesh_data(m, gm);
           render_mesh_ids[i] = scene_attach_mesh(s, m, mr->is_emissive);
           if(mr->inst_cnt == 1)
             // Update to actual render mesh id, so all other (non-emissive) instances get the index as well
