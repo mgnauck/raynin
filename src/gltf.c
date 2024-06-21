@@ -426,7 +426,7 @@ uint32_t read_cams(gltf_data *data, const char *s, jsmntok_t *t)
   return j;
 }
 
-uint32_t read_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
+uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
   m->subx = 0;
   m->suby = 0;
@@ -566,7 +566,7 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "extras") == 0) {
-      j += 1 + read_extras(m, s, t + j + 1);
+      j += 1 + read_mesh_extras(m, s, t + j + 1);
       continue;
     }
 
@@ -762,6 +762,73 @@ uint32_t read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
   return j;
 }
 
+uint32_t read_scene_extras(gltf_data *d, const char *s, jsmntok_t *t)
+{
+  d->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
+
+  uint32_t j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "bgcol") == 0) {
+      if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
+        d->bg_col = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
+        vec3_logc("bg col: ", d->bg_col);
+        j += 5;
+        continue;
+      } else
+        logc("Failed to read bg col. Expected vec3.");
+    }
+
+    j += ignore(s, key);
+  }
+
+  return j;
+}
+
+uint32_t read_scene(gltf_data *d, const char *s, jsmntok_t *t)
+{
+  uint32_t j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "extras") == 0) {
+      j += 1 + read_scene_extras(d, s, t + j + 1);
+      continue;
+    }
+
+    j += ignore(s, key);
+  }
+
+  return j;
+}
+
+uint32_t read_scenes(gltf_data *data, const char *s, jsmntok_t *t)
+{
+  logc(">> scenes");
+
+  if(t->size > 1)
+    logc("#### WARN: Found %i scenes. Will process only the first and skip all others.", t->size);
+
+  uint32_t cnt = 0;
+  uint32_t j = 1;
+  for(int i=0; i<t->size; i++) {
+    logc(">>>> scene %i", i);
+
+    // For now we process the first scene only
+    if(i == 0)
+      j += read_scene(data, s, t + j);
+    else
+      j += ignore(s, t + j);
+
+    logc("<<<< scene %i", i);
+  }
+
+  logc("<< scenes (total: %i, read: %i)", t->size, cnt);
+
+  return j;
+}
+
 uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz)
 {
   jsmn_parser parser;
@@ -795,6 +862,13 @@ uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz)
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
+
+    // Scenes
+    if(jsoneq(gltf, key, "scenes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+      j++;
+      j += read_scenes(data, gltf, t + j);
+      continue;
+    }
 
    // Materials
     if(jsoneq(gltf, key, "materials") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {

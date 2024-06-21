@@ -35,6 +35,7 @@ typedef struct scene {
   ltri        *ltris;
   view        view;
   cam         cam;
+  vec3        bg_col;
   uint32_t    dirty;
   uint32_t    curr_ofs;
 } scene;

@@ -36,6 +36,8 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt
 
   s->max_tri_cnt  = 0; // Attach all meshes before calculating this
 
+  s->bg_col        = (vec3){ 0.0f, 0.0f, 0.0f };
+
   s->curr_ofs     = 0;
 
   scene_set_dirty(s, RT_CAM_VIEW);

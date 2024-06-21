@@ -365,6 +365,9 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
       logc("#### WARN: Found unknown node %i (%s). Expected camera or mesh. Skipping.", i, gn->name);
   }
 
+  // Set scene attributes
+  s->bg_col = data.bg_col;
+
   // Finalize the scene data (bvhs and ltris)
   logc("-------- Creating bvhs and preparing ltris");
   scene_finalize(s);

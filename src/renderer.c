@@ -46,7 +46,6 @@ typedef struct render_data {
   uint8_t   bounces;
   uint32_t  frame;
   uint32_t  gathered_spp;
-  vec3      bg_col;
 } render_data;
 
 #ifndef NATIVE_BUILD
@@ -90,7 +89,6 @@ render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t sp
   rd->bounces = MAX_BOUNCES;
   rd->frame = 0;
   rd->gathered_spp = 0;
-  rd->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
 
   return rd;
 }
@@ -104,13 +102,6 @@ void reset_samples(render_data *rd)
 {
   // Reset gathered samples
   rd->gathered_spp = TEMPORAL_WEIGHT * rd->gathered_spp;
-}
-
-void renderer_set_bg_col(render_data *rd, vec3 bg_col)
-{
-  memcpy(&rd->bg_col, &bg_col, sizeof(rd->bg_col));
-  rd->gathered_spp = 0;
-  scene_set_dirty(rd->scene, RT_CAM_VIEW);
 }
 
 void push_mtls(render_data *rd)
@@ -213,7 +204,7 @@ void renderer_update(render_data *rd, float time)
   // Push frame data
   uint32_t frameUint[4] = { rd->frame, rd->gathered_spp, /* pad */ 0, /* pad */ 0 };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frameUint, sizeof(frameUint));
-  float frameFloat[4] = { rd->bg_col.x, rd->bg_col.y, rd->bg_col.z,
+  float frameFloat[4] = { s->bg_col.x, s->bg_col.y, s->bg_col.z,
     rd->spp / (float)(rd->gathered_spp + rd->spp) };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME + sizeof(frameUint), frameFloat, sizeof(frameFloat));
 #endif
@@ -236,7 +227,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
           ray_create_primary(&r, (float)(i + x), (float)(j + y), &rd->scene->view, &rd->scene->cam);
           hit h = (hit){ .t = MAX_DISTANCE };
           intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, rd->scene->bvhs, &h);
-          vec3 c = rd->bg_col;
+          vec3 c = rd->scene->bg_col;
           if(h.t < MAX_DISTANCE) {
             inst *inst = &rd->scene->instances[h.e & INST_ID_MASK];
             mat4 transform;

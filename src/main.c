@@ -33,7 +33,6 @@
 scene         scn;
 scene         *cs = &scn;
 render_data   *rd;
-vec3          bg_col = { 0.0f, 0.0f, 0.0f };
 bool          orbit_cam = false;
 
   __attribute__((visibility("default")))
@@ -70,8 +69,7 @@ void key_down(unsigned char key, float move_vel)
       orbit_cam = !orbit_cam;
       break;
     case 'u':
-      bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, bg_col);
-      renderer_set_bg_col(rd, bg_col);
+      cs->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, cs->bg_col);
       break;
     case 'r':
       // TODO Call JS to reload shader
@@ -227,8 +225,7 @@ void init(uint32_t width, uint32_t height, uint8_t spp)
   
   renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
   rd = renderer_init(cs, width, height, spp);
-  
-  renderer_set_bg_col(rd, bg_col);
+
   renderer_update_static(rd);
 }
 
