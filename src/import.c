@@ -270,7 +270,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
       logc("Gltf mesh %i (%s) will be mesh in the scene. This mesh is %semissive.",
           j, gm->name, is_emissive ? "" : "not ");
     } else {
-      // Everything else will be represented as a shape, i.e. boxes/spheres
+      // Everything else will be represented as a shape
       mr->mesh_idx = -1;
       mr->is_emissive = false;
       logc("Gltf mesh %i (%s) will be a shape of type %i.", j, gm->name, gm->type);
