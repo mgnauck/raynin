@@ -12,10 +12,10 @@
 #define SPHERE_DEFAULT_SUBX       18
 #define SPHERE_DEFAULT_SUBY       18
 #define CYLINDER_DEFAULT_SUBX     18
-#define CYLINDER_DEFAULT_SUBY     5
-#define QUAD_DEFAULT_SUBX         5
-#define QUAD_DEFAULT_SUBY         5
+#define CYLINDER_DEFAULT_SUBY     2
+#define QUAD_DEFAULT_SUBX         1
+#define QUAD_DEFAULT_SUBY         1
 
-#define TEMPORAL_WEIGHT     0.1f
+#define TEMPORAL_WEIGHT           0.0f
 
 #endif

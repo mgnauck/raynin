@@ -177,15 +177,15 @@ uint32_t read_pbr_metallic_roughness(gltf_mtl *m, const char *s, jsmntok_t *t)
 
 uint32_t read_mtl(gltf_mtl *m, const char *s, jsmntok_t *t)
 {
-  m->col = (vec3){ 0.5f, 0.5f, 0.5f };
+  m->col = (vec3){ 1.0f, 1.0f, 1.0f };
   m->metallic = 0.0f;
-  m->roughness = 1.0f;
-  m->ior = 1.01f;
+  m->roughness = 0.5f;
+  m->ior = 1.5f;
   m->refractive = 0.0f;
-  m->emission = (vec3){ 0.0f, 0.0f, 0.0f };
 
+  // Temporary store only, will use to calc material emission
   float emissive_strength = 0.0f;
-  vec3 emissive_factor = (vec3){ 0.0f, 0.0f, 0.0f };
+  vec3 emissive_factor = (vec3){ 1.0f, 1.0f, 1.0f };
 
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {

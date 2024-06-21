@@ -68,7 +68,7 @@ typedef struct gltf_accessor {
 } gltf_accessor;
 
 typedef struct gltf_bufview {
-  uint32_t      buf;        // Only 1 supported, which is the .bin file that comes with the .gltf
+  uint32_t      buf;        // Only 1 supported, which is a .bin file that comes with the .gltf
   uint32_t      byte_len;
   uint32_t      byte_ofs;   // Optional
   uint32_t      byte_stride;
@@ -77,10 +77,10 @@ typedef struct gltf_bufview {
 typedef struct gltf_node {
   char          name[NAME_STR_LEN];
   obj_type      type;
-  int32_t       mesh_idx;   // Index of a gltf mesh
-  int32_t       cam_idx;    // Index of a gltf cam
+  int32_t       mesh_idx;
+  int32_t       cam_idx;
   vec3          scale;
-  float         rot[4];
+  float         rot[4];     // Quaternion
   vec3          trans;
   // Not supporting node hierarchy currently
 } gltf_node;
@@ -99,6 +99,7 @@ typedef struct gltf_data {
   uint32_t      bufview_cnt;
   gltf_cam      *cams;
   uint32_t      cam_cnt;
+  vec3          bg_col;     // Background color (custom value)
 } gltf_data;
 
 uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz);
