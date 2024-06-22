@@ -257,6 +257,8 @@ void release()
 
 #ifdef NATIVE_BUILD
 
+const char *gltf = "{  \"scenes\": [    {      \"extras\": {        \"bgcol\": [          0.7,          0.7,          0.7        ]      },          }  ],  \"nodes\": [    {      \"mesh\": 0,      \"name\": \"Sphere\",      \"scale\": [        10,        10,        10      ],      \"translation\": [        0,        0,        0      ]    },    {      \"camera\": 0,      \"name\": \"Camera\",      \"rotation\": [        -0.09568335115909576,        0.4728190302848816,        0.04415176808834076,        0.874835729598999      ],      \"translation\": [        50,        5,        50      ]    }  ],  \"cameras\": [    {      \"name\": \"Camera.003\",      \"perspective\": {        \"aspectRatio\": 1.7777777777777777,        \"yfov\": 0.39959651231765747,        \"zfar\": 1000,        \"znear\": 0.10000000149011612      },      \"type\": \"perspective\"    }  ],  \"materials\": [    {      \"doubleSided\": true,      \"name\": \"Material.001\",      \"pbrMetallicRoughness\": {        \"baseColorFactor\": [          1,          0,          0,          1        ],              }    },      ],  \"meshes\": [    {      \"name\": \"Sphere\",      \"extras\": {        \"subx\": 36,        \"suby\": 36      },      \"primitives\": [        {          \"attributes\": {            \"POSITION\": 6,            \"NORMAL\": 7          },          \"indices\": 8,          \"material\": 0        }      ]    }  ]}";
+
 int main(int argc, char *argv[])
 {
   int32_t code = EXIT_SUCCESS;
@@ -277,6 +279,7 @@ int main(int argc, char *argv[])
     goto clean_window;
   }
 
+  init_scene(gltf, strlen(gltf), 0, 0);
   init(WIDTH, HEIGHT, 1);
 
   bool      quit = false;
@@ -301,9 +304,9 @@ int main(int argc, char *argv[])
         }
       }
       else if(event.type == SDL_KEYDOWN)
-        key_down(event.key.keysym.sym);
+        key_down(event.key.keysym.sym, 0.1f);
       else if(lock_mouse && event.type == SDL_MOUSEMOTION)
-        mouse_move(event.motion.xrel, event.motion.yrel);
+        mouse_move(event.motion.xrel, event.motion.yrel, 0.005f);
     }
 
     uint64_t frame = SDL_GetTicks64() - last;

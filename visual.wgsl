@@ -136,7 +136,9 @@ const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
 const TWO_PI              = 6.283185;
 const INV_PI              = 1 / PI;
-const ORIGIN              = vec3f(1 / 32.0); // posOfs()
+
+// posOfs
+const ORIGIN              = vec3f(1 / 32.0);
 const FLOAT_SCALE         = 1 / 65536.0;
 const INT_SCALE           = 256.0;
 
@@ -400,7 +402,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<
   let pvec = cross(dir, edge2);
   let det = dot(edge1, pvec);
 
-  if(abs(det) < EPS) {
+  if(abs(det) < 0.0) {
     // Ray in plane of triangle
     return INF;
   }

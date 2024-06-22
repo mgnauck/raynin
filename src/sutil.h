@@ -17,7 +17,6 @@ size_t          strlen(const char *p);
 int             strcmp(const char *s1, const char *s2);
 int             strncmp(const char *s1, const char *s2, size_t n);
 char            *strstr(const char *str, const char *sub);
-char            *strstr_lower(const char *str, const char *sub);
 
 int             tolower(int c);
 
@@ -28,7 +27,10 @@ int             atoi(const char *s);
 
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #endif
+
+char            *strstr_lower(const char *str, const char *sub);
 
 #endif

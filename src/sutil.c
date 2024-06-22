@@ -68,22 +68,6 @@ char *strstr(const char *str, const char *sub)
   return NULL;
 }
 
-char *strstr_lower(const char *str, const char *sub)
-{
-  int l = strlen(sub);
-  char *p = (char *)sub;
-  while(*str && *p) {
-    if(tolower(*str) == tolower(*p))
-      p++;
-    str++;
-    if(!*p)
-      return (char *)str - l;
-    if(l == p - sub)
-      p = (char *)sub;
-  }
-  return NULL;
-}
-
 int tolower(int c)
 {
   return c > 0x40 && c < 0x5b ? c | 0x60 : c;
@@ -125,3 +109,19 @@ int atoi(const char *s)
 }
 
 #endif
+
+char *strstr_lower(const char *str, const char *sub)
+{
+  int l = strlen(sub);
+  char *p = (char *)sub;
+  while(*str && *p) {
+    if(tolower(*str) == tolower(*p))
+      p++;
+    str++;
+    if(!*p)
+      return (char *)str - l;
+    if(l == p - sub)
+      p = (char *)sub;
+  }
+  return NULL;
+}

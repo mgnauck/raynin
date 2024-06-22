@@ -116,6 +116,7 @@ void push_ltris(render_data *rd)
   scene *s = rd->scene;
   gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
 
+#ifndef NATIVE_BUILD
   // Push tris because ltri id might have changed
   uint32_t cnt = 0;
   for(uint32_t i=0; i<s->mesh_cnt; i++) {    
@@ -123,6 +124,7 @@ void push_ltris(render_data *rd)
     gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
     cnt += m->tri_cnt;
   }
+#endif
 
   scene_clr_dirty(s, RT_LTRI);
 }
@@ -215,6 +217,7 @@ void renderer_update(render_data *rd, float time)
 }
 
 #ifdef NATIVE_BUILD
+
 void renderer_render(render_data *rd, SDL_Surface *surface)
 {
   float weight = rd->spp / (float)rd->gathered_spp;
@@ -230,19 +233,23 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
           vec3 c = rd->scene->bg_col;
           if(h.t < MAX_DISTANCE) {
             inst *inst = &rd->scene->instances[h.e & INST_ID_MASK];
-            mat4 transform;
-            mat4_from_row3x4(transform, inst->transform);
             vec3 nrm;
             uint16_t mtl_id;
             if(!(inst->data & SHAPE_TYPE_BIT)) {
               // Mesh
+              mat4 inv_transform;
+              mat4_from_row3x4(inv_transform, inst->inv_transform);
               uint32_t tri_idx = h.e >> 16;
               tri* tri = &rd->scene->meshes[inst->data & MESH_SHAPE_MASK].tris[tri_idx];
               nrm = vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
-              nrm = vec3_unit(mat4_mul_dir(transform, nrm));
+              mat4 inv_transform_t;
+              mat4_transpose(inv_transform_t, inv_transform);
+              nrm = vec3_unit(mat4_mul_dir(inv_transform_t, nrm));
               mtl_id = (inst->data & MTL_OVERRIDE_BIT) ? (inst->id >> 16) : (tri->mtl & MTL_ID_MASK);
             } else {
               // Shape
+              mat4 transform;
+              mat4_from_row3x4(transform, inst->transform);
               switch((shape_type)(h.e >> 16)) {
                 case ST_PLANE: 
                   nrm = vec3_unit(mat4_mul_dir(transform, (vec3){ 0.0f, 1.0f, 0.0f }));
