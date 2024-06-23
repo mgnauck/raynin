@@ -3,10 +3,11 @@
 
 void mtl_set_defaults(mtl *m)
 {
-  m->col = (vec3){ 0.5f, 0.5f, 0.5f };
+  // Blender defaults
+  m->col = (vec3){ 1.0f, 1.0f, 1.0f };
   m->metallic = 0.0f;
-  m->roughness = 1.0f;
-  m->ior = 1.01f;
+  m->roughness = 0.5f;
+  m->ior = 1.5f;
   m->refractive = 0.0f;
 }
 
@@ -20,7 +21,7 @@ mtl mtl_init(vec3 c)
   return (mtl){
     .col = c,
     .metallic = 0.0f,
-    .roughness = 0.0f,
+    .roughness = 1.0f,
     .ior = 1.01f,
     .refractive = 0.0f
   };
