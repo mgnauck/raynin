@@ -375,6 +375,7 @@ void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint32_t
     vec3 p0 = vec3_scale(p0n, outer_radius);
     vec3 p1n = (vec3){ sinf(v + dv), 0.0f, cosf(v + dv) };
     vec3 p1 = vec3_scale(p1n, outer_radius);
+
     float u = 0.0f;
     for(uint32_t i=0; i<sub_inner; i++) {
       float x0 = sinf(u) * inner_radius;
