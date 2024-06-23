@@ -3,9 +3,8 @@
 
 #include <stdint.h>
 #include "mat4.h"
-#include "cam.h"
-#include "view.h"
 #include "types.h"
+#include "view.h"
 
 typedef struct mtl mtl;
 typedef struct mesh mesh;
@@ -14,6 +13,7 @@ typedef struct inst inst;
 typedef struct inst_info inst_info;
 typedef struct tlas_node tlas_node;
 typedef struct ltri ltri;
+typedef struct cam cam;
 
 typedef struct scene {
   uint32_t    max_mtl_cnt;
@@ -33,14 +33,16 @@ typedef struct scene {
   uint32_t    max_ltri_cnt;
   uint32_t    ltri_cnt;
   ltri        *ltris;
+  cam         *cams;
+  uint32_t    cam_cnt;
+  cam         *active_cam;
   view        view;
-  cam         cam;
   vec3        bg_col;
   uint32_t    dirty;
   uint32_t    curr_ofs;
 } scene;
 
-void      scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt);
+void      scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t cam_cnt, uint32_t inst_cnt);
 void      scene_release(scene *s);
 
 void      scene_set_dirty(scene *s, res_type r);
@@ -50,6 +52,10 @@ void      scene_finalize(scene *s); // Call after loading the scene data
 void      scene_prepare_render(scene *s); // Call after each scene data update before render
 
 uint32_t  scene_add_mtl(scene *s, mtl *mtl);
+
+void      scene_set_active_cam(scene *s, uint32_t cam_id);
+cam       *scene_get_active_cam(scene *s);
+cam       *scene_get_cam(scene *s, uint32_t cam_id);
 
 uint32_t  scene_add_mesh_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform); // mtl_id < 0 means no mtl override
 uint32_t  scene_add_shape_inst(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform);

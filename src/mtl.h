@@ -1,8 +1,8 @@
 #ifndef MTL_H
 #define MTL_H
 
-#include "vec3.h"
 #include <stdbool.h>
+#include "vec3.h"
 
 typedef struct mtl
 {

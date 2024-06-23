@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include "bvh.h"
+#include "cam.h"
 #include "inst.h"
 #include "mesh.h"
 #include "mtl.h"
@@ -181,8 +182,9 @@ void renderer_update(render_data *rd, float time)
 
   // Push camera and view
   if(rd->scene->dirty & RT_CAM_VIEW) {
-    view_calc(&s->view, rd->width, rd->height, &s->cam);
-    gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, &s->cam, CAM_BUF_SIZE);
+    cam *cam = scene_get_active_cam(s);
+    view_calc(&s->view, rd->width, rd->height, cam);
+    gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, cam, CAM_BUF_SIZE);
     gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_VIEW, &s->view, sizeof(s->view));
     scene_clr_dirty(s, RT_CAM_VIEW);
   }
@@ -227,7 +229,8 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
       for(uint32_t y=0; y<BLOCK_SIZE; y++) {
         for(uint32_t x=0; x<BLOCK_SIZE; x++) {
           ray r;
-          ray_create_primary(&r, (float)(i + x), (float)(j + y), &rd->scene->view, &rd->scene->cam);
+          cam *cam = scene_get_active_cam(rd->scene);
+          ray_create_primary(&r, (float)(i + x), (float)(j + y), &rd->scene->view, cam);
           hit h = (hit){ .t = MAX_DISTANCE };
           intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, rd->scene->bvhs, &h);
           vec3 c = rd->scene->bg_col;

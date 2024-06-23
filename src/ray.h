@@ -1,8 +1,8 @@
 #ifndef RAY_H
 #define RAY_H
 
-#include "vec3.h"
 #include "mat4.h"
+#include "vec3.h"
 
 typedef struct view view;
 typedef struct cam cam;

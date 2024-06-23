@@ -1,10 +1,10 @@
 #include "bvh.h"
 #include <float.h>
-#include "sutil.h"
-#include "mutil.h"
-#include "tri.h"
 #include "aabb.h"
 #include "mesh.h"
+#include "mutil.h"
+#include "sutil.h"
+#include "tri.h"
 
 #define INTERVAL_CNT 16
 

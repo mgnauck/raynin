@@ -1,15 +1,16 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include "mutil.h"
-#include "vec3.h"
-#include "mtl.h"
-#include "mesh.h"
-#include "inst.h"
-#include "tlas.h"
-#include "scene.h"
-#include "renderer.h"
+#include "cam.h"
 #include "import.h"
+#include "inst.h"
+#include "mesh.h"
+#include "mtl.h"
+#include "mutil.h"
+#include "renderer.h"
+#include "scene.h"
 #include "settings.h"
+#include "tlas.h"
+#include "vec3.h"
 #include "log.h"
 
 #include "data/teapot.h"
@@ -33,6 +34,7 @@
 scene         scn;
 scene         *cs = &scn;
 render_data   *rd;
+uint32_t      active_cam = 0;
 bool          orbit_cam = false;
 
   __attribute__((visibility("default")))
@@ -40,30 +42,32 @@ void key_down(unsigned char key, float move_vel)
 {
   float speed = vec3_max_comp(vec3_scale(vec3_sub(cs->tlas_nodes[0].max, cs->tlas_nodes[0].min), 0.2f));
 
+  cam *cam = scene_get_active_cam(cs);
+
   switch(key) {
     case 'a':
-      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.right, -speed * move_vel));
+      cam->eye = vec3_add(cam->eye, vec3_scale(cam->right, -speed * move_vel));
       break;
     case 'd':
-      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.right, speed * move_vel));
+      cam->eye = vec3_add(cam->eye, vec3_scale(cam->right, speed * move_vel));
       break;
     case 'w':
-      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.fwd, -speed * move_vel));
+      cam->eye = vec3_add(cam->eye, vec3_scale(cam->fwd, -speed * move_vel));
      break;
     case 's':
-      cs->cam.eye = vec3_add(cs->cam.eye, vec3_scale(cs->cam.fwd, speed * move_vel));
+      cam->eye = vec3_add(cam->eye, vec3_scale(cam->fwd, speed * move_vel));
       break;
     case 'i':
-      cs->cam.foc_dist += 0.1f;
+      cam->foc_dist += 0.1f;
       break;
     case 'k':
-      cs->cam.foc_dist = max(cs->cam.foc_dist - 0.1f, 0.1f);
+      cam->foc_dist = max(cam->foc_dist - 0.1f, 0.1f);
       break;
     case 'j':
-      cs->cam.foc_angle = max(cs->cam.foc_angle - 0.1f, 0.1f);
+      cam->foc_angle = max(cam->foc_angle - 0.1f, 0.1f);
       break;
     case 'l':
-      cs->cam.foc_angle += 0.1f;
+      cam->foc_angle += 0.1f;
       break;
     case 'o':
       orbit_cam = !orbit_cam;
@@ -71,7 +75,17 @@ void key_down(unsigned char key, float move_vel)
     case 'u':
       cs->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, cs->bg_col);
       break;
-    case 'r':
+    case 'm':
+      active_cam = (active_cam + 1) % cs->cam_cnt;
+      scene_set_active_cam(cs, active_cam);
+      logc("Setting cam %i of %i cams active", active_cam, cs->cam_cnt);
+      break;
+    case 'n':
+      active_cam = active_cam > 0 ? active_cam - 1 : cs->cam_cnt - 1;
+      scene_set_active_cam(cs, active_cam);
+      logc("Setting cam %i of %i cams active", active_cam, cs->cam_cnt);
+      break;
+   case 'r':
       // TODO Call JS to reload shader
       break;
   }
@@ -82,20 +96,23 @@ void key_down(unsigned char key, float move_vel)
 __attribute__((visibility("default")))
 void mouse_move(int32_t dx, int32_t dy, float look_vel)
 {
-  float theta = min(max(acosf(-cs->cam.fwd.y) + (float)dy * look_vel, 0.01f), 0.99f * PI);
-  float phi = fmodf(atan2f(-cs->cam.fwd.z, cs->cam.fwd.x) + PI - (float)dx * look_vel, 2.0f * PI);
+  cam *cam = scene_get_active_cam(cs);
+
+  float theta = min(max(acosf(-cam->fwd.y) + (float)dy * look_vel, 0.01f), 0.99f * PI);
+  float phi = fmodf(atan2f(-cam->fwd.z, cam->fwd.x) + PI - (float)dx * look_vel, 2.0f * PI);
   
-  cam_set_dir(&cs->cam, vec3_spherical(theta, phi));
+  cam_set_dir(cam, vec3_spherical(theta, phi));
   
   scene_set_dirty(cs, RT_CAM_VIEW);
 }
 
 void init_scene_riow(scene *s)
 {
-  scene_init(s, MESH_CNT, MTL_CNT, INST_CNT);
+  scene_init(s, MESH_CNT, MTL_CNT, 1, INST_CNT);
 
-  s->cam = (cam){ .vert_fov = 20.0f, .foc_dist = 11.0f, .foc_angle = 0.5f };
-  cam_set(&s->cam, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+  cam *c = scene_get_active_cam(s);
+  *c = (cam){ .vert_fov = 20.0f, .foc_dist = 11.0f, .foc_angle = 0.5f };
+  cam_set(c, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   uint16_t mtl_id = 0;
   uint32_t lid = 0;
@@ -239,9 +256,10 @@ void update_scene(scene *s, float time)
 
   // Update camera
   if(orbit_cam) {
+    cam *cam = scene_get_active_cam(s);
     vec3  e = vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.4f);
     vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
-    cam_set(&s->cam, pos, vec3_neg(pos));
+    cam_set(cam, pos, vec3_neg(pos));
     scene_set_dirty(s, RT_CAM_VIEW);
   }
 }

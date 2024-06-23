@@ -1,17 +1,18 @@
 #include "scene.h"
-#include "sutil.h"
-#include "mutil.h"
-#include "tri.h"
 #include "aabb.h"
-#include "mtl.h"
-#include "mesh.h"
 #include "bvh.h"
+#include "cam.h"
 #include "inst.h"
+#include "mesh.h"
+#include "mtl.h"
+#include "mutil.h"
 #include "settings.h"
+#include "sutil.h"
 #include "tlas.h"
+#include "tri.h"
 #include "log.h"
 
-void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt)
+void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t cam_cnt, uint32_t inst_cnt)
 {
   s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
   s->max_mtl_cnt  = mtl_cnt;
@@ -34,9 +35,13 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t inst_cnt
   s->max_ltri_cnt = 0;
   s->ltri_cnt     = 0;
 
+  s->cams         = malloc(cam_cnt * sizeof(*s->cams));
+  s->cam_cnt      = cam_cnt;
+  s->active_cam   = &s->cams[0];
+
   s->max_tri_cnt  = 0; // Attach all meshes before calculating this
 
-  s->bg_col        = (vec3){ 0.0f, 0.0f, 0.0f };
+  s->bg_col       = (vec3){ 0.0f, 0.0f, 0.0f };
 
   s->curr_ofs     = 0;
 
@@ -48,8 +53,9 @@ void scene_release(scene *s)
   for(uint32_t i=0; i<s->mesh_cnt; i++)
     mesh_release(&s->meshes[i]);
 
-  free(s->tlas_nodes);
+  free(s->cams);
   free(s->ltris);
+  free(s->tlas_nodes);
   free(s->inst_info);
   free(s->instances);
   free(s->bvhs);
@@ -273,6 +279,21 @@ uint32_t scene_add_mtl(scene *s, mtl *mtl)
 {
   scene_upd_mtl(s, s->mtl_cnt, mtl);
   return s->mtl_cnt++;
+}
+
+void scene_set_active_cam(scene *s, uint32_t cam_id)
+{
+  s->active_cam = &s->cams[cam_id];
+}
+
+cam *scene_get_active_cam(scene *s)
+{
+  return s->active_cam;
+}
+
+cam *scene_get_cam(scene *s, uint32_t cam_id)
+{
+  return &s->cams[cam_id];
 }
 
 uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)

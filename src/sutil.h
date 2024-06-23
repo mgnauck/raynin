@@ -25,9 +25,9 @@ int             atoi(const char *s);
 
 #else
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 
 #endif
 

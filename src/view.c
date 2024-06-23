@@ -1,6 +1,6 @@
 #include "view.h"
-#include "mutil.h"
 #include "cam.h"
+#include "mutil.h"
 
 void view_calc(view *v, uint32_t width, uint32_t height, cam *c)
 {

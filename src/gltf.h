@@ -1,9 +1,9 @@
 #ifndef GLTF_H
 #define GLTF_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include "vec3.h"
 
 #define NAME_STR_LEN  256

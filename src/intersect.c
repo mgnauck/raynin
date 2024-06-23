@@ -1,11 +1,11 @@
 #include "intersect.h"
-#include "mutil.h"
-#include "ray.h"
-#include "tri.h"
-#include "mesh.h"
 #include "bvh.h"
 #include "inst.h"
+#include "mesh.h"
+#include "mutil.h"
+#include "ray.h"
 #include "tlas.h"
+#include "tri.h"
 #include "types.h"
 
 // GPU efficient slabs test [Laine et al. 2013; Afra et al. 2016]

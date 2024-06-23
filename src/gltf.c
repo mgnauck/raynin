@@ -1,6 +1,6 @@
 #include "gltf.h"
-#include "sutil.h"
 #include "mutil.h"
+#include "sutil.h"
 #include "log.h"
 
 #define JSMN_PARENT_LINKS

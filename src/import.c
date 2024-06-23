@@ -1,12 +1,13 @@
 #include "import.h"
-#include "sutil.h"
+#include "bvh.h"
+#include "cam.h"
+#include "gltf.h"
+#include "mesh.h"
+#include "mtl.h"
 #include "mutil.h"
 #include "scene.h"
-#include "mesh.h"
-#include "bvh.h"
-#include "mtl.h"
+#include "sutil.h"
 #include "tri.h"
-#include "gltf.h"
 #include "log.h"
 
 typedef struct mesh_ref {
@@ -221,10 +222,11 @@ void process_cam_node(scene *s, gltf_data *d, gltf_node *gn)
   vec3 dir = vec3_unit(mat4_mul_dir(rot, (vec3){ 0.0f, 0.0f, -1.0f }));
  
   gltf_cam *gc = &d->cams[gn->cam_idx];
-  s->cam = (cam){ .vert_fov = gc->vert_fov * 180.0f / PI, .foc_dist = 10.0f, .foc_angle = 0.0f };
-  cam_set(&s->cam, gn->trans, vec3_add(gn->trans, dir));
+  cam *c = scene_get_cam(s, gn->cam_idx);
+  *c = (cam){ .vert_fov = gc->vert_fov * 180.0f / PI, .foc_dist = 10.0f, .foc_angle = 0.0f };
+  cam_set(c, gn->trans, vec3_add(gn->trans, dir));
 
-  logc("Initialized default camera from node %s pointing to gltf cam %i (%s).", gn->name, gn->cam_idx, gc->name);
+  logc("Created camera %i from node (%s) pointing to gltf cam %i (%s).", gn->cam_idx, gn->name, gn->cam_idx, gc->name);
 }
 
 bool check_is_emissive_mtl(gltf_mtl *gm)
@@ -299,9 +301,9 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   logc("Found that %i duplicates of emissive meshes are required.", dup_mesh_cnt);
 
   // Allocate scene
-  logc("-------- Allocating %i meshes, %i materials and %i instances.",
-    mesh_cnt + dup_mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt);
-  scene_init(s, mesh_cnt + dup_mesh_cnt, data.mtl_cnt, data.node_cnt - data.cam_node_cnt);
+  logc("-------- Allocating %i meshes, %i materials, %i cameras and %i instances.",
+    mesh_cnt + dup_mesh_cnt, data.mtl_cnt, max(1, data.cam_node_cnt), data.node_cnt - data.cam_node_cnt);
+  scene_init(s, mesh_cnt + dup_mesh_cnt, data.mtl_cnt, max(1, data.cam_node_cnt), data.node_cnt - data.cam_node_cnt);
 
   // Gltf node indices to render mesh indices
   int32_t *render_mesh_ids = malloc(data.node_cnt * sizeof(*render_mesh_ids));
@@ -357,9 +359,10 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     logc("Created material %s (emissive: %i, refractive: %i)", gm->name, is_emissive, m.refractive == 1.0f);
   }
 
-  // Set default camera (might be overwritten if there is a cam in the scene)
-  s->cam = (cam){ .vert_fov = 45.0f, .foc_dist = 10.0f, .foc_angle = 0.0f };
-  cam_set(&s->cam, (vec3){ 0.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+  // Initialize a default camera (might be overwritten if there are one or more cams in the scene)
+  cam *c = scene_get_active_cam(s);
+  *c = (cam){ .vert_fov = 45.0f, .foc_dist = 10.0f, .foc_angle = 0.0f };
+  cam_set(c, (vec3){ 0.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   // Add nodes as scene instances
   logc("-------- Processing nodes and creating instances:");
@@ -368,7 +371,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     if(gn->mesh_idx >= 0)
       process_mesh_node(s, &data, gn, i, render_mesh_ids);
     else if(gn->cam_idx >= 0) 
-      process_cam_node(s, &data, gn); // TODO Last cam wins for now
+      process_cam_node(s, &data, gn);
     else
       logc("#### WARN: Found unknown node %i (%s). Expected camera or mesh. Skipping.", i, gn->name);
   }
@@ -382,7 +385,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
  
   gltf_release(&data);
 
-  logc("-------- Completed scene: %i meshes, %i materials, %i instances, %i cameras", s->mesh_cnt, s->mtl_cnt, s->inst_cnt, data.cam_cnt); // TODO Cameras
+  logc("-------- Completed scene: %i meshes, %i materials, %i cameras, %i instances", s->mesh_cnt, s->mtl_cnt, data.cam_cnt, s->inst_cnt);
 
   return 0;
 }

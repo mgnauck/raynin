@@ -1,8 +1,8 @@
 #include "ray.h"
-#include "mutil.h"
-#include "view.h"
 #include "cam.h"
+#include "mutil.h"
 #include "settings.h"
+#include "view.h"
 
 void ray_create(ray *ray, vec3 ori, vec3 dir)
 {
