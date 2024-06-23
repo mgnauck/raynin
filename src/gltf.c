@@ -89,6 +89,8 @@ obj_type get_type(const char *name)
     return OT_SPHERE;
   else if(strstr_lower(name, "cylinder"))
     return OT_CYLINDER;
+  else if(strstr_lower(name, "torus") || strstr_lower(name, "ring") || strstr_lower(name, "donut"))
+    return OT_TORUS;
   // Everything else is considered a mesh
   return OT_MESH;
 }

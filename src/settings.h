@@ -8,6 +8,8 @@
 
 #define PLANE_DEFAULT_SIZE        2.0f
 
+#define TORUS_DEFAULT_SUB_INNER   18
+#define TORUS_DEFAULT_SUB_OUTER   18
 #define ICOSPHERE_DEFAULT_STEPS   0   // Lowest level
 #define SPHERE_DEFAULT_SUBX       18
 #define SPHERE_DEFAULT_SUBY       18

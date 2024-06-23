@@ -150,7 +150,12 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 
 void generate_mesh_data(mesh *m, gltf_mesh *gm)
 {
-  if(gm->type == OT_ICOSPHERE) {
+   if(gm->type == OT_TORUS) {
+    uint32_t subx = (gm->subx > 0) ? gm->subx : TORUS_DEFAULT_SUB_INNER;
+    uint32_t suby = (gm->suby > 0) ? gm->suby : TORUS_DEFAULT_SUB_OUTER;
+    mesh_create_torus(m, 0.25f, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms);
+    logc("Generated torus with %i triangles.", m->tri_cnt);
+  } else if(gm->type == OT_ICOSPHERE) {
     mesh_create_icosphere(m, gm->steps > 0 ? gm->steps : ICOSPHERE_DEFAULT_STEPS, gm->prims[0].mtl_idx, gm->face_nrms);
     logc("Generated icosphere with %i triangles.", m->tri_cnt);
   } else if(gm->type == OT_SPHERE) {
@@ -262,7 +267,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     mesh_ref *mr = &mesh_map[j];
     mr->inst_cnt = 0; // Init for duplicate identification
     bool is_emissive = check_is_emissive_mesh(gm, &data);
-    if(is_emissive || check_is_custom(gm) || gm->type == OT_MESH || gm->type == OT_BOX || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_QUAD || gm->prim_cnt > 1) {
+    if(is_emissive || check_is_custom(gm) || gm->type == OT_MESH || gm->type == OT_TORUS || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_BOX|| gm->type == OT_QUAD || gm->prim_cnt > 1) {
       // Meshes that are emissive or need to be loaded or generated will end up as an actual renderer mesh
       mr->mesh_idx = 1; // Assign something that is not -1 ot indicate it is a mesh, actual index will follow during mesh creation
       mr->is_emissive = is_emissive;

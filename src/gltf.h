@@ -15,6 +15,7 @@ typedef enum obj_type { // Infer shape type from name
   OT_ICOSPHERE,
   OT_SPHERE,
   OT_CYLINDER,
+  OT_TORUS,
   OT_MESH,
   OT_UNKNOWN
 } obj_type;
