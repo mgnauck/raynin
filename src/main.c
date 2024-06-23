@@ -117,6 +117,7 @@ void init_scene_riow(scene *s)
     scene_attach_mesh(s, mesh, true);
   }
 
+  /*
   // Sphere mesh
   mesh = scene_acquire_mesh(s);
   mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false);
@@ -124,6 +125,7 @@ void init_scene_riow(scene *s)
   //mesh_create_icosphere(mesh, 3, mtl_id, false);
   //import_mesh(mesh, teapot, mtl_id, false);
   sid = scene_attach_mesh(s, mesh, false);
+  */
   
   // Floor mesh
   m = mtl_init((vec3){ 0.25f, 0.25f, 0.25f });
@@ -156,9 +158,10 @@ void init_scene_riow(scene *s)
   mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 0.0f, 0.0f, 0.0f });
   m.ior = 2.3f;
+  m.roughness = 0.0f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  scene_add_mesh_inst(s, sid, mtl_id, translation);
+  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Reflecting sphere (white)
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -166,9 +169,10 @@ void init_scene_riow(scene *s)
   mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
   m.ior = 1.5f;
+  m.roughness = 0.0f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  scene_add_mesh_inst(s, sid, mtl_id, translation);
+  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Metallic sphere
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -178,8 +182,8 @@ void init_scene_riow(scene *s)
   m.metallic = 1.0f;
   m.roughness = 0.5f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  scene_add_mesh_inst(s, sid, mtl_id, translation);
+  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  //scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   mat4_scale_u(scale, 0.2f);
   
@@ -188,6 +192,7 @@ void init_scene_riow(scene *s)
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
         m = mtl_init(vec3_rand());
+        m.roughness = 0.0f;
         if(pcg_randf() < 0.4f) {
           m.refractive = 1.0f;
           m.roughness = pcg_randf();
@@ -196,8 +201,8 @@ void init_scene_riow(scene *s)
         mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        //scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
-        scene_add_mesh_inst(s, sid, mtl_id, transform);
+        scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
+        //scene_add_mesh_inst(s, sid, mtl_id, transform);
       }
     }
   }
@@ -257,7 +262,7 @@ void release()
 
 #ifdef NATIVE_BUILD
 
-const char *gltf = "{  \"scenes\": [    {      \"extras\": {        \"bgcol\": [          0.7,          0.7,          0.7        ]      },          }  ],  \"nodes\": [    {      \"mesh\": 0,      \"name\": \"Sphere\",      \"scale\": [        10,        10,        10      ],      \"translation\": [        0,        0,        0      ]    },    {      \"camera\": 0,      \"name\": \"Camera\",      \"rotation\": [        -0.09568335115909576,        0.4728190302848816,        0.04415176808834076,        0.874835729598999      ],      \"translation\": [        50,        5,        50      ]    }  ],  \"cameras\": [    {      \"name\": \"Camera.003\",      \"perspective\": {        \"aspectRatio\": 1.7777777777777777,        \"yfov\": 0.39959651231765747,        \"zfar\": 1000,        \"znear\": 0.10000000149011612      },      \"type\": \"perspective\"    }  ],  \"materials\": [    {      \"doubleSided\": true,      \"name\": \"Material.001\",      \"pbrMetallicRoughness\": {        \"baseColorFactor\": [          1,          0,          0,          1        ],              }    },      ],  \"meshes\": [    {      \"name\": \"Sphere\",      \"extras\": {        \"subx\": 36,        \"suby\": 36      },      \"primitives\": [        {          \"attributes\": {            \"POSITION\": 6,            \"NORMAL\": 7          },          \"indices\": 8,          \"material\": 0        }      ]    }  ]}";
+const char *gltf = "TODO";
 
 int main(int argc, char *argv[])
 {

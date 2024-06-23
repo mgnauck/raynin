@@ -908,10 +908,6 @@ fn evalDiffuse(mtl: Mtl, n: vec3f, wi: vec3f) -> vec3f
 
 fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, fres: ptr<function, vec3f>, isSpecular: ptr<function, bool>, pdf: ptr<function, f32>) -> bool
 {
-  if(dot(wo, n) == 0.0) {
-    return false;
-  }
-
   let m = sign(dot(wo, n)) * sampleGGX(n, r0.xy, getRoughness(mtl));
   *fres = fresnelSchlick(dot(wo, m), mtlToF0(mtl));
   let p = luminance(*fres);
