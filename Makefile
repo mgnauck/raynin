@@ -1,6 +1,6 @@
 OUTDIR=output
-SRC=sutil.c mutil.c printf.c log.c vec3.c mat4.c ray.c tri.c aabb.c cam.c view.c mesh.c mtl.c bvh.c tlas.c scene.c renderer.c intersect.c gltf.c import.c main.c
-OBJ=$(patsubst %.c,obj/%.o,$(SRC))
+SRC=$(shell find src/ -type f -name '*.c')
+OBJ=$(patsubst src/%.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=visual.wgsl
 SHADER_EXCLUDES=computeMain,vertexMain,fragmentMain

@@ -4,7 +4,7 @@
 #include "log.h"
 
 #define JSMN_PARENT_LINKS
-#include "jsmn.h"
+#include "ext/jsmn.h"
 
 #define SBUF_LEN 1024 // Fixed buffer for temporary string storage
 char sbuf[SBUF_LEN];

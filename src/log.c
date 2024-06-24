@@ -5,7 +5,7 @@
 #ifdef NATIVE_BUILD
 #include <SDL.h>
 #else
-#include "printf.h"
+#include "ext/printf.h"
 extern void log_buf(char *addr, uint32_t len);
 #endif
 
