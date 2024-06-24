@@ -1,21 +1,17 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include "cam.h"
-#include "import.h"
-#include "inst.h"
-#include "mesh.h"
-#include "mtl.h"
-#include "mutil.h"
-#include "renderer.h"
-#include "scene.h"
+#include "acc/tlas.h"
+#include "imp/import.h"
+#include "scene/cam.h"
+#include "scene/inst.h"
+#include "scene/mesh.h"
+#include "scene/mtl.h"
+#include "sys/log.h"
+#include "sys/mutil.h"
+#include "rend/renderer.h"
+#include "scene/scene.h"
+#include "util/vec3.h"
 #include "settings.h"
-#include "tlas.h"
-#include "vec3.h"
-#include "log.h"
-
-#include "data/teapot.h"
-#include "data/dragon.h"
-#include "data/icosahedron.h"
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
