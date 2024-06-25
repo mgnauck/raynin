@@ -54,7 +54,9 @@ typedef struct gltf_mesh {
   obj_type      type;
   uint32_t      subx;       // Object generation (custom value)
   uint32_t      suby;       // Object generation (custom value)
-  uint16_t      steps;      // Object generation (custom value)
+  uint16_t      steps;      // Object generation (custom value icosphere)
+  float         in_radius;  // Object generation (custom value torus)
+  bool          no_caps;    // Object generation (custom value cylinder)
   bool          face_nrms;  // Object generation (custom value)
   gltf_prim*    prims;
   uint32_t      prim_cnt;

@@ -20,7 +20,7 @@ void mesh_release(mesh *m)
 
 void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl)
 {
-  // Generate plane in XZ at origin with normal pointing up in Y
+  // Generate quad in XZ plane at origin with normal pointing up in Y
   mesh_init(m, 2 * subx * suby);
 
   float P = QUAD_DEFAULT_SIZE;
@@ -28,39 +28,37 @@ void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl)
   float dx = P / (float)subx;
   float dz = P / (float)suby;
 
+  uint32_t ofs = 0;
+
   float z = 0.0f;
   for(uint32_t j=0; j<suby; j++) {
     float x = 0.0f;
     for(uint32_t i=0; i<subx; i++) {
-      uint32_t ofs = 2 * (subx * j + i);
-      tri *tri = &m->tris[ofs];
-      tri->v0 = (vec3){ -P2 + x, 0.0, -P2 + z };
-      tri->v1 = (vec3){ -P2 + x, 0.0, -P2 + z + dz };
-      tri->v2 = (vec3){ -P2 + x + dx, 0.0, -P2 + z + dz };
-      tri->n0 = tri->n1 = tri->n2 = (vec3){ 0.0f, 1.0f, 0.0f };
-#ifdef TEXTURE_SUPPORT // Untested
-      tri->uv0[0] = x / P; tri->uv0[1] = z / P;
-      tri->uv1[0] = x / P; tri->uv1[1] = (z + dz) / P;
-      tri->uv2[0] = (x + dx) / P; tri->uv2[1] = (z + dz) / P;
-#endif
-      tri->mtl = mtl;
-      m->centers[ofs] = tri_calc_center(tri);
+      // Tri 0
+      tri *t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = (vec3){ -P2 + x, 0.0, -P2 + z },
+        .v1 = (vec3){ -P2 + x, 0.0, -P2 + z + dz },
+        .v2 = (vec3){ -P2 + x + dx, 0.0, -P2 + z + dz },
+        .mtl = mtl
+      };
+      t->n0 = t->n1 = t->n2 = (vec3){ 0.0f, 1.0f, 0.0f };
+      m->centers[ofs++] = tri_calc_center(t);
 
-      tri = &m->tris[ofs + 1];
-      tri->v0 = (vec3){ -P2 + x, 0.0, -P2 + z };
-      tri->v1 = (vec3){ -P2 + x + dx, 0.0, -P2 + z + dz };
-      tri->v2 = (vec3){ -P2 + x + dx, 0.0, -P2 + z };
-      tri->n0 = tri->n1 = tri->n2 = (vec3){ 0.0f, 1.0f, 0.0f };
-#ifdef TEXTURE_SUPPORT // Untested
-      tri->uv0[0] = x / P; tri->uv0[1] = z / P;
-      tri->uv1[0] = (x + dx) / P; tri->uv1[1] = (z + dz) / P;
-      tri->uv2[0] = (x + dx) / P; tri->uv2[1] = z / P;
-#endif
-      tri->mtl = mtl;
-      m->centers[ofs + 1] = tri_calc_center(tri);
+      // Tri 1
+      t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = (vec3){ -P2 + x, 0.0, -P2 + z },
+        .v1 = (vec3){ -P2 + x + dx, 0.0, -P2 + z + dz },
+        .v2 = (vec3){ -P2 + x + dx, 0.0, -P2 + z },
+        .mtl = mtl
+      };
+      t->n0 = t->n1 = t->n2 = (vec3){ 0.0f, 1.0f, 0.0f };
+      m->centers[ofs++] = tri_calc_center(t);
 
       x += dx;
     }
+
     z += dz;
   }
 }
@@ -125,92 +123,6 @@ void mesh_create_box(mesh *m, uint32_t mtl)
   }
 }
 
-void mesh_create_icosphere(mesh *m, uint8_t steps, uint32_t mtl, bool face_normals)
-{
-  mesh_init(m, 20 * (1 << (2 * steps)));
-
-  float phi = 0.5f * (1.0f + sqrtf(5.0f));
-  
-  m->tris[ 0] = (tri){ .v0 = (vec3){ -1.0, phi, 0.0 }, .v1 = (vec3){ 0.0, 1.0, phi }, .v2 = (vec3){ 1.0, phi, 0.0 } };
-  m->tris[ 1] = (tri){ .v0 = (vec3){ 1.0, phi, 0.0 }, .v1 = (vec3){ 0.0, 1.0, -phi }, .v2 = (vec3){ -1.0, phi, 0.0 } };
-  m->tris[ 2] = (tri){ .v0 = (vec3){ 1.0, phi, 0.0 }, .v1 = (vec3){ 0.0, 1.0, phi }, .v2 = (vec3){ phi, 0.0, 1.0 } };
-  m->tris[ 3] = (tri){ .v0 = (vec3){ 1.0, phi, 0.0 }, .v1 = (vec3){ phi, 0.0, -1.0 }, .v2 = (vec3){ 0.0, 1.0, -phi } };
-  m->tris[ 4] = (tri){ .v0 = (vec3){ phi, 0.0, -1.0 }, .v1 = (vec3){ 1.0, phi, 0.0 }, .v2 = (vec3){ phi, 0.0, 1.0 } };
-  m->tris[ 5] = (tri){ .v0 = (vec3){ -1.0, -phi, 0.0 }, .v1 = (vec3){ 1.0, -phi, 0.0 }, .v2 = (vec3){ 0.0, -1.0, phi } };
-  m->tris[ 6] = (tri){ .v0 = (vec3){ -1.0, -phi, 0.0 }, .v1 = (vec3){ 0.0, -1.0, -phi }, .v2 = (vec3){ 1.0, -phi, 0.0 } };
-  m->tris[ 7] = (tri){ .v0 = (vec3){ -1.0, -phi, 0.0 }, .v1 = (vec3){ 0.0, -1.0, phi }, .v2 = (vec3){ -phi, 0.0, 1.0 } };
-  m->tris[ 8] = (tri){ .v0 = (vec3){ -1.0, -phi, 0.0 }, .v1 = (vec3){ -phi, 0.0, -1.0 }, .v2 = (vec3){ 0.0, -1.0, -phi } };
-  m->tris[ 9] = (tri){ .v0 = (vec3){ -phi, 0.0, 1.0 }, .v1 = (vec3){ -phi, 0.0, -1.0 }, .v2 = (vec3){ -1.0, -phi, 0.0 } };
-  m->tris[10] = (tri){ .v0 = (vec3){ -1.0, phi, 0.0 }, .v1 = (vec3){ -phi, 0.0, 1.0 }, .v2 = (vec3){ 0.0, 1.0, phi } };
-  m->tris[11] = (tri){ .v0 = (vec3){ -1.0, phi, 0.0 }, .v1 = (vec3){ 0.0, 1.0, -phi }, .v2 = (vec3){ -phi, 0.0, -1.0 } };
-  m->tris[12] = (tri){ .v0 = (vec3){ -1.0, phi, 0.0 }, .v1 = (vec3){ -phi, 0.0, -1.0 }, .v2 = (vec3){ -phi, 0.0, 1.0 } };
-  m->tris[13] = (tri){ .v0 = (vec3){ 1.0, -phi, 0.0 }, .v1 = (vec3){ phi, 0.0, 1.0 }, .v2 = (vec3){ 0.0, -1.0, phi } };
-  m->tris[14] = (tri){ .v0 = (vec3){ 1.0, -phi, 0.0 }, .v1 = (vec3){ 0.0, -1.0, -phi }, .v2 = (vec3){ phi, 0.0, -1.0 } };
-  m->tris[15] = (tri){ .v0 = (vec3){ 1.0, -phi, 0.0 }, .v1 = (vec3){ phi, 0.0, -1.0 }, .v2 = (vec3){ phi, 0.0, 1.0 } };
-  m->tris[16] = (tri){ .v0 = (vec3){ 0.0, -1.0, -phi }, .v1 = (vec3){ -phi, 0.0, -1.0 }, .v2 = (vec3){ 0.0, 1.0, -phi } };
-  m->tris[17] = (tri){ .v0 = (vec3){ 0.0, -1.0, -phi }, .v1 = (vec3){ 0.0, 1.0, -phi }, .v2 = (vec3){ phi, 0.0, -1.0 } };
-  m->tris[18] = (tri){ .v0 = (vec3){ 0.0, 1.0, phi }, .v1 = (vec3){ -phi, 0.0, 1.0 }, .v2 = (vec3){ 0.0, -1.0, phi } };
-  m->tris[19] = (tri){ .v0 = (vec3){ 0.0, 1.0, phi }, .v1 = (vec3){ 0.0, -1.0, phi }, .v2 = (vec3){ phi, 0.0, 1.0 } };
-
-  for(uint8_t i=0; i<20; i++) {
-    tri *t = &m->tris[i];
-    t->v0 = vec3_unit(t->v0);
-    t->v1 = vec3_unit(t->v1);
-    t->v2 = vec3_unit(t->v2);
-  }
-
-  // Alloc temp tri buffer for last but one subdiv level
-  tri *temp_tris = (steps > 0) ? malloc(20 * (1 << (2 * (steps - 1))) * sizeof(*temp_tris)) : NULL;
-
-  // Subdivide
-  for(uint8_t j=0; j<steps; j++)
-  {
-    uint32_t curr_tri_cnt = 20 * (1 << (2 * j)); 
-    
-    memcpy(temp_tris, m->tris, curr_tri_cnt * sizeof(*temp_tris));
-
-    for(uint32_t i=0; i<curr_tri_cnt; i++) {
-      tri *t = &temp_tris[i];
-      vec3 a = vec3_unit(vec3_scale(vec3_add(t->v0, t->v1), 0.5f));
-      vec3 b = vec3_unit(vec3_scale(vec3_add(t->v1, t->v2), 0.5f));
-      vec3 c = vec3_unit(vec3_scale(vec3_add(t->v2, t->v0), 0.5f));
-
-      uint32_t ofs = 4 * i;
-      m->tris[ofs + 0] = (tri){ .v0 = t->v0, .v1 =     a, .v2 =     c };
-      m->tris[ofs + 1] = (tri){ .v0 =     a, .v1 = t->v1, .v2 =     b };
-      m->tris[ofs + 2] = (tri){ .v0 =     c, .v1 =     b, .v2 = t->v2 };
-      m->tris[ofs + 3] = (tri){ .v0 =     a, .v1 =     b, .v2 =     c };
-    }
-  }
-
-  free(temp_tris);
-
-  // Materials, centers, normals and uvs
-  for(uint32_t i=0; i<m->tri_cnt; i++) {
-    tri *t = &m->tris[i];
-    t->mtl = mtl;
-    m->centers[i] = tri_calc_center(t);
-    if(face_normals) {
-      vec3 n = vec3_unit(m->centers[i]);
-      t->n0 = n;
-      t->n1 = n;
-      t->n2 = n;
-    } else {
-      t->n0 = t->v0;
-      t->n1 = t->v1;
-      t->n2 = t->v2;
-    }
-#ifdef TEXTURE_SUPPORT // Untested
-    t->uv0[0] = asinf(t->v0.x) / PI + 0.5f;
-    t->uv0[1] = asinf(t->v0.y) / PI + 0.5f;
-    t->uv1[0] = asinf(t->v1.x) / PI + 0.5f;
-    t->uv1[1] = asinf(t->v1.y) / PI + 0.5f;
-    t->uv2[0] = asinf(t->v2.x) / PI + 0.5f;
-    t->uv2[1] = asinf(t->v2.y) / PI + 0.5f;
-#endif
-  }
-}
-
 void mesh_create_uvsphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uint32_t mtl, bool face_normals)
 {
   mesh_init(m, 2 * subx * suby);
@@ -219,60 +131,50 @@ void mesh_create_uvsphere(mesh *m, float radius, uint32_t subx, uint32_t suby, u
   float dtheta = PI / suby;
   float inv_r = 1.0f / radius;
 
+  uint32_t ofs = 0;
+
   float theta = 0.0f;
   for(uint32_t j=0; j<suby; j++) {
     float phi = 0.0f;
     for(uint32_t i=0; i<subx; i++) {
-      uint32_t ofs = 2 * (subx * j + i);
-
       vec3 a = vec3_scale(vec3_spherical(theta + dtheta, phi), radius);
       vec3 b = vec3_scale(vec3_spherical(theta, phi), radius);
       vec3 c = vec3_scale(vec3_spherical(theta, phi + dphi), radius);
       vec3 d = vec3_scale(vec3_spherical(theta + dtheta, phi + dphi), radius);
 
-      tri *t1 = &m->tris[ofs];
-      *t1 = (tri){ .v0 = a, .v1 = b, .v2 = c,
-#ifdef TEXTURE_SUPPORT // Untested
-        .uv0[0] = phi / 2.0f * PI, .uv0[1] = (theta + dtheta) / PI,
-        .uv1[0] = phi / 2.0f * PI, .uv1[1] = theta / PI,
-        .uv2[0] = (phi + dphi) / 2.0f * PI, .uv2[1] = theta / PI,
-#endif
+      // Tri 0
+      tri *t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = a, .v1 = b, .v2 = c,
+        .mtl = mtl
       };
       
-      t1->mtl = mtl;
-      m->centers[ofs] = tri_calc_center(t1);
-      
       if(face_normals) {
-        t1->n0 = vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b)));
-        t1->n1 = t1->n0;
-        t1->n2 = t1->n0;
+        t->n0 = t->n1 = t->n2 = vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b)));
       } else {
-        t1->n0 = vec3_scale(a, inv_r);
-        t1->n1 = vec3_scale(b, inv_r);
-        t1->n2 = vec3_scale(c, inv_r);
+        t->n0 = vec3_scale(a, inv_r);
+        t->n1 = vec3_scale(b, inv_r);
+        t->n2 = vec3_scale(c, inv_r);
       }
 
-      tri *t2 = &m->tris[ofs + 1];
-      *t2 = (tri){ .v0 = a, .v1 = c, .v2 = d,
-#ifdef TEXTURE_SUPPORT // Untested
-        .uv0[0] = t1->uv0[0], .uv0[1] = t1->uv0[1],
-        .uv1[0] = t1->uv2[0], .uv1[1] = t1->uv1[1],
-        .uv2[0] = t1->uv2[0], .uv2[1] = t1->uv0[1],
-#endif
+      m->centers[ofs++] = tri_calc_center(t);
+
+      // Tri 1
+      t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = a, .v1 = c, .v2 = d,
+        .mtl = mtl
       };
       
-      t2->mtl = mtl;
-      m->centers[ofs + 1] = tri_calc_center(t2);
-      
       if(face_normals) {
-        t2->n0 = vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c)));
-        t2->n1 = t2->n0;
-        t2->n2 = t2->n0;
+        t->n0 = t->n1 = t->n2 = vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c)));
       } else {
-        t2->n0 = vec3_scale(a, inv_r);
-        t2->n1 = vec3_scale(c, inv_r);
-        t2->n2 = vec3_scale(d, inv_r);
+        t->n0 = vec3_scale(a, inv_r);
+        t->n1 = vec3_scale(c, inv_r);
+        t->n2 = vec3_scale(d, inv_r);
       }
+
+      m->centers[ofs++] = tri_calc_center(t);
 
       phi += dphi;
     }
@@ -281,80 +183,97 @@ void mesh_create_uvsphere(mesh *m, float radius, uint32_t subx, uint32_t suby, u
   }
 }
 
-void mesh_create_uvcylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, uint32_t mtl, bool face_normals)
+void mesh_create_uvcylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, bool caps, uint32_t mtl, bool face_normals)
 {
-  mesh_init(m, 2 * subx * suby);
+  mesh_init(m, 2 * subx * suby + (caps ? 2 * subx : 0));
 
   float dphi = 2 * PI / subx;
   float dh = height / suby;
   float inv_r = 1.0f / radius;
+  uint32_t ofs = 0;
 
   float h = 0.0f;
   for(uint32_t j=0; j<suby; j++) {
     float phi = 0.0f;
     for(uint32_t i=0; i<subx; i++) {
-      uint32_t ofs = 2 * (subx * j + i);
+      float x0 = radius * sinf(phi);
+      float x1 = radius * sinf(phi + dphi);
+      float y0 = -height * 0.5f + h;
+      float y1 = -height * 0.5f + h + dh;
+      float z0 = radius * cosf(phi);
+      float z1 = radius * cosf(phi + dphi);
 
-      float x1 = radius * sinf(phi);
-      float x2 = radius * sinf(phi + dphi);
-      float y1 = -height * 0.5f + h;
-      float y2 = -height * 0.5f + h + dh;
-      float z1 = radius * cosf(phi);
-      float z2 = radius * cosf(phi + dphi);
+      vec3 a = { x0, y1, z0 };
+      vec3 b = { x0, y0, z0 };
+      vec3 c = { x1, y0, z1 };
+      vec3 d = { x1, y1, z1 };
 
-      vec3 a = { x1, y2, z1 };
-      vec3 b = { x1, y1, z1 };
-      vec3 c = { x2, y1, z2 };
-      vec3 d = { x2, y2, z2 };
-
-      tri *t1 = &m->tris[ofs];
-      *t1 = (tri){ .v0 = a, .v1 = b, .v2 = c,
-#ifdef TEXTURE_SUPPORT // Untested
-        .uv0[0] = phi / 2.0f * PI, .uv0[1] = (h + dh) / height,
-        .uv1[0] = phi / 2.0f * PI, .uv1[1] = h / height,
-        .uv2[0] = (phi + dphi) / 2.0f * PI, .uv2[1] = h / height,
-#endif
+      // Tri 0
+      tri *t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = a, .v1 = b, .v2 = c,
+        .mtl = mtl
       };
       
-      t1->mtl = mtl;
-      m->centers[ofs] = tri_calc_center(t1);
-      
-      if(face_normals) {
-        t1->n0 = vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b)));
-        t1->n1 = t1->n0;
-        t1->n2 = t1->n0;
-      } else {
-        t1->n0 = vec3_scale((vec3){ x1, 0.0f, z1 }, inv_r);
-        t1->n1 = t1->n0;
-        t1->n2 = vec3_scale((vec3){ x2, 0.0f, z2 }, inv_r);
+      if(face_normals)
+        t->n0 = t->n1 = t->n2 = vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b)));
+      else {
+        t->n0 = t->n1 = vec3_scale((vec3){ x0, 0.0f, z0 }, inv_r);
+        t->n2 = vec3_scale((vec3){ x1, 0.0f, z1 }, inv_r);
       }
 
-      tri *t2 = &m->tris[ofs + 1];
-      *t2 = (tri){ .v0 = a, .v1 = c, .v2 = d,
-#ifdef TEXTURE_SUPPORT // Untested
-        .uv0[0] = t1->uv0[0], .uv0[1] = t1->uv0[1],
-        .uv1[0] = t1->uv2[0], .uv1[1] = t1->uv1[1],
-        .uv2[0] = t1->uv2[0], .uv2[1] = t1->uv0[1],
-#endif
+      m->centers[ofs++] = tri_calc_center(t);
+
+      // Tri 1
+      t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = a, .v1 = c, .v2 = d,
+        .mtl = mtl
       };
       
-      t2->mtl = mtl;
-      m->centers[ofs + 1] = tri_calc_center(t2);
-      
-      if(face_normals) {
-        t2->n0 = vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c)));
-        t2->n1 = t2->n0;
-        t2->n2 = t2->n0;
-      } else {
-        t2->n0 = vec3_scale((vec3){ x1, 0.0f, z1 }, inv_r);
-        t2->n1 = vec3_scale((vec3){ x2, 0.0f, z2 }, inv_r);
-        t2->n2 = t2->n1;
+      if(face_normals)
+        t->n0 = t->n1 = t->n2 = vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c)));
+      else {
+        t->n0 = vec3_scale((vec3){ x0, 0.0f, z0 }, inv_r);
+        t->n1 = t->n2 = vec3_scale((vec3){ x1, 0.0f, z1 }, inv_r);
       }
+
+      m->centers[ofs++] = tri_calc_center(t);
 
       phi += dphi;
     }
 
     h += dh;
+  }
+
+  if(caps) {
+    float phi = 0.0f;
+    for(uint32_t i=0; i<subx; i++) {
+      float x0 = radius * sinf(phi);
+      float x1 = radius * sinf(phi + dphi);
+      float z0 = radius * cosf(phi);
+      float z1 = radius * cosf(phi + dphi);
+
+      // Tri 0 (top cap)
+      tri *t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = (vec3){ 0.0f, height * 0.5f, 0.0f }, .v1 = (vec3){ x0, height * 0.5f, z0 }, .v2 = (vec3){ x1, height * 0.5f, z1 },
+        .n0 = (vec3){ 0.0f, 1.0f, 0.0f}, .n1 = (vec3){ 0.0f, 1.0f, 0.0f }, .n2 = (vec3){ 0.0f, 1.0f, 0.0f },
+        .mtl = mtl
+      };
+      m->centers[ofs] = tri_calc_center(t);
+
+      // Tri 1 (bottom cap)
+      t = &m->tris[ofs + subx];
+      *t = (tri){
+        .v0 = (vec3){ 0.0f, -height * 0.5f, 0.0f }, .v1 = (vec3){ x1, -height * 0.5f, z1 }, .v2 = (vec3){ x0, -height * 0.5f, z0 },
+        .n0 = (vec3){ 0.0f, -1.0f, 0.0f}, .n1 = (vec3){ 0.0f, -1.0f, 0.0f }, .n2 = (vec3){ 0.0f, -1.0f, 0.0f },
+        .mtl = mtl
+      };
+      m->centers[ofs++] = tri_calc_center(t);
+
+      phi += dphi;
+    }
   }
 }
 
@@ -368,6 +287,8 @@ void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint32_t
   vec3  up = (vec3){ 0.0f, 1.0f, 0.0f };
 
   float inv_ir = 1.0f / inner_radius;
+
+  uint32_t ofs = 0;
 
   float v = 0.0f;
   for(uint32_t j=0; j<sub_outer; j++) {
@@ -398,26 +319,104 @@ void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint32_t
         n3 = vec3_scale(vec3_sub(v3, p1), inv_ir);
       }
 
-      uint32_t ofs = 2 * (sub_outer * j + i);
+      // Tri 0
+      tri *t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = v0, .v1 = v1, .v2 = v3,
+        .n0 = n0, .n1 = n1, .n2 = n3,
+        .mtl = mtl
+      };
+      m->centers[ofs++] = tri_calc_center(t);
 
-      tri *t0 = &m->tris[ofs];
-      t0->v0 = v0; t0->n0 = n0;
-      t0->v1 = v1; t0->n1 = n1;
-      t0->v2 = v3; t0->n2 = n3;
-      t0->mtl = mtl;
-      m->centers[ofs] = tri_calc_center(t0);
-
-      ofs++;
-
-      tri *t1 = &m->tris[ofs];
-      t1->v0 = v0; t1->n0 = n0;
-      t1->v1 = v3; t1->n1 = n3;
-      t1->v2 = v2; t1->n2 = n2;
-      t1->mtl = mtl;
-      m->centers[ofs] = tri_calc_center(t1);
+      // Tri 1
+      t = &m->tris[ofs];
+      *t = (tri){
+        .v0 = v0, .v1 = v3, .v2 = v2,
+        .n0 = n0, .n1 = n3, .n2 = n2,
+        .mtl = mtl
+      };
+      m->centers[ofs++] = tri_calc_center(t);
 
       u += du;
     }
     v += dv;
+  }
+}
+
+void mesh_create_icosphere(mesh *m, uint8_t steps, uint32_t mtl, bool face_normals)
+{
+  mesh_init(m, 20 * (1 << (2 * steps)));
+
+  float phi = 0.5f * (1.0f + sqrtf(5.0f));
+  
+  m->tris[ 0] = (tri){ .v0 = (vec3){ -1.0, phi, 0.0 }, .v1 = (vec3){ 0.0, 1.0, phi }, .v2 = (vec3){ 1.0, phi, 0.0 } };
+  m->tris[ 1] = (tri){ .v0 = (vec3){ 1.0, phi, 0.0 }, .v1 = (vec3){ 0.0, 1.0, -phi }, .v2 = (vec3){ -1.0, phi, 0.0 } };
+  m->tris[ 2] = (tri){ .v0 = (vec3){ 1.0, phi, 0.0 }, .v1 = (vec3){ 0.0, 1.0, phi }, .v2 = (vec3){ phi, 0.0, 1.0 } };
+  m->tris[ 3] = (tri){ .v0 = (vec3){ 1.0, phi, 0.0 }, .v1 = (vec3){ phi, 0.0, -1.0 }, .v2 = (vec3){ 0.0, 1.0, -phi } };
+  m->tris[ 4] = (tri){ .v0 = (vec3){ phi, 0.0, -1.0 }, .v1 = (vec3){ 1.0, phi, 0.0 }, .v2 = (vec3){ phi, 0.0, 1.0 } };
+  m->tris[ 5] = (tri){ .v0 = (vec3){ -1.0, -phi, 0.0 }, .v1 = (vec3){ 1.0, -phi, 0.0 }, .v2 = (vec3){ 0.0, -1.0, phi } };
+  m->tris[ 6] = (tri){ .v0 = (vec3){ -1.0, -phi, 0.0 }, .v1 = (vec3){ 0.0, -1.0, -phi }, .v2 = (vec3){ 1.0, -phi, 0.0 } };
+  m->tris[ 7] = (tri){ .v0 = (vec3){ -1.0, -phi, 0.0 }, .v1 = (vec3){ 0.0, -1.0, phi }, .v2 = (vec3){ -phi, 0.0, 1.0 } };
+  m->tris[ 8] = (tri){ .v0 = (vec3){ -1.0, -phi, 0.0 }, .v1 = (vec3){ -phi, 0.0, -1.0 }, .v2 = (vec3){ 0.0, -1.0, -phi } };
+  m->tris[ 9] = (tri){ .v0 = (vec3){ -phi, 0.0, 1.0 }, .v1 = (vec3){ -phi, 0.0, -1.0 }, .v2 = (vec3){ -1.0, -phi, 0.0 } };
+  m->tris[10] = (tri){ .v0 = (vec3){ -1.0, phi, 0.0 }, .v1 = (vec3){ -phi, 0.0, 1.0 }, .v2 = (vec3){ 0.0, 1.0, phi } };
+  m->tris[11] = (tri){ .v0 = (vec3){ -1.0, phi, 0.0 }, .v1 = (vec3){ 0.0, 1.0, -phi }, .v2 = (vec3){ -phi, 0.0, -1.0 } };
+  m->tris[12] = (tri){ .v0 = (vec3){ -1.0, phi, 0.0 }, .v1 = (vec3){ -phi, 0.0, -1.0 }, .v2 = (vec3){ -phi, 0.0, 1.0 } };
+  m->tris[13] = (tri){ .v0 = (vec3){ 1.0, -phi, 0.0 }, .v1 = (vec3){ phi, 0.0, 1.0 }, .v2 = (vec3){ 0.0, -1.0, phi } };
+  m->tris[14] = (tri){ .v0 = (vec3){ 1.0, -phi, 0.0 }, .v1 = (vec3){ 0.0, -1.0, -phi }, .v2 = (vec3){ phi, 0.0, -1.0 } };
+  m->tris[15] = (tri){ .v0 = (vec3){ 1.0, -phi, 0.0 }, .v1 = (vec3){ phi, 0.0, -1.0 }, .v2 = (vec3){ phi, 0.0, 1.0 } };
+  m->tris[16] = (tri){ .v0 = (vec3){ 0.0, -1.0, -phi }, .v1 = (vec3){ -phi, 0.0, -1.0 }, .v2 = (vec3){ 0.0, 1.0, -phi } };
+  m->tris[17] = (tri){ .v0 = (vec3){ 0.0, -1.0, -phi }, .v1 = (vec3){ 0.0, 1.0, -phi }, .v2 = (vec3){ phi, 0.0, -1.0 } };
+  m->tris[18] = (tri){ .v0 = (vec3){ 0.0, 1.0, phi }, .v1 = (vec3){ -phi, 0.0, 1.0 }, .v2 = (vec3){ 0.0, -1.0, phi } };
+  m->tris[19] = (tri){ .v0 = (vec3){ 0.0, 1.0, phi }, .v1 = (vec3){ 0.0, -1.0, phi }, .v2 = (vec3){ phi, 0.0, 1.0 } };
+
+  for(uint8_t i=0; i<20; i++) {
+    tri *t = &m->tris[i];
+    *t = (tri){
+      .v0 = vec3_unit(t->v0),
+      .v1 = vec3_unit(t->v1),
+      .v2 = vec3_unit(t->v2)
+    };
+  }
+
+  // Alloc temp tri buffer for last but one subdiv level
+  tri *temp_tris = (steps > 0) ? malloc(20 * (1 << (2 * (steps - 1))) * sizeof(*temp_tris)) : NULL;
+
+  // Subdivide
+  for(uint8_t j=0; j<steps; j++)
+  {
+    uint32_t curr_tri_cnt = 20 * (1 << (2 * j)); 
+    
+    memcpy(temp_tris, m->tris, curr_tri_cnt * sizeof(*temp_tris));
+
+    for(uint32_t i=0; i<curr_tri_cnt; i++) {
+      tri *t = &temp_tris[i];
+      vec3 a = vec3_unit(vec3_scale(vec3_add(t->v0, t->v1), 0.5f));
+      vec3 b = vec3_unit(vec3_scale(vec3_add(t->v1, t->v2), 0.5f));
+      vec3 c = vec3_unit(vec3_scale(vec3_add(t->v2, t->v0), 0.5f));
+
+      uint32_t ofs = 4 * i;
+      m->tris[ofs + 0] = (tri){ .v0 = t->v0, .v1 =     a, .v2 =     c };
+      m->tris[ofs + 1] = (tri){ .v0 =     a, .v1 = t->v1, .v2 =     b };
+      m->tris[ofs + 2] = (tri){ .v0 =     c, .v1 =     b, .v2 = t->v2 };
+      m->tris[ofs + 3] = (tri){ .v0 =     a, .v1 =     b, .v2 =     c };
+    }
+  }
+
+  free(temp_tris);
+
+  // Materials, centers and normals
+  for(uint32_t i=0; i<m->tri_cnt; i++) {
+    tri *t = &m->tris[i];
+    t->mtl = mtl;
+    m->centers[i] = tri_calc_center(t);
+    if(face_normals) {
+      vec3 n = vec3_unit(m->centers[i]);
+      t->n0 = t->n1 = t->n2 = n;
+    } else {
+      t->n0 = t->v0;
+      t->n1 = t->v1;
+      t->n2 = t->v2;
+    }
   }
 }

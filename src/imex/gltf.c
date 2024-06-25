@@ -433,6 +433,8 @@ uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
   m->subx = 0;
   m->suby = 0;
   m->steps = 0;
+  m->in_radius = 0.25f;
+  m->no_caps = false;
   m->face_nrms = false;
 
   uint32_t j = 1;
@@ -456,6 +458,20 @@ uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "steps") == 0) {
       m->steps = atoi(toktostr(s, &t[j + 1]));
       logc("steps: %i", m->suby);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "innerradius") == 0) {
+      m->in_radius = atof(toktostr(s, &t[j + 1]));
+      logc("inner radius: %i", m->in_radius);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "nocaps") == 0) {
+      m->no_caps = true;
+      logc("no caps: %i", m->no_caps);
       j += 2;
       continue;
     }

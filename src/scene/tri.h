@@ -19,13 +19,6 @@ typedef struct tri {
   float     pad2;
   vec3      n2;
   float     pad3;
-#ifdef TEXTURE_SUPPORT
-  float     uv0[2];
-  float     uv1[2];
-  float     uv2[2];
-  float     pad4;
-  float     pad5;
-#endif
 } tri;
 
 // Light tri
