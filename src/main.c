@@ -1,7 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "acc/tlas.h"
-#include "imp/import.h"
+#include "imex/import.h"
 #include "scene/cam.h"
 #include "scene/inst.h"
 #include "scene/mesh.h"
@@ -111,14 +111,12 @@ void init_scene_riow(scene *s)
   cam_set(c, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   uint16_t mtl_id = 0;
-  uint32_t lid = 0;
-  uint32_t sid = 0;
-  uint32_t fid = 0;
-  mesh *mesh = 0;
   mtl m;
+  mesh *mesh;
   mat4 transform, translation, rotation, scale;
 
   // Light meshes (need to be unique)
+  uint32_t lid = 0;
   m = mtl_init((vec3){ 1.16f, 1.16, 1.16f });
   mtl_id = scene_add_mtl(s, &m);
   mesh = scene_acquire_mesh(s);
@@ -132,15 +130,16 @@ void init_scene_riow(scene *s)
 
   /*
   // Sphere mesh
+  uint32_t sid = 0;
   mesh = scene_acquire_mesh(s);
   mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false);
   //mesh_create_uvcylinder(mesh, 1.0f, 2.0f, 20, 20, 1, false);
   //mesh_create_icosphere(mesh, 3, mtl_id, false);
-  //import_mesh(mesh, teapot, mtl_id, false);
   sid = scene_attach_mesh(s, mesh, false);
   */
   
   // Floor mesh
+  uint32_t fid = 0;
   m = mtl_init((vec3){ 0.25f, 0.25f, 0.25f });
   m.metallic = 0.0f;
   m.roughness = 1.0f;
