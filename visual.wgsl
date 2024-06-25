@@ -81,13 +81,6 @@ struct Tri
   pad2:   f32,
   n2:     vec3f,
   pad3:   f32,
-//#ifdef TEXTURE_SUPPORT
-/*uv0:    vec2f,
-  uv1:    vec2f,
-  uv2:    vec2f,
-  pad4    f32,
-  pad5:   f32*/
-//#endif
 }
 
 struct LTri
@@ -151,7 +144,7 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(7) var<storage, read> materials: array<Mtl>;
 @group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
-const MAX_LTRIS     = 256u;
+const MAX_LTRIS     = 64u;
 const MAX_NODE_CNT  = 32u;
 
 // Traversal stacks for bvhs
