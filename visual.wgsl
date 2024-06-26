@@ -144,12 +144,14 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(7) var<storage, read> materials: array<Mtl>;
 @group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
-const MAX_LTRIS     = 64u;
-const MAX_NODE_CNT  = 32u;
-
 // Traversal stacks for bvhs
+const MAX_NODE_CNT = 32u;
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
+
+// Ltri contributions
+const MAX_LTRIS = 64u;
+var<private> ltriContributions: array<f32, MAX_LTRIS>;
 
 // State of prng
 var<private> rng: vec4u;
@@ -969,7 +971,6 @@ fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriNrm: vec3f, 
 fn calcLTriPickProb(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
 {
   // Calculate picking probability with respect to ltri contributions
-  var contributions: array<f32, MAX_LTRIS>;
   var totalContrib = 0.0;
   let ltriCnt = arrayLength(&ltris);
 
@@ -977,19 +978,18 @@ fn calcLTriPickProb(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
   for(var i=0u; i<ltriCnt; i++) {
     let ltri = &ltris[i];
     let curr = calcLTriContribution(pos, nrm, ltriPos, (*ltri).nrm, (*ltri).power);
-    contributions[i] = curr;
+    ltriContributions[i] = curr;
     totalContrib += curr;
   }
 
   // Scale contribution by total, so that our picking pdf integrates to 1
-  return select(0.0, contributions[ltriId] / totalContrib, totalContrib > EPS);
+  return select(0.0, ltriContributions[ltriId] / totalContrib, totalContrib > EPS);
 }
 
 // https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
 fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function, f32>) -> u32
 {
   // Calculate picking probability with respect to ltri contributions
-  var contributions: array<f32, MAX_LTRIS>;
   var totalContrib = 0.0;
   let ltriCnt = arrayLength(&ltris);
 
@@ -998,7 +998,7 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
     let ltri = &ltris[i];
     let ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
     let curr = calcLTriContribution(pos, nrm, ltriPos, (*ltri).nrm, (*ltri).power);
-    contributions[i] = curr;
+    ltriContributions[i] = curr;
     totalContrib += curr;
   }
 
@@ -1008,7 +1008,7 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
     return 0u;
   }
 
-   // Same as scaling contributions[i] by totalContrib
+   // Same as scaling ltri contributions by totalContrib
   let rScaled = r * totalContrib;
 
   // Randomly pick the ltri according to the CDF
@@ -1016,7 +1016,7 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
   var cumulative = 0.0;
   var ltriId: u32;
   for(var i=0u; i<ltriCnt; i++) {
-    cumulative += contributions[i];
+    cumulative += ltriContributions[i];
     if(rScaled <= cumulative) {
       ltriId = i;
       break;
@@ -1024,7 +1024,7 @@ fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function
   }
 
   // Scale contribution by total, so that our picking pdf integrates to 1
-  *pdf = contributions[ltriId] / totalContrib;
+  *pdf = ltriContributions[ltriId] / totalContrib;
   return ltriId;
 }
 
