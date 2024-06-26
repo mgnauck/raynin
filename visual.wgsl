@@ -50,12 +50,12 @@ struct BvhNode
 
 struct Mtl
 {
-  col: vec3f,             // Base color (diff col of non-metallics, spec col of metallics)
-  metallic: f32,          // Appearance range from dielectric to conductor (0 - 1)
-  roughness: f32,         // Perfect reflection to completely diffuse (0 - 1)
-  ior: f32,               // Index of refraction
+  col:        vec3f,      // Base color (diff col of non-metallics, spec col of metallics)
+  metallic:   f32,        // Appearance range from dielectric to conductor (0 - 1)
+  roughness:  f32,        // Perfect reflection to completely diffuse (0 - 1)
+  ior:        f32,        // Index of refraction
   refractive: f32,        // Flag if material refracts
-  pad0: f32
+  pad0:       f32
 }
 
 struct IA
@@ -150,8 +150,8 @@ var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
 // Ltri contributions
-const MAX_LTRIS = 64u;
-var<private> ltriContributions: array<f32, MAX_LTRIS>;
+const MAX_LTRI_CNT = 256u;
+var<private> ltriContributions: array<f32, MAX_LTRI_CNT>;
 
 // State of prng
 var<private> rng: vec4u;
@@ -1118,7 +1118,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
     // Either use the material id from the triangle or the material override from the instance
     *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
     (*ia).nrm = calcTriNormal(hit, inst, tri);
-    (*ia).ltriId = select(MAX_LTRIS + 1u, tri.ltriId, isEmissive(*mtl));
+    (*ia).ltriId = select(MAX_LTRI_CNT + 1u, tri.ltriId, isEmissive(*mtl));
   }
 
   // Flip normal if backside, except if we hit a ltri or refractive mtl
@@ -1375,7 +1375,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 {
-  // Workaround for below code which does work with naga
+  // Workaround for below code which does work with Firefox' naga
   switch(vertexIndex)
   {
     case 0u: {
