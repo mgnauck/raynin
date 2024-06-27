@@ -12,9 +12,36 @@
 
 typedef struct mesh_ref {
   int32_t   mesh_idx;     // Render mesh index
-  bool      is_emissive;  // Emissive flag
+  bool      is_emissive;  // True if mesh has emissive mtl
   uint32_t  inst_cnt;     // Instances pointing to a mesh
 } mesh_ref;
+
+typedef enum obj_type {
+  OT_QUAD,
+  OT_BOX,
+  OT_ICOSPHERE,
+  OT_SPHERE,
+  OT_CYLINDER,
+  OT_TORUS,
+  OT_MESH,
+} obj_type;
+
+obj_type get_type(const char *name)
+{
+  if(strstr_lower(name, "grid") || strstr_lower(name, "plane") || strstr_lower(name, "quad"))
+    return OT_QUAD;
+  else if(strstr_lower(name, "cube") || strstr_lower(name, "box"))
+    return OT_BOX;
+  else if(strstr_lower(name, "icosphere"))
+    return OT_ICOSPHERE;
+  else if(strstr_lower(name, "sphere"))
+    return OT_SPHERE;
+  else if(strstr_lower(name, "cylinder"))
+    return OT_CYLINDER;
+  else if(strstr_lower(name, "torus") || strstr_lower(name, "ring") || strstr_lower(name, "donut"))
+    return OT_TORUS;
+  return OT_MESH; // Everything else
+}
 
 uint8_t read_ubyte(const uint8_t *buf, uint32_t byte_ofs, uint32_t i)
 {
@@ -151,28 +178,29 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 
 void generate_mesh_data(mesh *m, gltf_mesh *gm)
 {
-   if(gm->type == OT_TORUS) {
+  obj_type type = get_type(gm->name); 
+  if(type == OT_TORUS) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : TORUS_DEFAULT_SUB_INNER;
     uint32_t suby = (gm->suby > 0) ? gm->suby : TORUS_DEFAULT_SUB_OUTER;
     mesh_create_torus(m, gm->in_radius, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms);
     logc("Generated torus with %i triangles.", m->tri_cnt);
-  } else if(gm->type == OT_ICOSPHERE) {
+  } else if(type == OT_ICOSPHERE) {
     mesh_create_icosphere(m, gm->steps > 0 ? gm->steps : ICOSPHERE_DEFAULT_STEPS, gm->prims[0].mtl_idx, gm->face_nrms);
     logc("Generated icosphere with %i triangles.", m->tri_cnt);
-  } else if(gm->type == OT_SPHERE) {
+  } else if(type == OT_SPHERE) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : SPHERE_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : SPHERE_DEFAULT_SUBY;
     mesh_create_uvsphere(m, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms);
     logc("Generated uvsphere with %i triangles.", m->tri_cnt);
-  } else if(gm->type == OT_CYLINDER) {
+  } else if(type == OT_CYLINDER) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : CYLINDER_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : CYLINDER_DEFAULT_SUBY;
     mesh_create_uvcylinder(m, 1.0f, 2.0f, subx, suby, !gm->no_caps, gm->prims[0].mtl_idx, gm->face_nrms);
     logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
-  } else if(gm->type == OT_BOX) {
+  } else if(type == OT_BOX) {
     mesh_create_box(m, gm->prims[0].mtl_idx);
     logc("Generated box with %i triangles.", m->tri_cnt);
-  } else if(gm->type == OT_QUAD) {
+  } else if(type == OT_QUAD) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : QUAD_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : QUAD_DEFAULT_SUBY;
     mesh_create_quad(m, subx, suby, gm->prims[0].mtl_idx);
@@ -202,14 +230,17 @@ void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx,
         gn->mesh_idx, gm->name, mesh_idx, node_idx, gn->name);
   } else {
     // Shape instance
-    if(gm->type == OT_BOX) {
+    obj_type type = get_type(gm->name); 
+    if(type == OT_BOX) {
       scene_add_shape_inst(s, ST_BOX, gm->prims[0].mtl_idx, final);
       logc("Created box shape instance of gltf mesh %i (%s) for node %i (%s).",
           gn->mesh_idx, gm->name, node_idx, gn->name);
-    } else if(gm->type == OT_SPHERE) {
+    } else if(type == OT_SPHERE) {
       scene_add_shape_inst(s, ST_SPHERE, gm->prims[0].mtl_idx, final);
       logc("Created sphere shape instance of gltf mesh %i (%s) for node %i (%s).",
           gn->mesh_idx, gm->name, node_idx, gn->name);
+    } else {
+      logc("#### ERROR: Failed to create instance because the shape type is unknown or invalid.");
     }
   }
 }
@@ -269,7 +300,8 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     mesh_ref *mr = &mesh_map[j];
     mr->inst_cnt = 0; // Init for duplicate identification
     bool is_emissive = check_is_emissive_mesh(gm, &data);
-    if(is_emissive || check_is_custom(gm) || gm->type == OT_MESH || gm->type == OT_TORUS || gm->type == OT_ICOSPHERE || gm->type == OT_CYLINDER || gm->type == OT_BOX|| gm->type == OT_QUAD || gm->prim_cnt > 1) {
+    obj_type type = get_type(gm->name); 
+    if(is_emissive || check_is_custom(gm) || gm->prim_cnt > 1 || type != OT_SPHERE) {
       // Meshes that are emissive or need to be loaded or generated will end up as an actual renderer mesh
       mr->mesh_idx = 1; // Assign something that is not -1 ot indicate it is a mesh, actual index will follow during mesh creation
       mr->is_emissive = is_emissive;
@@ -280,7 +312,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
       // Everything else will be represented as a shape
       mr->mesh_idx = -1;
       mr->is_emissive = false;
-      logc("Gltf mesh %i (%s) will be a shape of type %i.", j, gm->name, gm->type);
+      logc("Gltf mesh %i (%s) will be a shape.", j, gm->name);
     }
   }
 
@@ -321,7 +353,8 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
         if(++mr->inst_cnt == 1 || mr->is_emissive) {
           gltf_mesh *gm = &data.meshes[gn->mesh_idx];
           mesh *m = scene_acquire_mesh(s);
-          if(gm->type == OT_MESH || gm->prim_cnt > 1)
+          obj_type type = get_type(gm->name); 
+          if(type == OT_MESH || gm->prim_cnt > 1)
             load_mesh_data(m, &data, gm, bin);
           else
             generate_mesh_data(m, gm);

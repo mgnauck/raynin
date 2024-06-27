@@ -75,26 +75,6 @@ uint32_t ignore(const char *s, jsmntok_t *t)
   return j;
 }
 
-obj_type get_type(const char *name)
-{
-  if(strstr_lower(name, "camera"))
-    return OT_CAMERA;
-  else if(strstr_lower(name, "grid") || strstr_lower(name, "plane") || strstr_lower(name, "quad"))
-    return OT_QUAD;
-  else if(strstr_lower(name, "cube") || strstr_lower(name, "box"))
-    return OT_BOX;
-  else if(strstr_lower(name, "icosphere"))
-    return OT_ICOSPHERE;
-  else if(strstr_lower(name, "sphere"))
-    return OT_SPHERE;
-  else if(strstr_lower(name, "cylinder"))
-    return OT_CYLINDER;
-  else if(strstr_lower(name, "torus") || strstr_lower(name, "ring") || strstr_lower(name, "donut"))
-    return OT_TORUS;
-  // Everything else is considered a mesh
-  return OT_MESH;
-}
-
 uint32_t read_mtl_extensions(gltf_mtl *m, const char *s, jsmntok_t *t, float *emissive_strength)
 {
   uint32_t j = 1;
@@ -251,7 +231,6 @@ uint32_t read_mtls(gltf_data *data, const char *s, jsmntok_t *t)
 
 uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
 {
-  n->type = OT_UNKNOWN;
   n->mesh_idx = -1;
   n->cam_idx = -1;
   n->trans = (vec3){ 0.0f, 0.0f, 0.0f };
@@ -265,8 +244,7 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "name") == 0) {
       char *name = toktostr(s, &t[j + 1]);
       bstrndup(n->name, name, t[j + 1].end - t[j + 1].start, NAME_STR_LEN);
-      n->type = get_type(name);
-      logc("type: %i (%s)", n->type, name);
+      logc("name: %s", name);
       j += 2;
       continue;
     }
@@ -325,14 +303,6 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
     j += ignore(s, key);
   }
 
-  if(n->type == OT_UNKNOWN) {
-    if(n->cam_idx >= 0 || n->mesh_idx >= 0) {
-      n->type = (n->cam_idx >= 0) ? OT_CAMERA : OT_MESH;
-      logc("#### WARN: Failed to read node type. Falling back to %s", n->type == OT_CAMERA ? "camera" : "mesh");
-    } else
-      logc("#### ERROR: Failed to read node type. No fallback available.");
-  }
-
   return j;
 }
 
@@ -351,7 +321,7 @@ uint32_t read_nodes(gltf_data *data, const char *s, jsmntok_t *t)
     gltf_node *n = &data->nodes[cnt++];
     j += read_node(n, s, t + j);
    
-    if(n->type == OT_CAMERA)
+    if(n->cam_idx >= 0)
       data->cam_node_cnt++;
 
     logc("<<<< node %i", i);
@@ -574,8 +544,6 @@ uint32_t read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
 
 uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
-  m->type = OT_UNKNOWN;
-
   m->prims = NULL;
   m->prim_cnt = 0;
 
@@ -591,8 +559,7 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "name") == 0) {
       char *name = toktostr(s, &t[j + 1]);
       bstrndup(m->name, name, t[j + 1].end - t[j + 1].start, NAME_STR_LEN);
-      m->type = get_type(name);
-      logc("type: %i (%s)", m->type, name);
+      logc("name: %s", name);
       j += 2;
       continue;
     }
@@ -606,11 +573,6 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
     }
 
     j += ignore(s, key);
-  }
-
-  if(m->type == OT_UNKNOWN) {
-    logc("Failed to read mesh type. Falling back to mesh.");
-    m->type = OT_MESH;
   }
 
   return j;

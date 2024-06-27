@@ -8,18 +8,6 @@
 
 #define NAME_STR_LEN  256
 
-typedef enum obj_type { // Infer shape type from name
-  OT_CAMERA,
-  OT_QUAD,
-  OT_BOX,
-  OT_ICOSPHERE,
-  OT_SPHERE,
-  OT_CYLINDER,
-  OT_TORUS,
-  OT_MESH,
-  OT_UNKNOWN
-} obj_type;
-
 typedef enum data_type {
   DT_SCALAR,
   DT_VEC3,
@@ -51,13 +39,12 @@ typedef struct gltf_prim {
 
 typedef struct gltf_mesh {
   char          name[NAME_STR_LEN];
-  obj_type      type;
-  uint32_t      subx;       // Object generation (custom value)
-  uint32_t      suby;       // Object generation (custom value)
-  uint16_t      steps;      // Object generation (custom value icosphere)
-  float         in_radius;  // Object generation (custom value torus)
-  bool          no_caps;    // Object generation (custom value cylinder)
-  bool          face_nrms;  // Object generation (custom value)
+  uint32_t      subx;       // Custom value subdivision 
+  uint32_t      suby;       // Custom value subdivision
+  uint16_t      steps;      // Custom value subdivision (icosphere)
+  float         in_radius;  // Custom value (torus)
+  bool          no_caps;    // Custom value (cylinder)
+  bool          face_nrms;  // Custom value
   gltf_prim*    prims;
   uint32_t      prim_cnt;
 } gltf_mesh;
@@ -79,7 +66,6 @@ typedef struct gltf_bufview {
 
 typedef struct gltf_node {
   char          name[NAME_STR_LEN];
-  obj_type      type;
   int32_t       mesh_idx;
   int32_t       cam_idx;
   vec3          scale;
