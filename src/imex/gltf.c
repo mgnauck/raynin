@@ -406,6 +406,7 @@ uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
   m->in_radius = 0.25f;
   m->no_caps = false;
   m->face_nrms = false;
+  m->invert_nrms = false;
 
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
@@ -449,6 +450,13 @@ uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "facenormals") == 0) {
       m->face_nrms = true;
       logc("facenormals: %i", m->face_nrms);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "invertnormals") == 0) {
+      m->invert_nrms = true;
+      logc("invertnormals: %i", m->invert_nrms);
       j += 2;
       continue;
     }

@@ -120,11 +120,11 @@ void init_scene_riow(scene *s)
   m = mtl_init((vec3){ 1.16f, 1.16, 1.16f });
   mtl_id = scene_add_mtl(s, &m);
   mesh = scene_acquire_mesh(s);
-  mesh_create_quad(mesh, 1, 1, mtl_id);
+  mesh_create_quad(mesh, 1, 1, mtl_id, false);
   lid = scene_attach_mesh(s, mesh, true);
   for(uint8_t i=1; i<LIGHT_CNT; i++) {
     mesh = scene_acquire_mesh(s);
-    mesh_create_quad(mesh, 1, 1, mtl_id);
+    mesh_create_quad(mesh, 1, 1, mtl_id, false);
     scene_attach_mesh(s, mesh, true);
   }
 
@@ -132,9 +132,9 @@ void init_scene_riow(scene *s)
   // Sphere mesh
   uint32_t sid = 0;
   mesh = scene_acquire_mesh(s);
-  mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false);
-  //mesh_create_uvcylinder(mesh, 1.0f, 2.0f, 20, 20, 1, false);
-  //mesh_create_icosphere(mesh, 3, mtl_id, false);
+  mesh_create_uvsphere,(mesh, 1.0f, 20, 20, mtl_id, false, false);
+  //mesh_create_uvcylinder(mesh, 1.0f, 2.0f, 20, 20, 1, false, false);
+  //mesh_create_icosphere(mesh, 3, mtl_id, false, false);
   sid = scene_attach_mesh(s, mesh, false);
   */
   
@@ -145,7 +145,7 @@ void init_scene_riow(scene *s)
   m.roughness = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
   mesh = scene_acquire_mesh(s);
-  mesh_create_quad(mesh, 10, 10, mtl_id);
+  mesh_create_quad(mesh, 10, 10, mtl_id, false);
   fid = scene_attach_mesh(s, mesh, false);
  
   // Light instances

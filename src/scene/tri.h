@@ -8,17 +8,17 @@
 
 typedef struct tri {
   vec3      v0;
-  uint32_t  mtl;      // (mtl_id & 0xffff)
+  uint32_t  mtl;        // (mtl_id & 0xffff)
   vec3      v1;
-  uint32_t  ltri_id;  // Set only if tri has light emitting material
+  uint32_t  ltri_id;    // Set only if tri has light emitting material
   vec3      v2;
-  float     pad0;
+  float     face_nrm;   // 1.0f if tri has face normal
   vec3      n0;
-  float     pad1;
+  float     pad0;
   vec3      n1;
-  float     pad2;
+  float     pad1;
   vec3      n2;
-  float     pad3;
+  float     pad2;
 } tri;
 
 // Light tri

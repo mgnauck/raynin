@@ -26,85 +26,85 @@ struct Global
 
 struct Hit
 {
-  t: f32,
-  u: f32,
-  v: f32,
-  e: u32                  // (tri id << 16) | (inst id & 0xffff)
+  t:            f32,
+  u:            f32,
+  v:            f32,
+  e:            u32             // (tri id << 16) | (inst id & 0xffff)
 }
 
 struct TlasNode
 {
-  aabbMin:  vec3f,
-  children: u32,          // 2x 16 bits
-  aabbMax:  vec3f,
-  inst:     u32           // Assigned on leaf nodes only
+  aabbMin:      vec3f,
+  children:     u32,            // 2x 16 bits
+  aabbMax:      vec3f,
+  inst:         u32             // Assigned on leaf nodes only
 }
 
 struct BvhNode
 {
-  aabbMin:    vec3f,
-  startIndex: u32,        // Either index of first object or left child node
-  aabbMax:    vec3f,
-  objCount:   u32
+  aabbMin:      vec3f,
+  startIndex:   u32,            // Either index of first object or left child node
+  aabbMax:      vec3f,
+  objCount:     u32
 }
 
 struct Mtl
 {
-  col:        vec3f,      // Base color (diff col of non-metallics, spec col of metallics)
-  metallic:   f32,        // Appearance range from dielectric to conductor (0 - 1)
-  roughness:  f32,        // Perfect reflection to completely diffuse (0 - 1)
-  ior:        f32,        // Index of refraction
-  refractive: f32,        // Flag if material refracts
-  pad0:       f32
+  col:          vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
+  metallic:     f32,            // Appearance range from dielectric to conductor (0 - 1)
+  roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
+  ior:          f32,            // Index of refraction
+  refractive:   f32,            // Flag if material refracts
+  pad0:         f32
 }
 
 struct IA
 {
-  pos:      vec3f,
-  dist:     f32,
-  nrm:      vec3f,
-  ltriId:   u32,
-  wo:       vec3f
+  pos:          vec3f,
+  dist:         f32,
+  nrm:          vec3f,
+  ltriId:       u32,
+  wo:           vec3f
 }
 
 struct Tri
 {
-  v0:     vec3f,
-  mtl:    u32,            // (mtl id & 0xffff)
-  v1:     vec3f,
-  ltriId: u32,            // Set only if tri has light emitting material
-  v2:     vec3f,
-  pad0:   f32,
-  n0:     vec3f,
-  pad1:   f32,
-  n1:     vec3f,
-  pad2:   f32,
-  n2:     vec3f,
-  pad3:   f32,
+  v0:           vec3f,
+  mtl:          u32,            // (mtl id & 0xffff)
+  v1:           vec3f,
+  ltriId:       u32,            // Set only if tri has light emitting material
+  v2:           vec3f,
+  face_nrm:     f32,            // 1.0f if tri has face normal
+  n0:           vec3f,
+  pad1:         f32,
+  n1:           vec3f,
+  pad2:         f32,
+  n2:           vec3f,
+  pad3:         f32,
 }
 
 struct LTri
 {
-  v0:       vec3f,
-  instId:   u32,
-  v1:       vec3f,
-  triId:    u32,          // Original tri id of the mesh (w/o inst data ofs)
-  v2:       vec3f,
-  area:     f32,
-  nrm:      vec3f,
-  power:    f32,          // Precalculated product of area and emission
-  emission: vec3f,
-  pad0:     f32
+  v0:           vec3f,
+  instId:       u32,
+  v1:           vec3f,
+  triId:        u32,            // Original tri id of the mesh (w/o inst data ofs)
+  v2:           vec3f,
+  area:         f32,
+  nrm:          vec3f,
+  power:        f32,            // Precalculated product of area and emission
+  emission:     vec3f,
+  pad0:         f32
 }
 
 struct Inst
 {
   transform:    mat3x4f,
   aabbMin:      vec3f,
-  id:           u32,      // (mtl override id << 16) | (inst id & 0xffff)
+  id:           u32,            // (mtl override id << 16) | (inst id & 0xffff)
   invTransform: mat3x4f,
   aabbMax:      vec3f,
-  data:         u32       // See comment on data in inst.h
+  data:         u32             // See comment on data in inst.h
 }
 
 // Scene data bit handling
@@ -708,23 +708,25 @@ fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
   return false; // Required by firefox
 }
 
+fn normalToWorldSpace(nrm: vec3f, inst: Inst) -> vec3f
+{
+  // Transform normal to world space with transpose of inverse
+  return normalize(nrm * transpose(toMat3x3(inst.invTransform)));
+}
+
 fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
 {
   switch(inst.data & MESH_SHAPE_MASK) {
     case ST_BOX: {
-      // Bring hit pos to object space
       let pos = (vec4f(hitPos, 1.0) * toMat4x4(inst.invTransform)).xyz;
-      // Calc normal
-      var nrm = pos * step(vec3f(1.0) - abs(pos), vec3f(EPS));
-      // Transform nrm to world space with transpose of inverse
-      return normalize(nrm * transpose(toMat3x3(inst.invTransform))); // TODO Optimize with above
+      return normalToWorldSpace(pos * step(vec3f(1.0) - abs(pos), vec3f(EPS)), inst);
     }
     case ST_PLANE: {
-      return normalize(vec3f(0.0, 1.0, 0.0) * transpose(toMat3x3(inst.invTransform)));
+      return normalToWorldSpace(vec3f(0.0, 1.0, 0.0), inst);
     }
     case ST_SPHERE: {
-      let pos = (vec4f(hitPos, 1.0) * toMat4x4(inst.invTransform)).xyz; // TODO Optimize
-      return normalize(vec3f(pos) * transpose(toMat3x3(inst.invTransform)));
+      let pos = (vec4f(hitPos, 1.0) * toMat4x4(inst.invTransform)).xyz;
+      return normalToWorldSpace(pos, inst);
     }
     default: {
       // Error
@@ -736,8 +738,7 @@ fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
 fn calcTriNormal(h: Hit, inst: Inst, tri: Tri) -> vec3f
 {
   let nrm = tri.n1 * h.u + tri.n2 * h.v + tri.n0 * (1.0 - h.u - h.v);
-  // Transform nrm to world space with transpose of inverse
-  return normalize(nrm * transpose(toMat3x3(inst.invTransform)));
+  return normalToWorldSpace(nrm, inst);
 }
 
 fn isEmissive(mtl: Mtl) -> bool
@@ -1117,7 +1118,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
     let tri = tris[ofs + (hit.e >> 16)];
     // Either use the material id from the triangle or the material override from the instance
     *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
-    (*ia).nrm = calcTriNormal(hit, inst, tri);
+    (*ia).nrm = select(calcTriNormal(hit, inst, tri), normalToWorldSpace(tri.n0, inst), tri.face_nrm > 0.0);
     (*ia).ltriId = select(MAX_LTRI_CNT + 1u, tri.ltriId, isEmissive(*mtl));
   }
 

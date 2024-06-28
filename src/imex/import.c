@@ -176,34 +176,34 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
   logc("Loaded mesh from gltf data with %i triangles.", m->tri_cnt);
 }
 
-void generate_mesh_data(mesh *m, gltf_mesh *gm)
+void generate_mesh_data(mesh *m, gltf_mesh *gm, bool is_emissive)
 {
   obj_type type = get_type(gm->name); 
   if(type == OT_TORUS) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : TORUS_DEFAULT_SUB_INNER;
     uint32_t suby = (gm->suby > 0) ? gm->suby : TORUS_DEFAULT_SUB_OUTER;
-    mesh_create_torus(m, gm->in_radius, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms);
+    mesh_create_torus(m, gm->in_radius, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated torus with %i triangles.", m->tri_cnt);
   } else if(type == OT_ICOSPHERE) {
-    mesh_create_icosphere(m, gm->steps > 0 ? gm->steps : ICOSPHERE_DEFAULT_STEPS, gm->prims[0].mtl_idx, gm->face_nrms);
+    mesh_create_icosphere(m, gm->steps > 0 ? gm->steps : ICOSPHERE_DEFAULT_STEPS, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated icosphere with %i triangles.", m->tri_cnt);
   } else if(type == OT_SPHERE) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : SPHERE_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : SPHERE_DEFAULT_SUBY;
-    mesh_create_uvsphere(m, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms);
+    mesh_create_uvsphere(m, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated uvsphere with %i triangles.", m->tri_cnt);
   } else if(type == OT_CYLINDER) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : CYLINDER_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : CYLINDER_DEFAULT_SUBY;
-    mesh_create_uvcylinder(m, 1.0f, 2.0f, subx, suby, !gm->no_caps, gm->prims[0].mtl_idx, gm->face_nrms);
+    mesh_create_uvcylinder(m, 1.0f, 2.0f, subx, suby, !gm->no_caps, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
   } else if(type == OT_BOX) {
-    mesh_create_box(m, gm->prims[0].mtl_idx);
+    mesh_create_box(m, gm->prims[0].mtl_idx, gm->invert_nrms);
     logc("Generated box with %i triangles.", m->tri_cnt);
   } else if(type == OT_QUAD) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : QUAD_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : QUAD_DEFAULT_SUBY;
-    mesh_create_quad(m, subx, suby, gm->prims[0].mtl_idx);
+    mesh_create_quad(m, subx, suby, gm->prims[0].mtl_idx, gm->invert_nrms);
     logc("Generated quad with %i triangles.", m->tri_cnt);
   }
 }
@@ -357,7 +357,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
           if(type == OT_MESH || gm->prim_cnt > 1)
             load_mesh_data(m, &data, gm, bin);
           else
-            generate_mesh_data(m, gm);
+            generate_mesh_data(m, gm, mr->is_emissive);
           render_mesh_ids[i] = scene_attach_mesh(s, m, mr->is_emissive);
           if(mr->inst_cnt == 1)
             // Update to actual render mesh id, so all other (non-emissive) instances get the index as well

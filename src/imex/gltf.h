@@ -39,12 +39,13 @@ typedef struct gltf_prim {
 
 typedef struct gltf_mesh {
   char          name[NAME_STR_LEN];
-  uint32_t      subx;       // Custom value subdivision 
-  uint32_t      suby;       // Custom value subdivision
-  uint16_t      steps;      // Custom value subdivision (icosphere)
-  float         in_radius;  // Custom value (torus)
-  bool          no_caps;    // Custom value (cylinder)
-  bool          face_nrms;  // Custom value
+  uint32_t      subx;         // Custom value subdivision 
+  uint32_t      suby;         // Custom value subdivision
+  uint16_t      steps;        // Custom value subdivision (icosphere)
+  float         in_radius;    // Custom value (torus)
+  bool          no_caps;      // Custom value (cylinder)
+  bool          face_nrms;    // Custom value (generate face normals)
+  bool          invert_nrms;  // Custom value (e.g. emitter skybox) 
   gltf_prim*    prims;
   uint32_t      prim_cnt;
 } gltf_mesh;
