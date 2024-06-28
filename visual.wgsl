@@ -1392,9 +1392,22 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec
   //return vec4f(pos[vertexIndex], 0.0, 1.0);
 }
 
+
+// https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
+fn filmicToneACES(col: vec3f) -> vec3f
+{
+  let a = 2.51;
+  let b = 0.03;
+  let c = 2.43;
+  let d = 0.59;
+  let e = 0.14;
+  return saturate(col * (a * col + vec3(b)) / (col * (c * col + vec3(d)) + vec3(e)));
+}
+
 @fragment
 fn fragmentMain(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
   // TODO Postprocessing
+  //return vec4f(pow(filmicToneACES(buffer[globals.width * u32(pos.y) + u32(pos.x)].xyz), vec3f(0.4545)), 1);
   return vec4f(pow(buffer[globals.width * u32(pos.y) + u32(pos.x)].xyz, vec3f(0.4545)), 1);
 }

@@ -254,7 +254,7 @@ void update_scene(scene *s, float time)
   // Update camera
   if(orbit_cam) {
     cam *cam = scene_get_active_cam(s);
-    vec3  e = vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.4f);
+    vec3  e = vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.3f);
     vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
     cam_set(cam, pos, vec3_neg(pos));
     scene_set_dirty(s, RT_CAM_VIEW);
