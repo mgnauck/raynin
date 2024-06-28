@@ -19,14 +19,6 @@
 #define HEIGHT      600
 #endif
 
-#define RIOW_SIZE   22
-#define TRI_CNT     1280 + 600
-#define LIGHT_CNT   3
-#define LTRI_CNT    LIGHT_CNT * 2
-#define MESH_CNT    2 + LIGHT_CNT
-#define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 3)
-#define MTL_CNT     INST_CNT
-
 scene         scn;
 scene         *cs = &scn;
 render_data   *rd;
@@ -104,6 +96,14 @@ void mouse_move(int32_t dx, int32_t dy, float look_vel)
 
 void init_scene_riow(scene *s)
 {
+#define RIOW_SIZE   22
+#define TRI_CNT     1280 + 600
+#define LIGHT_CNT   3
+#define LTRI_CNT    LIGHT_CNT * 2
+#define MESH_CNT    2 + LIGHT_CNT
+#define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 3)
+#define MTL_CNT     INST_CNT
+
   scene_init(s, MESH_CNT, MTL_CNT, 1, INST_CNT);
 
   cam *c = scene_get_active_cam(s);
@@ -117,7 +117,8 @@ void init_scene_riow(scene *s)
 
   // Light meshes (need to be unique)
   uint32_t lid = 0;
-  m = mtl_init((vec3){ 1.16f, 1.16, 1.16f });
+  m = mtl_init((vec3){ 1.16f, 1.16f, 1.16f });
+  m.emissive = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
   mesh = scene_acquire_mesh(s);
   mesh_create_quad(mesh, 1, 1, mtl_id, false);
@@ -132,11 +133,11 @@ void init_scene_riow(scene *s)
   // Sphere mesh
   uint32_t sid = 0;
   mesh = scene_acquire_mesh(s);
-  mesh_create_uvsphere,(mesh, 1.0f, 20, 20, mtl_id, false, false);
+  mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false, false);
   //mesh_create_uvcylinder(mesh, 1.0f, 2.0f, 20, 20, 1, false, false);
   //mesh_create_icosphere(mesh, 3, mtl_id, false, false);
   sid = scene_attach_mesh(s, mesh, false);
-  */
+  //*/
   
   // Floor mesh
   uint32_t fid = 0;
@@ -225,6 +226,7 @@ void init_scene_riow(scene *s)
 __attribute__((visibility("default")))
 uint8_t init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
 {
+  //return 0;
   return import_gltf(cs, gltf, gltf_sz, bin, bin_sz);
 }
 

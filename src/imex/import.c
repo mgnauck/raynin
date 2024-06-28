@@ -264,7 +264,7 @@ void process_cam_node(scene *s, gltf_data *d, gltf_node *gn)
 
 bool check_is_emissive_mtl(gltf_mtl *gm)
 {
-  return vec3_max_comp(gm->emission) > 1.0f;
+  return vec3_max_comp(gm->emission) > 0.0f;
 }
 
 bool check_is_emissive_mesh(gltf_mesh *gm, gltf_data* d)
@@ -390,6 +390,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     mtl m = (mtl){ .metallic = gm->metallic, .roughness = gm->roughness, .ior = gm->ior, .refractive = gm->refractive > 0.99f ? 1.0f : 0.0f };
     bool is_emissive = check_is_emissive_mtl(gm);
     m.col = is_emissive ? gm->emission : gm->col;
+    m.emissive = is_emissive ? 1.0f : 0.0f;
     scene_add_mtl(s, &m);
     logc("Created material %s (emissive: %i, refractive: %i)", gm->name, is_emissive, m.refractive == 1.0f);
   }

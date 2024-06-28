@@ -11,7 +11,7 @@
 typedef enum data_type {
   DT_SCALAR,
   DT_VEC3,
-  DT_UNKNOWN // All the unsupported ones
+  DT_UNKNOWN                  // All the unsupported ones
 } data_type;
 
 typedef struct gltf_mtl {
@@ -51,17 +51,17 @@ typedef struct gltf_mesh {
 } gltf_mesh;
 
 typedef struct gltf_accessor {
-  int32_t       bufview;    // TODO: When undefined, the data MUST be initialized with zeros.
+  int32_t       bufview;      // TODO: When undefined, the data MUST be initialized with zeros.
   uint32_t      count;
-  uint32_t      byte_ofs;   // Optional
+  uint32_t      byte_ofs;     // Optional
   uint32_t      comp_type;
   data_type     data_type;
 } gltf_accessor;
 
 typedef struct gltf_bufview {
-  uint32_t      buf;        // Only 1 supported, which is a .bin file that comes with the .gltf
+  uint32_t      buf;          // Only 1 supported, which is a .bin file that comes with the .gltf
   uint32_t      byte_len;
-  uint32_t      byte_ofs;   // Optional
+  uint32_t      byte_ofs;     // Optional
   uint32_t      byte_stride;
 } gltf_bufview;
 
@@ -70,7 +70,7 @@ typedef struct gltf_node {
   int32_t       mesh_idx;
   int32_t       cam_idx;
   vec3          scale;
-  float         rot[4];     // Quaternion
+  float         rot[4];       // Quaternion xyzw
   vec3          trans;
   // Not supporting node hierarchy currently
 } gltf_node;
@@ -89,7 +89,7 @@ typedef struct gltf_data {
   uint32_t      bufview_cnt;
   gltf_cam      *cams;
   uint32_t      cam_cnt;
-  vec3          bg_col;     // Background color (custom value)
+  vec3          bg_col;       // Background color (custom value)
 } gltf_data;
 
 uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz);

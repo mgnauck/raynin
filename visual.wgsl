@@ -55,7 +55,7 @@ struct Mtl
   roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
   ior:          f32,            // Index of refraction
   refractive:   f32,            // Flag if material refracts
-  pad0:         f32
+  emissive:     f32             // Flag if material is emissive
 }
 
 struct IA
@@ -741,11 +741,6 @@ fn calcTriNormal(h: Hit, inst: Inst, tri: Tri) -> vec3f
   return normalToWorldSpace(nrm, inst);
 }
 
-fn isEmissive(mtl: Mtl) -> bool
-{
-  return any(mtl.col > vec3f(1.0));
-}
-
 fn luminance(col: vec3f) -> f32
 {
   return dot(col, vec3f(0.2126, 0.7152, 0.0722));
@@ -1119,11 +1114,11 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
     // Either use the material id from the triangle or the material override from the instance
     *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
     (*ia).nrm = select(calcTriNormal(hit, inst, tri), normalToWorldSpace(tri.n0, inst), tri.face_nrm > 0.0);
-    (*ia).ltriId = select(MAX_LTRI_CNT + 1u, tri.ltriId, isEmissive(*mtl));
+    (*ia).ltriId = select(MAX_LTRI_CNT + 1u, tri.ltriId, (*mtl).emissive > 0.0);
   }
 
   // Flip normal if backside, except if we hit a ltri or refractive mtl
-  (*ia).nrm *= select(-1.0, 1.0, dot((*ia).wo, (*ia).nrm) > 0 || isEmissive(*mtl) || (*mtl).refractive > 0.0);
+  (*ia).nrm *= select(-1.0, 1.0, dot((*ia).wo, (*ia).nrm) > 0 || (*mtl).emissive > 0.0 || (*mtl).refractive > 0.0);
 }
 
 fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
@@ -1138,7 +1133,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   var mtl: Mtl;
   finalizeHit(oriPrim, dirPrim, hit, &ia, &mtl);
 
-  if(isEmissive(mtl)) {
+  if(mtl.emissive > 0.0) {
     return mtl.col * step(0.0, dot(ia.wo, ia.nrm));
   }
 
@@ -1177,17 +1172,17 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(!sampleMaterial(mtl, ia.wo, ia.nrm, r1.xyz, &wi, &fres, &wasSpecular, &pdf)) {
       break;
     }
-    // Scale indirect light contribution by material
-    throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, wasSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
     // Trace indirect light direction
     let ori = ia.pos;
     let dir = wi;
     hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
-      col += throughput * globals.bgColor;
       break;
     }
+
+    // Scale indirect light contribution by material
+    throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, wasSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
     // Save for light hit MIS calculation
     let lastPos = ia.pos;
@@ -1196,7 +1191,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     finalizeHit(ori, dir, hit, &ia, &mtl);
 
     // Hit light via material direction
-    if(isEmissive(mtl)) {
+    if(mtl.emissive > 0.0) {
       // Lights emit from front side only
       if(dot(ia.wo, ia.nrm) > 0) {
         // Apply MIS
@@ -1243,7 +1238,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     finalizeHit(ori, dir, hit, &ia, &mtl);
 
     // Hit a light
-    if(isEmissive(mtl)) {
+    if(mtl.emissive > 0.0) {
       // Lights emit from front side only
       if(dot(ia.wo, ia.nrm) > 0) {
         // Last bounce was specular
@@ -1319,7 +1314,7 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     finalizeHit(ori, dir, hit, &ia, &mtl);
 
     // Hit a light
-    if(isEmissive(mtl)) {
+    if(mtl.emissive > 0.0) {
       col += throughput * mtl.col * step(0.0, dot(ia.wo, ia.nrm));
       break;
     }

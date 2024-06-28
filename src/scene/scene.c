@@ -138,7 +138,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
     for(uint32_t i=0; i<tri_cnt; i++) {
       tri *t = &tris[i];
       mtl *mtl = &s->mtls[t->mtl & 0xffff];
-      if(mtl_is_emissive(mtl)) {
+      if(mtl->emissive > 0.0f) {
         uint32_t ltri_id = ltri_ofs + ltri_cnt++;
         tri_build_ltri(&s->ltris[ltri_id], t,
             inst->id & 0xffff, i, inst->transform, mtl->col);
@@ -363,7 +363,7 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
 
     // For mesh inst only we want to know if mtl is now emissive or not
     if(!(inst->data & SHAPE_TYPE_BIT)) {
-      if(mtl_is_emissive(&s->mtls[mtl_id]))
+      if(s->mtls[mtl_id].emissive > 0.0f)
         info->state |= IS_EMISSIVE;
       else
         info->state &= ~IS_EMISSIVE;
