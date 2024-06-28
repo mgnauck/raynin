@@ -87,6 +87,8 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 
   mesh_init(m, m->tri_cnt);
 
+  float inv = gm->invert_nrms ? -1.0f : 1.0f;
+
   // Collect the data and copy to our actual mesh
   uint32_t tri_cnt = 0;
   for(uint32_t j=0; j<gm->prim_cnt; j++) {
@@ -153,9 +155,9 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
       //vec3_logc("Tri with p1: ", t->v1);
       //vec3_logc("Tri with p2: ", t->v2);
 
-      t->n0 = read_vec(bin, nrm_bv->byte_ofs, i0);
-      t->n1 = read_vec(bin, nrm_bv->byte_ofs, i1);
-      t->n2 = read_vec(bin, nrm_bv->byte_ofs, i2);
+      t->n0 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i0), inv);
+      t->n1 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i1), inv);
+      t->n2 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i2), inv);
 
       //vec3_logc("Tri with n0: ", t->n0);
       //vec3_logc("Tri with n1: ", t->n1);
