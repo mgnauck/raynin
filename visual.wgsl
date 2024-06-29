@@ -1,3 +1,16 @@
+const MAX_MTL_CNT   = 128u; // 402 is max due to 64k limit of uniform buffer
+const MAX_INST_CNT  = 256u; // 402 is max due to 64k limit of uniform buffer
+
+struct WrappedMtl
+{
+  @size(32) e: Mtl
+}
+
+struct WrappedInst
+{
+  @size(128) e: Inst
+}
+
 struct Global
 {
   width:        u32,
@@ -22,14 +35,8 @@ struct Global
   pad2:         f32,
   pixelTopLeft: vec3f,
   pad3:         f32,
-}
-
-struct Hit
-{
-  t:            f32,
-  u:            f32,
-  v:            f32,
-  e:            u32             // (tri id << 16) | (inst id & 0xffff)
+  materials:    array<WrappedMtl, MAX_MTL_CNT>,
+  instances:    array<WrappedInst, MAX_INST_CNT>
 }
 
 struct BvhNode                  // Same for BVH and TLAS nodes
@@ -40,25 +47,6 @@ struct BvhNode                  // Same for BVH and TLAS nodes
   aabbMax:      vec3f,
   val1:         u32             // TLAS: inst (assigned on leafs only)
                                 // BVH: obj count
-}
-
-struct Mtl
-{
-  col:          vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
-  metallic:     f32,            // Appearance range from dielectric to conductor (0 - 1)
-  roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
-  ior:          f32,            // Index of refraction
-  refractive:   f32,            // Flag if material refracts
-  emissive:     f32             // Flag if material is emissive
-}
-
-struct IA
-{
-  pos:          vec3f,
-  dist:         f32,
-  nrm:          vec3f,
-  ltriId:       u32,
-  wo:           vec3f
 }
 
 struct Tri
@@ -91,6 +79,16 @@ struct LTri
   pad0:         f32
 }
 
+struct Mtl
+{
+  col:          vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
+  metallic:     f32,            // Appearance range from dielectric to conductor (0 - 1)
+  roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
+  ior:          f32,            // Index of refraction
+  refractive:   f32,            // Flag if material refracts
+  emissive:     f32             // Flag if material is emissive
+}
+
 struct Inst
 {
   transform:    mat3x4f,
@@ -99,6 +97,23 @@ struct Inst
   invTransform: mat3x4f,
   aabbMax:      vec3f,
   data:         u32             // See comment on data in inst.h
+}
+
+struct Hit
+{
+  t:            f32,
+  u:            f32,
+  v:            f32,
+  e:            u32             // (tri id << 16) | (inst id & 0xffff)
+}
+
+struct IA
+{
+  pos:          vec3f,
+  dist:         f32,
+  nrm:          vec3f,
+  ltriId:       u32,
+  wo:           vec3f
 }
 
 // Scene data bit handling
@@ -133,17 +148,15 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(2) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(3) var<storage, read> indices: array<u32>;
 @group(0) @binding(4) var<storage, read> bvhNodes: array<BvhNode>;
-@group(0) @binding(5) var<storage, read> instances: array<Inst>;
-@group(0) @binding(6) var<storage, read> materials: array<Mtl>;
-@group(0) @binding(7) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(5) var<storage, read_write> buffer: array<vec4f>;
 
 // Traversal stacks for bvhs
-const MAX_NODE_CNT = 32u;
+const MAX_NODE_CNT  = 32u;
 var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
 // Ltri contributions
-const MAX_LTRI_CNT = 256u;
+const MAX_LTRI_CNT  = 256u;
 var<private> ltriContributions: array<f32, MAX_LTRI_CNT>;
 
 // State of prng
@@ -614,7 +627,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 
     if(nodeChildren == 0) {
       // Leaf node, intersect the single assigned instance 
-      intersectInst(ori, dir, instances[(*node).val1], &hit);
+      intersectInst(ori, dir, globals.instances[(*node).val1].e, &hit);
     } else {
       // Interior node
       var leftChildIndex = nodeChildren & TLAS_NODE_MASK;
@@ -681,7 +694,7 @@ fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
       let nodeChildren = (*node).val0;
       if(nodeChildren == 0) {
         // Leaf node, intersect the single assigned instance
-        if(intersectInstAnyHit(p0, dir, tfar, instances[(*node).val1])) {
+        if(intersectInstAnyHit(p0, dir, tfar, globals.instances[(*node).val1].e)) {
           return true;
         }
       } else {
@@ -1094,7 +1107,7 @@ fn sampleEye(r: vec2f) -> vec3f
 
 fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr<function, Mtl>)
 {
-  let inst = instances[hit.e & INST_ID_MASK];
+  let inst = globals.instances[hit.e & INST_ID_MASK].e;
 
   (*ia).dist = hit.t;
   (*ia).pos = ori + hit.t * dir;
@@ -1102,14 +1115,14 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
  
   if((inst.data & SHAPE_TYPE_BIT) > 0) {
     // Shape
-    *mtl = materials[(inst.id >> 16) & MTL_ID_MASK];
+    *mtl = globals.materials[(inst.id >> 16) & MTL_ID_MASK].e;
     (*ia).nrm = calcShapeNormal(inst, (*ia).pos);
   } else {
     // Mesh
     let ofs = inst.data & MESH_SHAPE_MASK;
     let tri = tris[ofs + (hit.e >> 16)];
     // Either use the material id from the triangle or the material override from the instance
-    *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
+    *mtl = globals.materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK].e;
     (*ia).nrm = select(calcTriNormal(hit, inst, tri), normalToWorldSpace(tri.n0, inst), tri.face_nrm > 0.0);
     (*ia).ltriId = select(MAX_LTRI_CNT + 1u, tri.ltriId, (*mtl).emissive > 0.0);
   }

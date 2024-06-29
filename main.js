@@ -19,7 +19,7 @@ const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
 // Same indices as in wasm gpu_buf_type enum
-const bufType = { GLOB: 0, TRI: 1, LTRI: 2, INDEX: 3, BVH_NODE: 4, INST: 5, MAT: 6, ACC: 7 };
+const bufType = { GLOB: 0, TRI: 1, LTRI: 2, INDEX: 3, BVH_NODE: 4, ACC: 5 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -75,7 +75,7 @@ function Wasm(module)
       }
       return parseFloat(s); 
     },
-    gpu_create_res: (g, t, lt, idx, bn, tn, i, m) => createGpuResources(g, t, lt, idx, bn, tn, i, m),
+    gpu_create_res: (g, t, lt, idx, bn) => createGpuResources(g, t, lt, idx, bn),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
   };
 
@@ -134,7 +134,7 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, instSz, matSz)
+function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz)
 {
   res.buf = [];
 
@@ -169,16 +169,6 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, instSz, m
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[bufType.INST] = device.createBuffer({
-    size: instSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.MAT] = device.createBuffer({
-    size: matSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
   res.buf[bufType.ACC] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
@@ -201,12 +191,6 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, instSz, m
       { binding: bufType.BVH_NODE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: bufType.INST,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.MAT,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
@@ -221,8 +205,6 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, instSz, m
       { binding: bufType.LTRI, resource: { buffer: res.buf[bufType.LTRI] } },
       { binding: bufType.INDEX, resource: { buffer: res.buf[bufType.INDEX] } },
       { binding: bufType.BVH_NODE, resource: { buffer: res.buf[bufType.BVH_NODE] } },
-      { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
-      { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });
@@ -339,7 +321,10 @@ async function main()
   }
 
   // Init renderer
-  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP);
+  if(wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP) > 0) {
+    alert("Failed to initialize render resources");
+    return;
+  }
   
   // Pipelines
   if(VISUAL_SHADER.includes("END_visual_wgsl"))
