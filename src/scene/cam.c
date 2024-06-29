@@ -24,7 +24,7 @@ void cam_set_dir(cam *c, vec3 dir)
   cam_calc_base(c);
 }
 
-void cam_create_primary_ray(ray *ray, float x, float y, const view *v, const cam *c)
+void cam_create_primary_ray(const cam *c, ray *ray, float x, float y, const view *v)
 {
   // Viewplane pixel position
   vec3 pix_smpl = vec3_add(v->pix_top_left, vec3_add(

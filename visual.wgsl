@@ -4,10 +4,10 @@ struct Global
   height:       u32,
   spp:          u32,
   maxBounces:   u32,
+  tlasOfs:      u32,          // Offset into bvh node buffer for start of tlas nodes
+  pad0:         u32,
   frame:        u32,
   gatheredSpp:  u32,
-  pad0:         u32,
-  pad1:         u32,
   bgColor:      vec3f,
   weight:       f32,
   eye:          vec3f,
@@ -17,11 +17,11 @@ struct Global
   up:           vec3f,
   focAngle:     f32,
   pixelDeltaX:  vec3f,
-  pad2:         f32,
+  pad1:         f32,
   pixelDeltaY:  vec3f,
-  pad3:         f32,
+  pad2:         f32,
   pixelTopLeft: vec3f,
-  pad4:         f32,
+  pad3:         f32,
 }
 
 struct Hit
@@ -32,20 +32,14 @@ struct Hit
   e:            u32             // (tri id << 16) | (inst id & 0xffff)
 }
 
-struct TlasNode
+struct BvhNode                  // Same for BVH and TLAS nodes
 {
   aabbMin:      vec3f,
-  children:     u32,            // 2x 16 bits
+  val0:         u32,            // TLAS: child nodes left/right (2x 16 bits)
+                                // BVH: start of 1st obj or index of left child node (right + 1)
   aabbMax:      vec3f,
-  inst:         u32             // Assigned on leaf nodes only
-}
-
-struct BvhNode
-{
-  aabbMin:      vec3f,
-  startIndex:   u32,            // Either index of first object or left child node
-  aabbMax:      vec3f,
-  objCount:     u32
+  val1:         u32             // TLAS: inst (assigned on leafs only)
+                                // BVH: obj count
 }
 
 struct Mtl
@@ -139,10 +133,9 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(2) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(3) var<storage, read> indices: array<u32>;
 @group(0) @binding(4) var<storage, read> bvhNodes: array<BvhNode>;
-@group(0) @binding(5) var<storage, read> tlasNodes: array<TlasNode>;
-@group(0) @binding(6) var<storage, read> instances: array<Inst>;
-@group(0) @binding(7) var<storage, read> materials: array<Mtl>;
-@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(5) var<storage, read> instances: array<Inst>;
+@group(0) @binding(6) var<storage, read> materials: array<Mtl>;
+@group(0) @binding(7) var<storage, read_write> buffer: array<vec4f>;
 
 // Traversal stacks for bvhs
 const MAX_NODE_CNT = 32u;
@@ -458,8 +451,8 @@ fn intersectBvh(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32
   // Sorted DF traversal (near child first + skip far child if not within current dist)
   loop {
     let node = &bvhNodes[bvhOfs + nodeIndex];
-    let nodeStartIndex = (*node).startIndex;
-    let nodeObjCount = (*node).objCount;
+    let nodeStartIndex = (*node).val0;
+    let nodeObjCount = (*node).val1;
    
     if(nodeObjCount != 0) {
       // Leaf node, intersect all contained triangles
@@ -521,8 +514,8 @@ fn intersectBvhAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs:
   loop {
     let node = &bvhNodes[bvhOfs + nodeIndex];
     if(intersectAabbAnyHit(ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
-      let nodeStartIndex = (*node).startIndex;
-      let nodeObjCount = (*node).objCount; 
+      let nodeStartIndex = (*node).val0;
+      let nodeObjCount = (*node).val1; 
       if(nodeObjCount != 0) {
         // Leaf node, intersect all contained triangles
         for(var i=0u; i<nodeObjCount; i++) {
@@ -607,6 +600,8 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
+  let tlasOfs = globals.tlasOfs;
+
   let invDir = 1 / dir;
 
   var hit: Hit;
@@ -614,19 +609,19 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 
   // Ordered DF traversal (near child first + skip far child if not within current dist)
   loop {
-    let node = &tlasNodes[nodeIndex];
-    let nodeChildren = (*node).children;
+    let node = &bvhNodes[tlasOfs + nodeIndex];
+    let nodeChildren = (*node).val0;
 
     if(nodeChildren == 0) {
       // Leaf node, intersect the single assigned instance 
-      intersectInst(ori, dir, instances[(*node).inst], &hit);
+      intersectInst(ori, dir, instances[(*node).val1], &hit);
     } else {
       // Interior node
       var leftChildIndex = nodeChildren & TLAS_NODE_MASK;
       var rightChildIndex = nodeChildren >> 16;
 
-      let leftChildNode = &tlasNodes[leftChildIndex];
-      let rightChildNode = &tlasNodes[rightChildIndex];
+      let leftChildNode = &bvhNodes[tlasOfs + leftChildIndex];
+      let rightChildNode = &bvhNodes[tlasOfs + rightChildIndex];
 
       // Intersect both child node aabbs
       var leftDist = intersectAabb(ori, invDir, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
@@ -674,17 +669,19 @@ fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
   dir /= tfar;
   let invDir = 1 / dir;
 
+  let tlasOfs = globals.tlasOfs;
+
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
   // Early exit, unordered DF traversal
   loop {
-    let node = &tlasNodes[nodeIndex];
+    let node = &bvhNodes[tlasOfs + nodeIndex];
     if(intersectAabbAnyHit(p0, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
-      let nodeChildren = (*node).children;
+      let nodeChildren = (*node).val0;
       if(nodeChildren == 0) {
         // Leaf node, intersect the single assigned instance
-        if(intersectInstAnyHit(p0, dir, tfar, instances[(*node).inst])) {
+        if(intersectInstAnyHit(p0, dir, tfar, instances[(*node).val1])) {
           return true;
         }
       } else {
