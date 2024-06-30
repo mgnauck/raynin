@@ -14,7 +14,7 @@
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
-#include "../util/ray.h"
+#include "ray.h"
 #include "intersect.h"
 #endif
 
@@ -22,7 +22,7 @@
 
 // Global buffer offsets
 #define GLOB_BUF_OFS_CFG    0
-#define GLOB_BUF_OFS_FRAME  24
+#define GLOB_BUF_OFS_FRAME  16
 #define GLOB_BUF_OFS_CAM    48
 #define GLOB_BUF_OFS_VIEW   96
 #define GLOB_BUF_SIZE       144
@@ -30,18 +30,16 @@
 #define MAX_BOUNCES         50
 
 // GPU buffer types
-typedef enum gpu_buf_type {
+typedef enum buf_type {
   BT_GLOB = 0,
   BT_TRI,
   BT_LTRI,
   BT_INDEX,
   BT_BVH_NODE,
+  BT_TLAS_NODE,
   BT_INST,
   BT_MTL,
-} gpu_buf_type;
-
-// Will be used as offset to TLAS nodes start
-uint32_t max_bvh_node_cnt = 0;
+} buf_type;
 
 typedef struct render_data {
   scene     *scene;
@@ -56,9 +54,10 @@ typedef struct render_data {
 #ifndef NATIVE_BUILD
 
 extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz, uint32_t ltri_sz,
-    uint32_t index_sz, uint32_t bvh_node_sz, uint32_t inst_sz, uint32_t mtl_sz);
+    uint32_t index_sz, uint32_t bvh_node_sz, uint32_t tlas_node_sz, uint32_t inst_sz,
+    uint32_t mtl_sz);
 
-extern void gpu_write_buf(gpu_buf_type type, uint32_t dst_ofs,
+extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
 
 #else
@@ -76,12 +75,10 @@ void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
       total_tri_cnt * sizeof(tri), // Tris
       total_ltri_cnt * sizeof(ltri), // LTris
       total_tri_cnt * sizeof(uint32_t), // Indices
-      // BVH and TLAS nodes (shared buffer)
-      2 * (total_tri_cnt * sizeof(bvh_node) + total_inst_cnt * sizeof(tlas_node)), 
+      2 * total_tri_cnt * sizeof(bvh_node), // BVH nodes
+      2 * total_inst_cnt * sizeof(tlas_node), // TLAS nodes
       total_inst_cnt * sizeof(inst), // Instances
       total_mtl_cnt * sizeof(mtl)); // Materials
-
-  max_bvh_node_cnt = 2 * total_tri_cnt;
 }
 
 render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t spp)
@@ -141,7 +138,7 @@ void renderer_update_static(render_data *rd)
 
 #ifndef NATIVE_BUILD
   // Push part of globals
-  uint32_t cfg[6] = { rd->width, rd->height, rd->spp, rd->bounces, max_bvh_node_cnt, /*pad0 u32 */ 0 };
+  uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
 #endif
 
@@ -204,15 +201,14 @@ void renderer_update(render_data *rd, float time)
 
   // Push TLAS and instances
   if(rd->scene->dirty & RT_INST) {
-    // Bvh nodes and tlas nodes share the same buffer
-    gpu_write_buf(BT_BVH_NODE, max_bvh_node_cnt * sizeof(bvh_node), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
+    gpu_write_buf(BT_TLAS_NODE, 0, s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
     gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
     scene_clr_dirty(s, RT_INST);
   }
 
 #ifndef NATIVE_BUILD
   // Push frame data
-  uint32_t frameUint[2] = { rd->frame, rd->gathered_spp };
+  uint32_t frameUint[4] = { rd->frame, rd->gathered_spp, /* pad */ 0, /* pad */ 0 };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frameUint, sizeof(frameUint));
   float frameFloat[4] = { s->bg_col.x, s->bg_col.y, s->bg_col.z,
     rd->spp / (float)(rd->gathered_spp + rd->spp) };
@@ -236,7 +232,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
         for(uint32_t x=0; x<BLOCK_SIZE; x++) {
           ray r;
           cam *cam = scene_get_active_cam(rd->scene);
-          cam_create_primary_ray(cam, &r, (float)(i + x), (float)(j + y), &rd->scene->view);
+          ray_create_primary(&r, (float)(i + x), (float)(j + y), &rd->scene->view, cam);
           hit h = (hit){ .t = MAX_DISTANCE };
           intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, rd->scene->bvhs, &h);
           vec3 c = rd->scene->bg_col;
@@ -302,5 +298,4 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
     }
   }
 }
-
 #endif

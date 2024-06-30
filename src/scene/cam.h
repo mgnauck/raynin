@@ -23,6 +23,6 @@ typedef struct cam {
 void cam_set(cam *c, vec3 look_from, vec3 look_at);
 void cam_set_dir(cam *c, vec3 dir);
 
-void cam_create_primary_ray(const cam *c, ray *ray, float x, float y, const view *v);
+void cam_create_primary_ray(ray *ray, float x, float y, const view *v, const cam *c);
 
 #endif
