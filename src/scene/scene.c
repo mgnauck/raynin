@@ -127,7 +127,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
       tri *t = &tris[i];
       uint32_t ltri_id = ltri_ofs + ltri_cnt++;
       tri_build_ltri(&s->ltris[ltri_id], &tris[i],
-          inst->id & 0xffff, i, inst->transform,
+          inst->id & 0xffff, i, info->transform,
           s->mtls[t->mtl & 0xffff].col);
       // A tri links its ltri: Tris that emit light need to be unique, i.e.
       // multiple instances of the same light mesh/tri are not allowed :(
@@ -141,7 +141,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
       if(mtl->emissive > 0.0f) {
         uint32_t ltri_id = ltri_ofs + ltri_cnt++;
         tri_build_ltri(&s->ltris[ltri_id], t,
-            inst->id & 0xffff, i, inst->transform, mtl->col);
+            inst->id & 0xffff, i, info->transform, mtl->col);
         t->ltri_id = ltri_id;
       }
     }
@@ -154,12 +154,12 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
   scene_set_dirty(s, RT_LTRI);
 }
 
-void update_ltris(scene *s, inst *inst, inst_info *info)
+void update_ltris(scene *s, inst_info *info)
 {
   tri *tris = s->meshes[info->mesh_shape].tris;
   for(uint32_t i=0; i<info->ltri_cnt; i++) {
     ltri *lt = &s->ltris[info->ltri_ofs + i];
-    tri_update_ltri(lt, &tris[lt->tri_id], inst->transform);
+    tri_update_ltri(lt, &tris[lt->tri_id], info->transform);
   }
 
   scene_set_dirty(s, RT_LTRI);
@@ -198,12 +198,11 @@ void scene_prepare_render(scene *s)
  
         // Update transformation of existing ltris for this instance
         if(!rebuild_ltris && (info->state & IS_EMISSIVE))
-          update_ltris(s, inst, info);
+          update_ltris(s, info);
 
         // Calc inverse transform
-        mat4 transform, inv_transform;
-        mat4_from_row3x4(transform, inst->transform);
-        mat4_inv(inv_transform, transform);
+        mat4 inv_transform;
+        mat4_inv(inv_transform, info->transform);
         memcpy(inst->inv_transform, inv_transform, 12 * sizeof(float));
     
         aabb a = aabb_init();
@@ -228,14 +227,14 @@ void scene_prepare_render(scene *s)
         }
 
         // Transform instance aabb to world space
-        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, mi.y, mi.z }));
-        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, mi.y, mi.z }));
-        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, ma.y, mi.z }));
-        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, ma.y, mi.z }));
-        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, mi.y, ma.z }));
-        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, mi.y, ma.z }));
-        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ mi.x, ma.y, ma.z }));
-        aabb_grow(&a, mat4_mul_pos(transform, (vec3){ ma.x, ma.y, ma.z }));
+        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ mi.x, mi.y, mi.z }));
+        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ ma.x, mi.y, mi.z }));
+        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ mi.x, ma.y, mi.z }));
+        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ ma.x, ma.y, mi.z }));
+        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ mi.x, mi.y, ma.z }));
+        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ ma.x, mi.y, ma.z }));
+        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ mi.x, ma.y, ma.z }));
+        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ ma.x, ma.y, ma.z }));
 
         inst->min = a.min;
         inst->max = a.max;
@@ -340,8 +339,9 @@ uint32_t scene_add_shape_inst(scene *s, shape_type shape, uint16_t mtl_id, mat4 
 
 void scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform)
 {
-  memcpy(s->instances[inst_id].transform, transform, 12 * sizeof(float));
-  s->inst_info[inst_id].state |= IS_TRANS_DIRTY;
+  inst_info *info = &s->inst_info[inst_id];
+  memcpy(info->transform, transform, sizeof(mat4));
+  info->state |= IS_TRANS_DIRTY;
 }
 
 void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)

@@ -19,10 +19,11 @@ typedef enum inst_state {
 } inst_state;
 
 typedef struct inst_info {
-  uint32_t  mesh_shape;
-  uint32_t  ltri_ofs;
-  uint32_t  ltri_cnt;
-  uint32_t  state;
+  mat4        transform;
+  uint32_t    mesh_shape;
+  uint32_t    ltri_ofs;
+  uint32_t    ltri_cnt;
+  uint32_t    state;
 } inst_info;
 
 // inst.data:
@@ -37,10 +38,9 @@ typedef struct inst_info {
 // i.e. unitsphere, unitcylinder, unitbox
 
 typedef struct inst {
-  float       transform[12];
+  float       inv_transform[12];
   vec3        min;
   uint32_t    id;     // (mtl override id << 16) | (inst id & 0xffff)
-  float       inv_transform[12];
   vec3        max;
   uint32_t    data;   // See notes above
 } inst;

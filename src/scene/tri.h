@@ -1,6 +1,7 @@
 #ifndef TRI_H
 #define TRI_H
 
+#include "../util/mat4.h"
 #include "../util/vec3.h"
 #include "../settings.h"
 
@@ -38,7 +39,7 @@ typedef struct ltri {
 vec3  tri_calc_center(tri *t);
 float tri_calc_area(vec3 v0, vec3 v1, vec3 v2);
 
-void  tri_build_ltri(ltri *lt, const tri *t, uint32_t inst_id, uint32_t tri_id, float transform[12], vec3 emission);
-void  tri_update_ltri(ltri *lt, const tri *t, float transform[12]);
+void  tri_build_ltri(ltri *lt, const tri *t, uint32_t inst_id, uint32_t tri_id, mat4 transform, vec3 emission);
+void  tri_update_ltri(ltri *lt, const tri *t, mat4 transform);
 
 #endif
