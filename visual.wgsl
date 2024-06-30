@@ -24,12 +24,24 @@ struct Global
   pad4:         f32,
 }
 
-struct Hit
+struct Mtl
 {
-  t:            f32,
-  u:            f32,
-  v:            f32,
-  e:            u32             // (tri id << 16) | (inst id & 0xffff)
+  col:          vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
+  metallic:     f32,            // Appearance range from dielectric to conductor (0 - 1)
+  roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
+  ior:          f32,            // Index of refraction
+  refractive:   f32,            // Flag if material refracts
+  emissive:     f32             // Flag if material is emissive
+}
+
+struct Inst
+{
+  transform:    mat3x4f,
+  aabbMin:      vec3f,
+  id:           u32,            // (mtl override id << 16) | (inst id & 0xffff)
+  invTransform: mat3x4f,
+  aabbMax:      vec3f,
+  data:         u32             // See comment on data in inst.h
 }
 
 struct TlasNode
@@ -46,25 +58,6 @@ struct BvhNode
   startIndex:   u32,            // Either index of first object or left child node
   aabbMax:      vec3f,
   objCount:     u32
-}
-
-struct Mtl
-{
-  col:          vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
-  metallic:     f32,            // Appearance range from dielectric to conductor (0 - 1)
-  roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
-  ior:          f32,            // Index of refraction
-  refractive:   f32,            // Flag if material refracts
-  emissive:     f32             // Flag if material is emissive
-}
-
-struct IA
-{
-  pos:          vec3f,
-  dist:         f32,
-  nrm:          vec3f,
-  ltriId:       u32,
-  wo:           vec3f
 }
 
 struct Tri
@@ -97,14 +90,21 @@ struct LTri
   pad0:         f32
 }
 
-struct Inst
+struct Hit
 {
-  transform:    mat3x4f,
-  aabbMin:      vec3f,
-  id:           u32,            // (mtl override id << 16) | (inst id & 0xffff)
-  invTransform: mat3x4f,
-  aabbMax:      vec3f,
-  data:         u32             // See comment on data in inst.h
+  t:            f32,
+  u:            f32,
+  v:            f32,
+  e:            u32             // (tri id << 16) | (inst id & 0xffff)
+}
+
+struct IA
+{
+  pos:          vec3f,
+  dist:         f32,
+  nrm:          vec3f,
+  ltriId:       u32,
+  wo:           vec3f
 }
 
 // Scene data bit handling
@@ -135,13 +135,15 @@ const FLOAT_SCALE         = 1 / 65536.0;
 const INT_SCALE           = 256.0;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<storage, read> tris: array<Tri>;
-@group(0) @binding(2) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(3) var<storage, read> indices: array<u32>;
-@group(0) @binding(4) var<storage, read> bvhNodes: array<BvhNode>;
-@group(0) @binding(5) var<storage, read> tlasNodes: array<TlasNode>;
-@group(0) @binding(6) var<storage, read> instances: array<Inst>;
-@group(0) @binding(7) var<storage, read> materials: array<Mtl>;
+@group(0) @binding(1) var<uniform> materials: array<Mtl, 512>;
+@group(0) @binding(2) var<uniform> instances: array<Inst, 512>;
+
+@group(0) @binding(3) var<storage, read> tlasNodes: array<TlasNode>;
+@group(0) @binding(4) var<storage, read> tris: array<Tri>;
+@group(0) @binding(5) var<storage, read> ltris: array<LTri>;
+@group(0) @binding(6) var<storage, read> indices: array<u32>;
+@group(0) @binding(7) var<storage, read> bvhNodes: array<BvhNode>;
+
 @group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
 // Traversal stacks for bvhs

@@ -18,7 +18,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, TRI: 1, LTRI: 2, INDEX: 3, BVH_NODE: 4, TLAS_NODE: 5, INST: 6, MAT: 7, ACC: 8 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TLAS_NODE: 3, TRI: 4, LTRI: 5, INDEX: 6, BVH_NODE: 7, ACC: 8 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -74,7 +74,7 @@ function Wasm(module)
       }
       return parseFloat(s); 
     },
-    gpu_create_res: (g, t, lt, idx, bn, tn, i, m) => createGpuResources(g, t, lt, idx, bn, tn, i, m),
+    gpu_create_res: (g, m, i, tn, t, lt, idx, bn) => createGpuResources(g, m, i, tn, t, lt, idx, bn),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
   };
 
@@ -133,13 +133,28 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeSz, instSz, matSz)
+function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, ltriSz, indexSz, bvhNodeSz)
 {
   res.buf = [];
 
   res.buf[bufType.GLOB] = device.createBuffer({
     size: globSz,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.MTL] = device.createBuffer({
+    size: mtlSz,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.INST] = device.createBuffer({
+    size: instSz,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.TLAS_NODE] = device.createBuffer({
+    size: tlasNodeSz,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
@@ -168,21 +183,6 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeS
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[bufType.TLAS_NODE] = device.createBuffer({
-    size: tlasNodeSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.INST] = device.createBuffer({
-    size: instSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.MAT] = device.createBuffer({
-    size: matSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
   res.buf[bufType.ACC] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
@@ -193,6 +193,15 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeS
       { binding: bufType.GLOB,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "uniform" } },
+      { binding: bufType.MTL,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "uniform" } },
+      { binding: bufType.INST,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "uniform" } },
+      { binding: bufType.TLAS_NODE,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage" } },
       { binding: bufType.TRI,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
@@ -205,15 +214,6 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeS
       { binding: bufType.BVH_NODE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: bufType.TLAS_NODE,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.INST,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.MAT,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
@@ -224,13 +224,13 @@ function createGpuResources(globSz, triSz, ltriSz, indexSz, bvhNodeSz, tlasNodeS
     layout: bindGroupLayout,
     entries: [
       { binding: bufType.GLOB, resource: { buffer: res.buf[bufType.GLOB] } },
+      { binding: bufType.MTL, resource: { buffer: res.buf[bufType.MTL] } },
+      { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
+      { binding: bufType.TLAS_NODE, resource: { buffer: res.buf[bufType.TLAS_NODE] } },
       { binding: bufType.TRI, resource: { buffer: res.buf[bufType.TRI] } },
       { binding: bufType.LTRI, resource: { buffer: res.buf[bufType.LTRI] } },
       { binding: bufType.INDEX, resource: { buffer: res.buf[bufType.INDEX] } },
       { binding: bufType.BVH_NODE, resource: { buffer: res.buf[bufType.BVH_NODE] } },
-      { binding: bufType.TLAS_NODE, resource: { buffer: res.buf[bufType.TLAS_NODE] } },
-      { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
-      { binding: bufType.MAT, resource: { buffer: res.buf[bufType.MAT] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });
@@ -347,7 +347,10 @@ async function main()
   }
 
   // Init renderer
-  wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP);
+  if(wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP) > 0) {
+    alert("Failed to initialize render resources");
+    return;
+  }
   
   // Pipelines
   if(VISUAL_SHADER.includes("END_visual_wgsl"))

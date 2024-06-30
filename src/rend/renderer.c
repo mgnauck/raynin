@@ -14,31 +14,33 @@
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
-#include "ray.h"
+#include "../util/ray.h"
 #include "intersect.h"
 #endif
 
-#define TEMPORAL_WEIGHT     0.0f
+#define TEMPORAL_WEIGHT       0.0f
 
-// Global buffer offsets
-#define GLOB_BUF_OFS_CFG    0
-#define GLOB_BUF_OFS_FRAME  16
-#define GLOB_BUF_OFS_CAM    48
-#define GLOB_BUF_OFS_VIEW   96
-#define GLOB_BUF_SIZE       144
+// Global uniform buffer offsets
+#define GLOB_BUF_OFS_CFG      0
+#define GLOB_BUF_OFS_FRAME    16
+#define GLOB_BUF_OFS_CAM      48
+#define GLOB_BUF_OFS_VIEW     96
+#define GLOB_BUF_SIZE         144
 
-#define MAX_BOUNCES         50
+#define MAX_BOUNCES           50
+
+#define MAX_UNIFORM_BUF_SIZE  65536
 
 // GPU buffer types
 typedef enum buf_type {
   BT_GLOB = 0,
+  BT_MTL,
+  BT_INST,
+  BT_TLAS_NODE,
   BT_TRI,
   BT_LTRI,
   BT_INDEX,
   BT_BVH_NODE,
-  BT_TLAS_NODE,
-  BT_INST,
-  BT_MTL,
 } buf_type;
 
 typedef struct render_data {
@@ -53,9 +55,9 @@ typedef struct render_data {
 
 #ifndef NATIVE_BUILD
 
-extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz, uint32_t ltri_sz,
-    uint32_t index_sz, uint32_t bvh_node_sz, uint32_t tlas_node_sz, uint32_t inst_sz,
-    uint32_t mtl_sz);
+extern void gpu_create_res(uint32_t glob_sz, uint32_t mtl_sz,  uint32_t inst_sz,
+    uint32_t tlas_node_sz, uint32_t tri_sz, uint32_t ltri_sz, uint32_t index_sz,
+    uint32_t bvh_node_sz);
 
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
@@ -67,18 +69,32 @@ extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
 
 #endif
 
-void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
+uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
     uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
+  // Sanity check for implicitly assumed sizes/counts
+  if(sizeof(mtl) > sizeof(inst) || 2 * sizeof(tlas_node) > sizeof(inst) ||
+      total_inst_cnt * sizeof(inst) > MAX_UNIFORM_BUF_SIZE || total_mtl_cnt > total_inst_cnt)
+    return 1;
+
+  // Adjust max inst count to what the uniform buffer can take.
+  // Currently this is 65536 / 128 = 512 and is hardcoded in the shader.
+  total_inst_cnt = MAX_UNIFORM_BUF_SIZE / sizeof(inst);
+
+  // Each instance can have its own mtl (assuming that inst size is greater/equal than mtl)
+  total_mtl_cnt = total_inst_cnt;
+
   gpu_create_res(
-      GLOB_BUF_SIZE,
-      total_tri_cnt * sizeof(tri), // Tris
-      total_ltri_cnt * sizeof(ltri), // LTris
-      total_tri_cnt * sizeof(uint32_t), // Indices
-      2 * total_tri_cnt * sizeof(bvh_node), // BVH nodes
-      2 * total_inst_cnt * sizeof(tlas_node), // TLAS nodes
-      total_inst_cnt * sizeof(inst), // Instances
-      total_mtl_cnt * sizeof(mtl)); // Materials
+      GLOB_BUF_SIZE, // Globals (uniform buf)
+      total_mtl_cnt * sizeof(mtl), // Materials (uniform buf)
+      total_inst_cnt * sizeof(inst), // Instances (uniform buf)
+      2 * total_inst_cnt * sizeof(tlas_node), // TLAS nodes (storage buf)
+      total_tri_cnt * sizeof(tri), // Tris (storage buf)
+      total_ltri_cnt * sizeof(ltri), // LTris (storage buf)
+      total_tri_cnt * sizeof(uint32_t), // Indices (storage buf)
+      2 * total_tri_cnt * sizeof(bvh_node)); // BVH nodes (storage buf)
+
+  return 0;
 }
 
 render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t spp)
@@ -232,7 +248,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
         for(uint32_t x=0; x<BLOCK_SIZE; x++) {
           ray r;
           cam *cam = scene_get_active_cam(rd->scene);
-          ray_create_primary(&r, (float)(i + x), (float)(j + y), &rd->scene->view, cam);
+          cam_create_primary_ray(cam, &r, (float)(i + x), (float)(j + y), &rd->scene->view);
           hit h = (hit){ .t = MAX_DISTANCE };
           intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, rd->scene->bvhs, &h);
           vec3 c = rd->scene->bg_col;
@@ -253,29 +269,29 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
               mtl_id = (inst->data & MTL_OVERRIDE_BIT) ? (inst->id >> 16) : (tri->mtl & MTL_ID_MASK);
             } else {
               // Shape
-              mat4 transform;
-              mat4_from_row3x4(transform, inst->transform);
+              mat4 inv_transform;
+              mat4_from_row3x4(inv_transform, inst->inv_transform);
+              mat4 inv_transform_t;
+              mat4_transpose(inv_transform_t, inv_transform);
               switch((shape_type)(h.e >> 16)) {
                 case ST_PLANE: 
-                  nrm = vec3_unit(mat4_mul_dir(transform, (vec3){ 0.0f, 1.0f, 0.0f }));
+                  nrm = vec3_unit(mat4_mul_dir(inv_transform_t, (vec3){ 0.0f, 1.0f, 0.0f }));
                   break;
                 case ST_BOX:
                   {
                     vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
-                    mat4 inv_transform;
-                    mat4_from_row3x4(inv_transform, inst->inv_transform);
                     hit_pos = mat4_mul_pos(inv_transform, hit_pos);
                     nrm = (vec3){ 
                       (float)((int32_t)(hit_pos.x * 1.0001f)),
                       (float)((int32_t)(hit_pos.y * 1.0001f)),
                       (float)((int32_t)(hit_pos.z * 1.0001f)) };
-                    nrm = vec3_unit(mat4_mul_dir(transform, nrm));
+                    nrm = vec3_unit(mat4_mul_dir(inv_transform_t, nrm));
                   }
                   break;
                 case ST_SPHERE:
                   {
                     vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
-                    nrm = vec3_unit(vec3_sub(hit_pos, mat4_get_trans(transform)));
+                    nrm = vec3_unit(mat4_mul_dir(inv_transform_t, hit_pos));
                   }
                   break;
               }
