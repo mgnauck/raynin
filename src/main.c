@@ -231,7 +231,7 @@ uint8_t init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, s
 }
 
 __attribute__((visibility("default")))
-uint8_t init(uint32_t width, uint32_t height, uint8_t spp)
+void init(uint32_t width, uint32_t height, uint8_t spp)
 {
   pcg_srand(42u, 303u);
 
@@ -240,14 +240,10 @@ uint8_t init(uint32_t width, uint32_t height, uint8_t spp)
   logc("max tris: %i, max ltris: %i, max mtls: %i, max insts: %i",
       cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
   
-  if(renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt) != 0)
-    return 1;
-
+  renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
   rd = renderer_init(cs, width, height, spp);
 
   renderer_update_static(rd);
-
-  return 0;
 }
 
 void update_scene(scene *s, float time)

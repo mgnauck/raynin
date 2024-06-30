@@ -20,20 +20,12 @@
 
 #define TEMPORAL_WEIGHT     0.0f
 
-// Global uniform buffer offsets
+// Global buffer offsets
 #define GLOB_BUF_OFS_CFG    0
 #define GLOB_BUF_OFS_FRAME  24
 #define GLOB_BUF_OFS_CAM    48
 #define GLOB_BUF_OFS_VIEW   96
 #define GLOB_BUF_SIZE       144
-
-// Materials buffer in global uniforms (mtl is 32 bytes)
-#define GLOB_OFS_MTL_BUF    GLOB_BUF_SIZE
-#define MAX_MTL_CNT         128 // 402 is max due to 64k limit of uniforms buffer
-
-// Instances buffer in global uniforms (inst is 128 bytes)
-#define GLOB_OFS_INST_BUF   (GLOB_OFS_MTL_BUF + MAX_MTL_CNT * sizeof(mtl))
-#define MAX_INST_CNT        256 // 402 is max due to 64k limit of uniforms buffer
 
 #define MAX_BOUNCES         50
 
@@ -64,7 +56,7 @@ typedef struct render_data {
 #ifndef NATIVE_BUILD
 
 extern void gpu_create_res(uint32_t glob_sz, uint32_t tri_sz, uint32_t ltri_sz,
-    uint32_t index_sz, uint32_t bvh_node_sz);
+    uint32_t index_sz, uint32_t bvh_node_sz, uint32_t inst_sz, uint32_t mtl_sz);
 
 extern void gpu_write_buf(gpu_buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
@@ -76,24 +68,20 @@ extern void gpu_write_buf(gpu_buf_type type, uint32_t dst_ofs,
 
 #endif
 
-uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
+void renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
     uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
-  if(total_inst_cnt > MAX_INST_CNT || total_mtl_cnt > MAX_MTL_CNT)
-    return 1;
-
   gpu_create_res(
-      // Uniforms with mtls and insts
-      GLOB_BUF_SIZE + MAX_MTL_CNT * sizeof(mtl) + MAX_INST_CNT * sizeof(inst),
+      GLOB_BUF_SIZE,
       total_tri_cnt * sizeof(tri), // Tris
       total_ltri_cnt * sizeof(ltri), // LTris
       total_tri_cnt * sizeof(uint32_t), // Indices
       // BVH and TLAS nodes (shared buffer)
-      2 * (total_tri_cnt * sizeof(bvh_node) + total_inst_cnt * sizeof(tlas_node))); 
+      2 * (total_tri_cnt * sizeof(bvh_node) + total_inst_cnt * sizeof(tlas_node)), 
+      total_inst_cnt * sizeof(inst), // Instances
+      total_mtl_cnt * sizeof(mtl)); // Materials
 
   max_bvh_node_cnt = 2 * total_tri_cnt;
-
-  return 0;
 }
 
 render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t spp)
@@ -125,7 +113,7 @@ void reset_samples(render_data *rd)
 void push_mtls(render_data *rd)
 {
   scene *s = rd->scene;
-  gpu_write_buf(BT_GLOB, GLOB_OFS_MTL_BUF, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
+  gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
   scene_clr_dirty(s, RT_MTL);
 }
 
@@ -218,7 +206,7 @@ void renderer_update(render_data *rd, float time)
   if(rd->scene->dirty & RT_INST) {
     // Bvh nodes and tlas nodes share the same buffer
     gpu_write_buf(BT_BVH_NODE, max_bvh_node_cnt * sizeof(bvh_node), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
-    gpu_write_buf(BT_GLOB, GLOB_OFS_INST_BUF, s->instances, s->inst_cnt * sizeof(*s->instances));
+    gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
     scene_clr_dirty(s, RT_INST);
   }
 
