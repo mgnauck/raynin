@@ -36,10 +36,9 @@ struct Mtl
 
 struct Inst
 {
-  transform:    mat3x4f,
+  invTransform: mat3x4f,
   aabbMin:      vec3f,
   id:           u32,            // (mtl override id << 16) | (inst id & 0xffff)
-  invTransform: mat3x4f,
   aabbMax:      vec3f,
   data:         u32             // See comment on data in inst.h
 }
@@ -135,8 +134,8 @@ const FLOAT_SCALE         = 1 / 65536.0;
 const INT_SCALE           = 256.0;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<uniform> materials: array<Mtl, 512>;
-@group(0) @binding(2) var<uniform> instances: array<Inst, 512>;
+@group(0) @binding(1) var<uniform> materials: array<Mtl, 819>;
+@group(0) @binding(2) var<uniform> instances: array<Inst, 819>;
 
 @group(0) @binding(3) var<storage, read> tlasNodes: array<TlasNode>;
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
