@@ -103,7 +103,7 @@ static split find_best_cost_interval_split(const bvh *b, bvh_node *n)
 
 static void update_node_bounds(const bvh *b, bvh_node *n)
 {
-  aab box = aabb_init();
+  aabb box = aabb_init();
   for(uint32_t i=0; i<n->obj_cnt; i++) {
     const tri *t = &b->mesh->tris[b->indices[n->start_idx + i]];
     aabb_grow(&box, t->v0);
