@@ -3,7 +3,7 @@
 #include "../util/aabb.h"
 #include "../scene/inst.h"
 
-uint32_t find_best_node(tlas_node *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
+static uint32_t find_best_node(tlas_node *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
 {
   float best_area = FLT_MAX;
   uint32_t best_idx;

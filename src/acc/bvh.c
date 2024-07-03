@@ -9,14 +9,14 @@
 #define INTERVAL_CNT 16
 
 typedef struct interval {
-  aabb    aabb;
+  aabb      aabb;
   uint32_t  cnt;
 } interval;
 
 typedef struct split {
-  float   cost;
-  float   pos;
-  uint8_t axis;
+  float     cost;
+  float     pos;
+  uint8_t   axis;
 } split;
 
 void bvh_init(bvh *b, mesh *m)
@@ -30,7 +30,7 @@ void bvh_init(bvh *b, mesh *m)
 
 // Guenther et al: Realtime Ray Tracing on GPU with BVH-based Packet Traversal
 // Section Fast BVH Construction
-split find_best_cost_interval_split(const bvh *b, bvh_node *n)
+static split find_best_cost_interval_split(const bvh *b, bvh_node *n)
 {
   split best = { .cost = FLT_MAX };
   for(uint8_t axis=0; axis<3; axis++) {
@@ -101,7 +101,7 @@ split find_best_cost_interval_split(const bvh *b, bvh_node *n)
   return best;
 }
 
-void update_node_bounds(const bvh *b, bvh_node *n)
+static void update_node_bounds(const bvh *b, bvh_node *n)
 {
   n->min = (vec3){ FLT_MAX, FLT_MAX, FLT_MAX };
   n->max = (vec3){ -FLT_MAX, -FLT_MAX, -FLT_MAX };
@@ -116,7 +116,7 @@ void update_node_bounds(const bvh *b, bvh_node *n)
   }
 }
 
-void subdivide_node(bvh *b, bvh_node *n)
+static void subdivide_node(bvh *b, bvh_node *n)
 {
   // Calculate if we need to split or not
   split split = find_best_cost_interval_split(b, n);
