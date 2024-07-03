@@ -103,17 +103,16 @@ static split find_best_cost_interval_split(const bvh *b, bvh_node *n)
 
 static void update_node_bounds(const bvh *b, bvh_node *n)
 {
-  n->min = (vec3){ FLT_MAX, FLT_MAX, FLT_MAX };
-  n->max = (vec3){ -FLT_MAX, -FLT_MAX, -FLT_MAX };
+  aab box = aabb_init();
   for(uint32_t i=0; i<n->obj_cnt; i++) {
     const tri *t = &b->mesh->tris[b->indices[n->start_idx + i]];
-    n->min = vec3_min(n->min, t->v0);
-    n->min = vec3_min(n->min, t->v1);
-    n->min = vec3_min(n->min, t->v2);
-    n->max = vec3_max(n->max, t->v0);
-    n->max = vec3_max(n->max, t->v1);
-    n->max = vec3_max(n->max, t->v2);
+    aabb_grow(&box, t->v0);
+    aabb_grow(&box, t->v1);
+    aabb_grow(&box, t->v2);
   }
+  aabb_pad(&box);
+  n->min = box.min;
+  n->max = box.max;
 }
 
 static void subdivide_node(bvh *b, bvh_node *n)
