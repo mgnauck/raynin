@@ -36,10 +36,9 @@ void tlas_build(tlas_node *nodes, const inst *instances, const inst_info *inst_i
   uint32_t node_indices_cnt = 0;
   uint32_t ofs = 1; // Reserve space for root node
 
-  // Construct leaf node for each instance
+  // Construct a leaf node for each instance
   for(uint32_t i=0; i<inst_cnt; i++) {
-    if(!(inst_info[i].state & IS_DISABLED))
-    {
+    if(!(inst_info[i].state & IS_DISABLED)) {
       tlas_node *n = &nodes[ofs + node_indices_cnt];
       n->min = instances[i].min;
       n->max = instances[i].max;
@@ -72,7 +71,7 @@ void tlas_build(tlas_node *nodes, const inst *instances, const inst_info *inst_i
       // Each child node index gets 16 bits
       new_node->children = (idx_b << 16) | idx_a;
 
-      // ReplaceJonas Debbeler node A with newly created combined node
+      // Replace node A with newly created combined node
       node_indices[a] = node_cnt++;
 
       // Remove node B by replacing its slot with last node
