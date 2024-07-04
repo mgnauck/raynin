@@ -9,7 +9,7 @@ typedef struct ltri ltri;
 // Light node
 typedef struct lnode {
   vec3      min;
-  int32_t   l_idx;        // Light idx, but is only ltri idx for now
+  uint32_t  l_idx;        // Light idx, but is only ltri idx for now
   vec3      max;
   float     intensity;    // Sum of emission terms
   vec3      nrm;

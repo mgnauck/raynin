@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include "../acc/bvh.h"
+#include "../acc/lighttree.h"
 #include "../acc/tlas.h"
 #include "../scene/cam.h"
 #include "../scene/inst.h"
@@ -39,6 +40,7 @@ typedef enum buf_type {
   BT_TLAS_NODE,
   BT_TRI,
   BT_LTRI,
+  BT_LNODE,
   BT_INDEX,
   BT_BVH_NODE,
 } buf_type;
@@ -56,8 +58,8 @@ typedef struct render_data {
 #ifndef NATIVE_BUILD
 
 extern void gpu_create_res(uint32_t glob_sz, uint32_t mtl_sz,  uint32_t inst_sz,
-    uint32_t tlas_node_sz, uint32_t tri_sz, uint32_t ltri_sz, uint32_t index_sz,
-    uint32_t bvh_node_sz);
+    uint32_t tlas_node_sz, uint32_t tri_sz, uint32_t ltri_sz, uint32_t lnode_sz,
+    uint32_t index_sz, uint32_t bvh_node_sz);
 
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
@@ -91,6 +93,7 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
       2 * total_inst_cnt * sizeof(tlas_node), // TLAS nodes (storage buf)
       total_tri_cnt * sizeof(tri), // Tris (storage buf)
       total_ltri_cnt * sizeof(ltri), // LTris (storage buf)
+      2 * total_ltri_cnt * sizeof(lnode), // Light nodes (storage buf)
       total_tri_cnt * sizeof(uint32_t), // Indices (storage buf)
       2 * total_tri_cnt * sizeof(bvh_node)); // BVH nodes (storage buf)
 
@@ -130,13 +133,16 @@ void push_mtls(render_data *rd)
   scene_clr_dirty(s, RT_MTL);
 }
 
-void push_ltris(render_data *rd)
+void push_ltris_lnodes(render_data *rd)
 {
   scene *s = rd->scene;
-  gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
 
 #ifndef NATIVE_BUILD
-  // Push tris because ltri id might have changed
+  // Push ltris and light nodes
+  gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
+  gpu_write_buf(BT_LNODE, 0, s->lnodes, 2 * s->ltri_cnt * sizeof(*s->lnodes));
+
+  // Push tris because their ltri id might have changed
   uint32_t cnt = 0;
   for(uint32_t i=0; i<s->mesh_cnt; i++) {    
     mesh *m = &s->meshes[i];
@@ -184,7 +190,7 @@ void renderer_update_static(render_data *rd)
     push_mtls(rd);
 
   if(rd->scene->dirty & RT_LTRI)
-    push_ltris(rd);
+    push_ltris_lnodes(rd);
 }
 
 void renderer_update(render_data *rd, float time)
@@ -213,7 +219,7 @@ void renderer_update(render_data *rd, float time)
 
   // Push ltris
   if(rd->scene->dirty & RT_LTRI)
-    push_ltris(rd);
+    push_ltris_lnodes(rd);
 
   // Push TLAS and instances
   if(rd->scene->dirty & RT_INST) {

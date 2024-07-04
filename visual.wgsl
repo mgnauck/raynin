@@ -59,6 +59,20 @@ struct BvhNode
   objCount:     u32
 }
 
+struct LNode
+{
+  aabbMin:      vec3f,
+  lightId:      u32,
+  aabbbMax:     vec3f,
+  intensity:    f32,
+  nrm:          vec3f,
+  parent:       i32,
+  left:         i32,
+  right:        i32,
+  pad0:         f32,
+  pad1:         f32
+}
+
 struct Tri
 {
   v0:           vec3f,
@@ -72,7 +86,7 @@ struct Tri
   n1:           vec3f,
   pad2:         f32,
   n2:           vec3f,
-  pad3:         f32,
+  pad3:         f32
 }
 
 struct LTri
@@ -140,10 +154,11 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(3) var<storage, read> tlasNodes: array<TlasNode>;
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
 @group(0) @binding(5) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(6) var<storage, read> indices: array<u32>;
-@group(0) @binding(7) var<storage, read> bvhNodes: array<BvhNode>;
+@group(0) @binding(6) var<storage, read> lnodes: array<LNode>;
+@group(0) @binding(7) var<storage, read> indices: array<u32>;
+@group(0) @binding(8) var<storage, read> bvhNodes: array<BvhNode>;
 
-@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> buffer: array<vec4f>;
 
 // Traversal stacks for bvhs
 const MAX_NODE_CNT = 32u;
