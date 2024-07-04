@@ -1,5 +1,6 @@
 #include "scene.h"
 #include "../acc/bvh.h"
+#include "../acc/lighttree.h"
 #include "../acc/tlas.h"
 #include "../settings.h"
 #include "../sys/mutil.h"
@@ -31,7 +32,8 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t cam_cnt,
   s->max_inst_cnt = inst_cnt;
   s->inst_cnt     = 0;
   
-  s->ltris        = NULL; // Attach all meshes before initializing ltris
+  s->ltris        = NULL; // Attach all meshes before initializing ltris and lnodes
+  s->lnodes       = NULL;
   s->max_ltri_cnt = 0;
   s->ltri_cnt     = 0;
 
@@ -54,6 +56,7 @@ void scene_release(scene *s)
     mesh_release(&s->meshes[i]);
 
   free(s->cams);
+  free(s->lnodes);
   free(s->ltris);
   free(s->tlas_nodes);
   free(s->inst_info);
@@ -112,6 +115,9 @@ void scene_finalize(scene *s)
 {
   scene_build_bvhs(s);
   scene_prepare_ltris(s);
+
+  // Allocate light nodes of light tree according to scene's max ltri cnt
+  s->lnodes = malloc(2 * s->max_ltri_cnt * sizeof(*s->lnodes));
 }
 
 void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
@@ -251,6 +257,10 @@ void scene_prepare_render(scene *s)
 
   // Current ltri cnt in the scene
   s->ltri_cnt = ltri_cnt;
+
+  // Ltris got an update, so the light tree needs to be re-built as well
+  if(rebuild_ltris || s->dirty & RT_LTRI)
+    lighttree_build(s->lnodes, s->ltris, ltri_cnt);
 
   ///uint64_t inst_upd_end = SDL_GetTicks64();
 

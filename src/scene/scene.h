@@ -6,14 +6,15 @@
 #include "types.h"
 #include "view.h"
 
-typedef struct mtl mtl;
-typedef struct mesh mesh;
 typedef struct bvh bvh;
+typedef struct cam cam;
 typedef struct inst inst;
 typedef struct inst_info inst_info;
-typedef struct tlas_node tlas_node;
 typedef struct ltri ltri;
-typedef struct cam cam;
+typedef struct lnode lnode;
+typedef struct mesh mesh;
+typedef struct mtl mtl;
+typedef struct tlas_node tlas_node;
 
 typedef struct scene {
   uint32_t    max_mtl_cnt;
@@ -33,6 +34,7 @@ typedef struct scene {
   uint32_t    max_ltri_cnt;
   uint32_t    ltri_cnt;
   ltri        *ltris;
+  lnode       *lnodes;
   cam         *cams;
   uint32_t    cam_cnt;
   cam         *active_cam;

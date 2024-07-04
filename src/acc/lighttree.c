@@ -2,6 +2,7 @@
 #include <float.h>
 #include "../scene/tri.h"
 #include "../util/aabb.h"
+#include "../sys/log.h"
 
 static uint32_t find_best_node(lnode *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
 {
@@ -56,6 +57,10 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
     n->min = box.min;
     n->max = box.max;
 
+    //logc("Initializing ltri %i at node %i with intensity %f", n->l_idx, ofs + node_indices_cnt, n->intensity);
+    //vec3_logc("Min bounds: ", n->min);
+    //vec3_logc("Max bounds: ", n->max);
+
     node_indices[node_indices_cnt] = ofs + node_indices_cnt;
     node_indices_cnt++;
   }
@@ -78,6 +83,8 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
       // Claim new node which is the combination of node A and B
       lnode *new_node = &nodes[node_cnt];
 
+      new_node->l_idx = node_a->l_idx;
+
       new_node->min = vec3_min(node_a->min, node_b->min);
       new_node->max = vec3_max(node_a->max, node_b->max);
 
@@ -86,10 +93,15 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
       new_node->left  = idx_a;
       new_node->right = idx_b;
 
+      //logc("Combining nodes %i and %i in new node %i with intensity %f", idx_a, idx_b, node_cnt, new_node->intensity);
+      //vec3_logc("Min bounds: ", new_node->min);
+      //vec3_logc("Max bounds: ", new_node->max);
+
       if(vec3_dot(node_a->nrm, node_b->nrm) > 0.9f)
         // Keep the "same" normal of the children
         new_node->nrm = vec3_unit(vec3_add(node_a->nrm, node_b->nrm));
       else
+        // No good normal possible
         new_node->nrm = (vec3){ 0.0f, 0.0f, 0.0f };
 
       // Set new node as parent of child nodes (consider final move of root node!)
@@ -113,4 +125,5 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
 
   // Root node was formed last (at 2*n), move it to reserved index 0
   nodes[0] = nodes[--node_cnt];
+  nodes[0].prnt = -1;
 }
