@@ -59,11 +59,11 @@ struct BvhNode
   objCount:     u32
 }
 
-struct LNode
+struct LightNode
 {
   aabbMin:      vec3f,
   lightId:      u32,
-  aabbbMax:     vec3f,
+  aabbMax:      vec3f,
   intensity:    f32,
   nrm:          vec3f,
   parent:       i32,
@@ -136,7 +136,7 @@ const ST_BOX              = 1u;
 const ST_SPHERE           = 2u;
 
 // General constants
-const EPS                 = 0.0001;
+const EPS                 = 0.001;
 const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
 const TWO_PI              = 6.283185;
@@ -154,7 +154,7 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(3) var<storage, read> tlasNodes: array<TlasNode>;
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
 @group(0) @binding(5) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(6) var<storage, read> lnodes: array<LNode>;
+@group(0) @binding(6) var<storage, read> lightNodes: array<LightNode>;
 @group(0) @binding(7) var<storage, read> indices: array<u32>;
 @group(0) @binding(8) var<storage, read> bvhNodes: array<BvhNode>;
 
@@ -962,6 +962,34 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
   return vec3f(0);
 }
 
+fn sampleLTrisUniform(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+{
+  let bc = sampleBarycentric(r0.xy);
+
+  let ltriCnt = arrayLength(&ltris);
+  let ltriId = u32(floor(r0.z * f32(ltriCnt)));
+
+  let ltri = &ltris[ltriId];
+
+  *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
+  *ltriNrm = (*ltri).nrm;
+
+  let ldir = pos - *ltriPos;
+  var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
+  visible &= dot(ldir, n) < 0; // Not facing (behind)
+
+  *pdf = 1.0 / ((*ltri).area * f32(ltriCnt));
+
+  *emission = (*ltri).emission;
+
+  return visible;
+}
+
+fn sampleLTriUniformPdf(ltriId: u32) -> f32
+{
+  return 1.0 / (ltris[ltriId].area * f32(arrayLength(&ltris)));
+}
+
 fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriNrm: vec3f, lightPower: f32) -> f32
 {
   var lightDir = ltriPos - pos;
@@ -1044,14 +1072,10 @@ fn sampleLTris(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, l
 {
   let bc = sampleBarycentric(r0.xy);
 
-  // Pick a ltri uniformly
-  //let ltriCnt = arrayLength(&ltris);
-  //let ltriId = u32(floor(r0.z * f32(ltriCnt)));
-
   // Pick ltri via contribution
   var pickProb: f32;
   let ltriId = pickLTriRandomly(pos, n, r0.z, bc, &pickProb);
-  if(pickProb == 0.0) {
+  if(pickProb < EPS) {
     return false;
   }
 
@@ -1060,25 +1084,144 @@ fn sampleLTris(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, l
   *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
   *ltriNrm = (*ltri).nrm;
 
-  //let ldir = pos - *ltriPos;
-  //var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
-  //visible &= dot(ldir, n) < 0; // Not facing (behind)
-
-  //*pdf = 1.0 / ((*ltri).area * f32(ltriCnt)); // Uniform
   *pdf = pickProb / (*ltri).area;
 
   *emission = (*ltri).emission;
 
-  //return visible;
   return true;
 }
 
 fn sampleLTriPdf(pos: vec3f, n: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
 {
-  // Uniform
-  //return 1.0 / (ltris[ltriId].area * f32(arrayLength(&ltris)));
-
   let pickProb = calcLTriPickProb(pos, n, ltriPos, ltriId);
+  return pickProb / ltris[ltriId].area;
+}
+
+fn calcChildNodeProb(node: LightNode, pos: vec3f, n: vec3f) -> f32
+{
+  let left = lightNodes[node.left];
+  let right = lightNodes[node.right];
+
+  // Calculate squared min and max distance between pos and aabbs of left/right node
+  let diagHalfLeft = 0.5 * (left.aabbMax - left.aabbMin);
+  let diagHalfRight = 0.5 * (right.aabbMax - right.aabbMin);
+
+  let centLeft = 0.5 * (left.aabbMin + left.aabbMax);
+  let centRight = 0.5 * (right.aabbMin + right.aabbMax);
+
+  let vLeft = centLeft - pos;
+  let vRight = centRight - pos;
+
+  let minVLeft = max(vLeft - diagHalfLeft, vec3f(0)); // Handle inside via max
+  var minVRight = max(vRight - diagHalfRight, vec3f(0));
+
+  let minDistLeft = dot(minVLeft, minVLeft); // Squared min distances
+  let minDistRight = dot(minVRight, minVRight);
+
+  let maxVLeft = vLeft + diagHalfLeft;
+  let maxVRight = vRight + diagHalfRight;
+
+  let maxDistLeft = dot(maxVLeft, maxVLeft); // Squared max distances
+  let maxDistRight = dot(maxVRight, maxVRight);
+
+  // Calculate geometry term of reflectance bound F
+  // TODO Can we include a quick but suitable material term?
+  // TODO Provide rand from outside
+  let pLeft = left.aabbMin + 2.0 * diagHalfLeft * rand4().xyz; // Random point "on light"
+  let pRight = right.aabbMin + 2.0 * diagHalfRight * rand4().xyz;
+
+  let lvLeft = normalize(pLeft - pos); // Light vector
+  let lvRight = normalize(pRight - pos);
+
+  var fLeft = max(dot(n, lvLeft), EPS);
+  var fRight = max(dot(n, lvRight), EPS);
+
+  if(dot(node.nrm, node.nrm) > EPS) {
+    // Nrm at node is valid, i.e. it's an actual or approximated ltri nrm (see light tree creation)
+    fLeft *= max(dot(node.nrm, -lvLeft), EPS);
+    fRight *= max(dot(node.nrm, -lvRight), EPS);
+  }
+
+  // Calculate weights and node probability
+  let inside = select(false, true, minDistLeft == 0.0 && minDistRight == 0.0);
+
+  let minWeightLeft = (left.intensity * fLeft) / select(max(minDistLeft, EPS), 1.0, inside);
+  let minWeightRight = (right.intensity * fRight) / select(max(minDistRight, EPS), 1.0, inside);
+
+  let maxWeightLeft = (left.intensity * fLeft) / max(maxDistLeft, EPS);
+  let maxWeightRight = (right.intensity * fRight) / max(maxDistRight, EPS);
+
+  let probMinLeft = minWeightLeft / (minWeightLeft + minWeightRight);
+  let probMaxLeft = maxWeightLeft / (maxWeightLeft + maxWeightRight);
+
+  return 0.5 * (probMinLeft + probMaxLeft); // probRight = 1.0 - probLeft
+}
+
+// Walter et al: Real-Time Stochastic Lightcuts
+// Cem Yuksel: Stochastic Lightcuts for Sampling Many Lights
+// Yuksel et al: Real-Time Stochastic Lightcuts
+fn sampleLightTree(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+{
+  var ltriId: u32;
+  var nid = 0i;
+  var pickProb = 1.0;
+  var r = r0.z;
+
+  // Code from the 2nd paper w/o dead branch handling
+  loop {
+    let node = &lightNodes[nid];
+    if((*node).left == -1) {
+      ltriId = (*node).lightId; // Assign ltri contained at leaf
+      break;
+    } else {
+      let prob = calcChildNodeProb(*node, pos, nrm);
+      if(r < prob) {
+        pickProb *= prob; // Update probability
+        r = r / prob; // Rescale random value
+        nid = (*node).left;
+      } else {
+        pickProb *= 1.0 - prob; // Update
+        r = (r - prob) / (1.0 - prob); // Rescale
+        nid = (*node).right;
+      }
+    }
+  }
+
+  let ltri = &ltris[ltriId];
+
+  let bc = sampleBarycentric(r0.xy);
+
+  *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
+  *ltriNrm = (*ltri).nrm;
+
+  *pdf = pickProb / (*ltri).area;
+
+  *emission = (*ltri).emission;
+
+  return true;
+}
+
+fn sampleLightTreePdf(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
+{
+  var pickProb = 1.0;
+  var nid = i32(ltriId + 1); // Leaf node for given ltri is at 1 + ltri (because root light node is at 0)
+
+  // Calc probability of picking this ltri by going up the light tree from leaf to root
+  loop {
+    if(nid == 0) {
+      // Stop at root, we have the probability of the chosen ltri
+      break;
+    }
+
+    let pid = lightNodes[nid].parent;
+    let parent = &lightNodes[pid];
+
+    let prob = calcChildNodeProb(*parent, pos, nrm);
+    pickProb *= select(1.0 - prob, prob, (*parent).left == nid);
+
+    nid = pid;
+  }
+
   return pickProb / ltris[ltriId].area;
 }
 
@@ -1167,7 +1310,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    //if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       // Apply MIS
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
       var ltriWi = normalize(ltriPos - ia.pos);
@@ -1212,7 +1357,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       if(dot(ia.wo, ia.nrm) > 0) {
         // Apply MIS
         let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
-        let ltriPdf = sampleLTriPdf(lastPos, lastNrm, ia.pos, ia.ltriId);
+        //let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
+        //let ltriPdf = sampleLTriPdf(lastPos, lastNrm, ia.pos, ia.ltriId);
+        let ltriPdf = sampleLightTreePdf(lastPos, lastNrm, ia.pos, ia.ltriId);
         let weight = pdf * gsa / (pdf * gsa + ltriPdf);
         col += throughput * weight * mtl.col;
       }

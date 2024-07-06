@@ -28,8 +28,6 @@ static uint32_t find_best_node(lnode *nodes, uint32_t idx, uint32_t *node_indice
 }
 
 // Walter et al: Fast Agglomerative Clustering for Rendering
-// Walter et al: Lightcuts: A Scalable Approach to Illumination
-// Cem Yuksel: Stochastic Lightcuts for Sampling Many Lights
 void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
 {
   uint32_t node_indices[ltri_cnt];
@@ -101,7 +99,7 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
         // Keep the "same" normal of the children
         new_node->nrm = vec3_unit(vec3_add(node_a->nrm, node_b->nrm));
       else
-        // No good normal possible
+        // No good normal possible. We won't consider the lights normal during light tree evaluation.
         new_node->nrm = (vec3){ 0.0f, 0.0f, 0.0f };
 
       // Set new node as parent of child nodes (consider final move of root node!)
