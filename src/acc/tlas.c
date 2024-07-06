@@ -42,6 +42,7 @@ void tlas_build(tlas_node *nodes, const inst *instances, const inst_info *inst_i
       tlas_node *n = &nodes[ofs + node_indices_cnt];
       n->min = instances[i].min;
       n->max = instances[i].max;
+      // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
       n->children = 0;
       n->inst = i;
       node_indices[node_indices_cnt] = ofs + node_indices_cnt;

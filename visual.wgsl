@@ -46,7 +46,7 @@ struct Inst
 struct TlasNode
 {
   aabbMin:      vec3f,
-  children:     u32,            // 2x 16 bits
+  children:     u32,            // 2x 16 bits for left and right child
   aabbMax:      vec3f,
   inst:         u32             // Assigned on leaf nodes only
 }
@@ -62,15 +62,11 @@ struct BvhNode
 struct LightNode
 {
   aabbMin:      vec3f,
-  lightId:      u32,
+  id:           u32,            // Upper 16 bits is parent node id, lower 16 bits is light id (ltri id)
   aabbMax:      vec3f,
-  intensity:    f32,
+  children:     u32,            // 2x 16 bits for left and right child
   nrm:          vec3f,
-  parent:       i32,
-  left:         i32,
-  right:        i32,
-  pad0:         f32,
-  pad1:         f32
+  intensity:    f32
 }
 
 struct Tri
@@ -1099,8 +1095,8 @@ fn sampleLTriPdf(pos: vec3f, n: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
 
 fn calcChildNodeProb(node: LightNode, pos: vec3f, n: vec3f) -> f32
 {
-  let left = lightNodes[node.left];
-  let right = lightNodes[node.right];
+  let left = lightNodes[node.children & 0xffff];
+  let right = lightNodes[node.children >> 16];
 
   // Calculate squared min and max distance between pos and aabbs of left/right node
   let diagHalfLeft = 0.5 * (left.aabbMax - left.aabbMin);
@@ -1163,26 +1159,26 @@ fn calcChildNodeProb(node: LightNode, pos: vec3f, n: vec3f) -> f32
 fn sampleLightTree(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   var ltriId: u32;
-  var nid = 0i;
+  var nid = 0u;
   var pickProb = 1.0;
   var r = r0.z;
 
   // Code from the 2nd paper w/o dead branch handling
   loop {
     let node = &lightNodes[nid];
-    if((*node).left == -1) {
-      ltriId = (*node).lightId; // Assign ltri contained at leaf
+    if((*node).children == 0) {
+      ltriId = (*node).id & 0xffff; // Assign ltri contained at leaf
       break;
     } else {
       let prob = calcChildNodeProb(*node, pos, nrm);
       if(r < prob) {
         pickProb *= prob; // Update probability
         r = r / prob; // Rescale random value
-        nid = (*node).left;
+        nid = (*node).children & 0xffff; // Left
       } else {
         pickProb *= 1.0 - prob; // Update
         r = (r - prob) / (1.0 - prob); // Rescale
-        nid = (*node).right;
+        nid = (*node).children >> 16; // Right
       }
     }
   }
@@ -1204,7 +1200,7 @@ fn sampleLightTree(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec
 fn sampleLightTreePdf(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
 {
   var pickProb = 1.0;
-  var nid = i32(ltriId + 1); // Leaf node for given ltri is at 1 + ltri (because root light node is at 0)
+  var nid = ltriId + 1; // Leaf node for given ltri is at 1 + ltri (because root light node is at 0)
 
   // Calc probability of picking this ltri by going up the light tree from leaf to root
   loop {
@@ -1213,11 +1209,11 @@ fn sampleLightTreePdf(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f3
       break;
     }
 
-    let pid = lightNodes[nid].parent;
+    let pid = lightNodes[nid].id >> 16; // Parent node id
     let parent = &lightNodes[pid];
 
     let prob = calcChildNodeProb(*parent, pos, nrm);
-    pickProb *= select(1.0 - prob, prob, (*parent).left == nid);
+    pickProb *= select(1.0 - prob, prob, ((*parent).children & 0xffff) == nid);
 
     nid = pid;
   }

@@ -38,9 +38,10 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
   for(uint32_t i=0; i<ltri_cnt; i++) {
     lnode *n = &nodes[ofs + node_indices_cnt];
 
-    n->l_idx = i; // lnode i + 1 references light i
+    n->idx = i; // lnode i + 1 references light i
 
-    n->left = n->right = n->prnt = -1;
+    // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
+    n->children = 0;
 
     ltri *lt = &ltris[i];
 
@@ -55,7 +56,7 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
     n->min = box.min;
     n->max = box.max;
 
-    //logc("Initializing ltri %i at node %i with intensity %f", n->l_idx, ofs + node_indices_cnt, n->intensity);
+    //logc("Initializing ltri %i at node %i with intensity %f", n->idx, ofs + node_indices_cnt, n->intensity);
     //vec3_logc("Min bounds: ", n->min);
     //vec3_logc("Max bounds: ", n->max);
 
@@ -81,15 +82,17 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
       // Claim new node which is the combination of node A and B
       lnode *new_node = &nodes[node_cnt];
 
-      new_node->l_idx = node_a->l_idx;
+      // Set light index (ltri id). We will add parent node id later on.
+      // Root node will end up with wrong (unset) parent node id of 0. But we will handle this during traversal.
+      new_node->idx = node_a->idx;
 
       new_node->min = vec3_min(node_a->min, node_b->min);
       new_node->max = vec3_max(node_a->max, node_b->max);
 
       new_node->intensity = node_a->intensity + node_b->intensity;
 
-      new_node->left  = idx_a;
-      new_node->right = idx_b;
+      // Each child node index gets 16 bits 
+      new_node->children = (idx_b << 16) | idx_a;
 
       //logc("Combining nodes %i and %i in new node %i with intensity %f", idx_a, idx_b, node_cnt, new_node->intensity);
       //vec3_logc("Min bounds: ", new_node->min);
@@ -103,7 +106,10 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
         new_node->nrm = (vec3){ 0.0f, 0.0f, 0.0f };
 
       // Set new node as parent of child nodes (consider final move of root node!)
-      node_a->prnt = node_b->prnt = node_indices_cnt >= 2 ? node_cnt : 0;
+      // Lower 16 bits are index to light (ltri), upper 16 bits are idx of parent node
+      uint32_t parent_idx = node_indices_cnt >= 2 ? node_cnt : 0;
+      node_a->idx = (parent_idx << 16) | (node_a->idx & 0xffff);
+      node_b->idx = (parent_idx << 16) | (node_b->idx & 0xffff);
 
       // Replace node A with newly created combined node
       node_indices[a] = node_cnt++;
@@ -123,5 +129,4 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
 
   // Root node was formed last (at 2*n), move it to reserved index 0
   nodes[0] = nodes[--node_cnt];
-  nodes[0].prnt = -1;
 }

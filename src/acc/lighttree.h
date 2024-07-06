@@ -9,18 +9,12 @@ typedef struct ltri ltri;
 // Light node
 typedef struct lnode {
   vec3      min;
-  uint32_t  l_idx;        // Light idx, but is only ltri idx for now
+  uint32_t  idx;          // 16 bit parent node id, 16 bit light id (= ltri id for now)
   vec3      max;
-  float     intensity;    // Sum of emission terms
+  uint32_t  children;     // 2x 16 bit child node id
   vec3      nrm;
-  int32_t   prnt;         // TODO Combine parent with l_idx (each 16 bit)
-  int32_t   left;         // TODO Combine left/right into one (each 16 bit)
-  int32_t   right;
-  float     pad0;
-  float     pad1;
+  float     intensity;    // Sum of emission terms
 } lnode;
-
-// TODO Can we reference tris directly in the light tree avoiding dedicated ltris altogether?
 
 void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt);
 
