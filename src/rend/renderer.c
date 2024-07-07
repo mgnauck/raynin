@@ -142,12 +142,15 @@ void push_ltris_lnodes(render_data *rd)
   gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
   gpu_write_buf(BT_LNODE, 0, s->lnodes, 2 * s->ltri_cnt * sizeof(*s->lnodes));
 
-  // Push tris because their ltri id might have changed
-  uint32_t cnt = 0;
-  for(uint32_t i=0; i<s->mesh_cnt; i++) {    
-    mesh *m = &s->meshes[i];
-    gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
-    cnt += m->tri_cnt;
+  if(s->dirty & RT_TRI) {
+    // Push tris because their ltri id has changed during a ltri rebuild
+    uint32_t cnt = 0;
+    for(uint32_t i=0; i<s->mesh_cnt; i++) {    
+      mesh *m = &s->meshes[i];
+      gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
+      cnt += m->tri_cnt;
+    }
+    scene_clr_dirty(s, RT_TRI);
   }
 #endif
 
@@ -184,6 +187,7 @@ void renderer_update_static(render_data *rd)
     }
 #endif
     scene_clr_dirty(s, RT_MESH);
+    scene_clr_dirty(s, RT_TRI);
   } 
  
   if(s->dirty & RT_MTL)

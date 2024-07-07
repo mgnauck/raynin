@@ -157,6 +157,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
   info->ltri_ofs = ltri_ofs;
   info->ltri_cnt = ltri_cnt;
 
+  scene_set_dirty(s, RT_TRI); // Tris have modified ltri ids
   scene_set_dirty(s, RT_LTRI);
 }
 

@@ -4,9 +4,10 @@
 typedef enum res_type {
   RT_CAM_VIEW = 1,
   RT_MESH     = 2,
-  RT_LTRI     = 4,
-  RT_MTL      = 8,
-  RT_INST     = 16
+  RT_TRI      = 4,
+  RT_LTRI     = 8,
+  RT_MTL      = 16,
+  RT_INST     = 32
 } res_type;
 
 typedef enum shape_type {
