@@ -200,7 +200,9 @@ void generate_mesh_data(mesh *m, gltf_mesh *gm, bool is_emissive)
     mesh_create_uvcylinder(m, 1.0f, 2.0f, subx, suby, !gm->no_caps, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
   } else if(type == OT_BOX) {
-    mesh_create_box(m, gm->prims[0].mtl_idx, gm->invert_nrms);
+    uint32_t subx = (gm->subx > 0) ? gm->subx : BOX_DEFAULT_SUBX;
+    uint32_t suby = (gm->suby > 0) ? gm->suby : BOX_DEFAULT_SUBY;
+    mesh_create_box(m, subx, suby, gm->prims[0].mtl_idx, gm->invert_nrms);
     logc("Generated box with %i triangles.", m->tri_cnt);
   } else if(type == OT_QUAD) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : QUAD_DEFAULT_SUBX;

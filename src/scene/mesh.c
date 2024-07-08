@@ -18,11 +18,67 @@ void mesh_release(mesh *m)
   free(m->tris);
 }
 
+static void create_quad(mesh *m, uint32_t tri_ofs, vec3 pos, vec3 t, vec3 b, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals)
+{
+  float P = QUAD_DEFAULT_SIZE;
+  float P2 = 0.5f * P;
+
+  float dx = P / (float)subx;
+  float dz = P / (float)suby;
+
+  t = vec3_unit(t);
+  b = vec3_unit(b);
+
+  vec3 n = vec3_cross(b, t);
+  vec3 n_final = vec3_scale(n, invert_normals ? -1.0f : 1.0f);
+
+  vec3 o = vec3_add(vec3_add(pos, vec3_scale(t, -P2)), vec3_scale(b, -P2));
+
+  uint32_t ofs = tri_ofs;
+
+  float z = 0.0f;
+  for(uint32_t j=0; j<suby; j++) {
+    float x = 0.0f;
+    for(uint32_t i=0; i<subx; i++) {
+      // Tri 0
+      tri *t0 = &m->tris[ofs];
+      *t0 = (tri){
+        .v0 = vec3_add(vec3_add(o, vec3_scale(t, x)), vec3_scale(b, z)),
+        .v1 = vec3_add(vec3_add(o, vec3_scale(t, x)), vec3_scale(b, z + dz)),
+        .v2 = vec3_add(vec3_add(o, vec3_scale(t, x + dx)), vec3_scale(b, z + dz)),
+        .mtl = mtl,
+        .face_nrm = 1.0f
+      };
+      t0->n0 = t0->n1 = t0->n2 = n_final; 
+      m->centers[ofs++] = tri_calc_center(t0);
+
+      // Tri 1
+      t0 = &m->tris[ofs];
+      *t0 = (tri){
+        .v0 = vec3_add(vec3_add(o, vec3_scale(t, x)), vec3_scale(b, z)),
+        .v1 = vec3_add(vec3_add(o, vec3_scale(t, x + dx)), vec3_scale(b, z + dz)),
+        .v2 = vec3_add(vec3_add(o, vec3_scale(t, x + dx)), vec3_scale(b, z)),
+        .mtl = mtl,
+        .face_nrm = 1.0f
+      };
+      t0->n0 = t0->n1 = t0->n2 = n_final;
+      m->centers[ofs++] = tri_calc_center(t0);
+
+      x += dx;
+    }
+
+    z += dz;
+  }
+}
+
 void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals)
 {
-  // Generate quad in XZ plane at origin with normal pointing up in Y
   mesh_init(m, 2 * subx * suby);
+  
+  // Generate quad in XZ plane at origin with normal pointing up in Y
+  create_quad(m, 0, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 1.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 0.0f, 1.0f }, subx, suby, mtl, invert_normals);
 
+  /*
   float P = QUAD_DEFAULT_SIZE;
   float P2 = 0.5f * P;
 
@@ -66,10 +122,27 @@ void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool 
 
     z += dz;
   }
+  */
 }
 
-void mesh_create_box(mesh *m, uint32_t mtl, bool invert_normals)
+void mesh_create_box(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals)
 {
+  uint32_t cnt_per_side = 2 * subx * suby;
+  mesh_init(m, 6 * cnt_per_side);
+
+  // Top/bottom
+  create_quad(m, 0 * cnt_per_side, (vec3){ 0.0f,  QUAD_DEFAULT_SIZE * 0.5f, 0.0f }, (vec3){ 1.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 0.0f,  1.0f }, subx, suby, mtl, invert_normals);
+  create_quad(m, 1 * cnt_per_side, (vec3){ 0.0f, -QUAD_DEFAULT_SIZE * 0.5f, 0.0f }, (vec3){ 1.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 0.0f, -1.0f }, subx, suby, mtl, invert_normals);
+
+  // Left/right
+  create_quad(m, 2 * cnt_per_side, (vec3){ -QUAD_DEFAULT_SIZE * 0.5f, 0.0f, 0.0f }, (vec3){ 0.0f,  1.0f, 0.0f }, (vec3){ 0.0f, 0.0f, 1.0f }, subx, suby, mtl, invert_normals);
+  create_quad(m, 3 * cnt_per_side, (vec3){  QUAD_DEFAULT_SIZE * 0.5f, 0.0f, 0.0f }, (vec3){ 0.0f, -1.0f, 0.0f }, (vec3){ 0.0f, 0.0f, 1.0f }, subx, suby, mtl, invert_normals);
+
+  // Front/back
+  create_quad(m, 4 * cnt_per_side, (vec3){ 0.0f, 0.0f,  QUAD_DEFAULT_SIZE * 0.5f }, (vec3){ 1.0f,  0.0f, 0.0f }, (vec3){ 0.0f, -1.0f, 0.0f }, subx, suby, mtl, invert_normals);
+  create_quad(m, 5 * cnt_per_side, (vec3){ 0.0f, 0.0f, -QUAD_DEFAULT_SIZE * 0.5f }, (vec3){ 1.0f,  0.0f, 0.0f }, (vec3){ 0.0f,  1.0f, 0.0f }, subx, suby, mtl, invert_normals);
+
+  /*
   mesh_init(m, 12);
 
   float inv = invert_normals ? -1.0f : 1.0f;
@@ -129,6 +202,7 @@ void mesh_create_box(mesh *m, uint32_t mtl, bool invert_normals)
     t->mtl = mtl;
     t->face_nrm = 1.0f;
   }
+  */
 }
 
 void mesh_create_uvsphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uint32_t mtl, bool face_normals, bool invert_normals)

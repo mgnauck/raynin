@@ -24,6 +24,7 @@ scene         *cs = &scn;
 render_data   *rd;
 uint32_t      active_cam = 0;
 bool          orbit_cam = false;
+bool          converge = true;
 
   __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
@@ -62,6 +63,9 @@ void key_down(unsigned char key, float move_vel)
       break;
     case 'u':
       cs->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, cs->bg_col);
+      break;
+    case 'c':
+      converge = !converge;
       break;
     case 'm':
       active_cam = (active_cam + 1) % cs->cam_cnt;
@@ -248,8 +252,8 @@ void init(uint32_t width, uint32_t height, uint8_t spp)
 
 void update_scene(scene *s, float time)
 {
-  // Set scene always dirty, i.e. do not converge
-  scene_set_dirty(s, RT_CAM_VIEW);
+  if(!converge)
+    scene_set_dirty(s, RT_CAM_VIEW);
 
   // Update camera
   if(orbit_cam) {
