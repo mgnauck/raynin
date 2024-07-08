@@ -16,6 +16,6 @@ typedef struct lnode {
   float     intensity;    // Sum of emission terms
 } lnode;
 
-void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt);
+void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt);
 
 #endif

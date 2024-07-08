@@ -5,7 +5,7 @@
 
 static uint32_t find_best_node(tlas_node *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
 {
-  float best_area = FLT_MAX;
+  float best_cost = FLT_MAX;
   uint32_t best_idx;
 
   uint32_t curr_idx = node_indices[idx];
@@ -18,9 +18,9 @@ static uint32_t find_best_node(tlas_node *nodes, uint32_t idx, uint32_t *node_in
       uint32_t other_idx = node_indices[i];
       vec3 mi = vec3_min(curr_min, nodes[other_idx].min);
       vec3 ma = vec3_max(curr_max, nodes[other_idx].max);
-      float area = aabb_calc_area((aabb){ mi, ma });
-      if(area < best_area) {
-        best_area = area;
+      float cost = aabb_calc_area((aabb){ mi, ma });
+      if(cost < best_cost) {
+        best_cost = cost;
         best_idx = i;
       }
     }
@@ -42,8 +42,7 @@ void tlas_build(tlas_node *nodes, const inst *instances, const inst_info *inst_i
       tlas_node *n = &nodes[ofs + node_indices_cnt];
       n->min = instances[i].min;
       n->max = instances[i].max;
-      // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
-      n->children = 0;
+      n->children = 0; // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
       n->inst = i;
       node_indices[node_indices_cnt] = ofs + node_indices_cnt;
       node_indices_cnt++;

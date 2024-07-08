@@ -2,7 +2,6 @@
 #include <float.h>
 #include "../scene/tri.h"
 #include "../util/aabb.h"
-#include "../sys/log.h"
 
 static uint32_t find_best_node(lnode *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
 {
@@ -28,7 +27,7 @@ static uint32_t find_best_node(lnode *nodes, uint32_t idx, uint32_t *node_indice
 }
 
 // Walter et al: Fast Agglomerative Clustering for Rendering
-void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
+void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
 {
   uint32_t node_indices[ltri_cnt];
   uint32_t node_indices_cnt = 0;
@@ -36,29 +35,20 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
 
   // Construct a leaf node for each light
   for(uint32_t i=0; i<ltri_cnt; i++) {
-    lnode *n = &nodes[ofs + node_indices_cnt];
-
-    n->idx = i; // lnode i + 1 references light i
-
-    // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
-    n->children = 0;
-
-    ltri *lt = &ltris[i];
-
-    n->intensity = lt->emission.x + lt->emission.y + lt->emission.z;
-    n->nrm = lt->nrm;
-
+    const ltri *lt = &ltris[i];
     aabb box;
     aabb_grow(&box, lt->v0);
     aabb_grow(&box, lt->v1);
     aabb_grow(&box, lt->v2);
+    aabb_pad(&box);
 
+    lnode *n = &nodes[ofs + node_indices_cnt];
     n->min = box.min;
     n->max = box.max;
-
-    //logc("Initializing ltri %i at node %i with intensity %f", n->idx, ofs + node_indices_cnt, n->intensity);
-    //vec3_logc("Min bounds: ", n->min);
-    //vec3_logc("Max bounds: ", n->max);
+    n->children = 0; // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
+    n->idx = i; // lnode i + 1 references light i
+    n->nrm = lt->nrm;
+    n->intensity = lt->emission.x + lt->emission.y + lt->emission.z;
 
     node_indices[node_indices_cnt] = ofs + node_indices_cnt;
     node_indices_cnt++;
@@ -93,10 +83,6 @@ void lighttree_build(lnode *nodes, ltri *ltris, uint32_t ltri_cnt)
 
       // Each child node index gets 16 bits 
       new_node->children = (idx_b << 16) | idx_a;
-
-      //logc("Combining nodes %i and %i in new node %i with intensity %f", idx_a, idx_b, node_cnt, new_node->intensity);
-      //vec3_logc("Min bounds: ", new_node->min);
-      //vec3_logc("Max bounds: ", new_node->max);
 
       if(vec3_dot(node_a->nrm, node_b->nrm) > 0.9f)
         // Keep the "same" normal of the children
