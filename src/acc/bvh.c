@@ -1,203 +1,273 @@
 #include "bvh.h"
 #include <float.h>
-#include "../scene/mesh.h"
+#include "../scene/inst.h"
 #include "../scene/tri.h"
-#include "../sys/mutil.h"
-#include "../sys/sutil.h"
 #include "../util/aabb.h"
 
-#define INTERVAL_CNT 16
-
-typedef struct interval {
-  aabb      aabb;
-  uint32_t  cnt;
-} interval;
-
-typedef struct split {
-  float     cost;
-  float     pos;
-  uint8_t   axis;
-} split;
-
-void bvh_init(bvh *b, mesh *m)
+static uint32_t find_best_node(node *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
 {
-  // Would be 2 * tri_cnt - 1 but we skip one node
-  b->node_cnt = 0;
-  b->nodes    = malloc(2 * m->tri_cnt * sizeof(*b->nodes));
-  b->indices  = malloc(m->tri_cnt * sizeof(*b->indices));
-  b->mesh     = m;
-}
+  float best_cost = FLT_MAX;
+  uint32_t best_idx;
 
-// Guenther et al: Realtime Ray Tracing on GPU with BVH-based Packet Traversal
-// Section Fast BVH Construction
-static split find_best_cost_interval_split(const bvh *b, bvh_node *n)
-{
-  split best = { .cost = FLT_MAX };
-  for(uint8_t axis=0; axis<3; axis++) {
-    // Calculate bounds of object centers
-    float minc = FLT_MAX;
-    float maxc = -FLT_MAX;
-    for(uint32_t i=0; i<n->obj_cnt; i++) {
-      float c = vec3_get(b->mesh->centers[b->indices[n->start_idx + i]], axis);
-      minc = min(minc, c);
-      maxc = max(maxc, c);
-    }
-    if(fabsf(maxc - minc) < EPSILON)
-      continue;
-    
-    // Initialize empty intervals
-    interval intervals[INTERVAL_CNT];
-    for(uint32_t i=0; i<INTERVAL_CNT; i++)
-      intervals[i] = (interval){ aabb_init(), 0 };
+  uint32_t curr_idx = node_indices[idx];
+  vec3 curr_min = nodes[curr_idx].min;
+  vec3 curr_max = nodes[curr_idx].max;
 
-    // Count objects per interval and find their combined bounds
-    float delta = INTERVAL_CNT / (maxc - minc);
-    for(uint32_t i=0; i<n->obj_cnt; i++) {
-      vec3 center = b->mesh->centers[b->indices[n->start_idx + i]];
-      uint32_t int_idx =
-        (uint32_t)min(INTERVAL_CNT - 1, (vec3_get(center, axis) - minc) * delta);
-      aabb *int_aabb = &intervals[int_idx].aabb;
-      const tri *tri = &b->mesh->tris[b->indices[n->start_idx + i]];
-      aabb_grow(int_aabb, tri->v0);
-      aabb_grow(int_aabb, tri->v1);
-      aabb_grow(int_aabb, tri->v2);
-      intervals[int_idx].cnt++;
-    }
-
-    // Calculate left/right area and count for each plane separating the intervals
-    float areas_l[INTERVAL_CNT - 1];
-    float areas_r[INTERVAL_CNT - 1];
-    uint32_t cnts_l[INTERVAL_CNT - 1];
-    uint32_t cnts_r[INTERVAL_CNT - 1];
-    aabb aabb_l = aabb_init();
-    aabb aabb_r = aabb_init();
-    uint32_t total_cnt_l = 0;
-    uint32_t total_cnt_r = 0;
-    for(uint32_t i=0; i<INTERVAL_CNT - 1; i++) {
-      // From left
-      total_cnt_l += intervals[i].cnt;
-      cnts_l[i] = total_cnt_l;
-      aabb_l = aabb_combine(aabb_l, intervals[i].aabb);
-      areas_l[i] = aabb_calc_area(aabb_l);
-      // From right
-      total_cnt_r += intervals[INTERVAL_CNT - 1 - i].cnt;
-      cnts_r[INTERVAL_CNT - 2 - i] = total_cnt_r;
-      aabb_r = aabb_combine(aabb_r, intervals[INTERVAL_CNT - 1 - i].aabb);
-      areas_r[INTERVAL_CNT - 2 - i] = aabb_calc_area(aabb_r);
-    }
-
-    // Find best surface area cost for prepared interval planes
-    delta = 1.0f / delta;
-    for(uint32_t i=0; i<INTERVAL_CNT - 1; i++) {
-      float cost = cnts_l[i] * areas_l[i] + cnts_r[i] * areas_r[i];
-      if(cost < best.cost) {
-        best.cost = cost;
-        best.axis = axis;
-        best.pos = minc + (i + 1) * delta;
+  // Find smallest combined aabb of current node and any other node
+  for(uint32_t i=0; i<node_indices_cnt; i++) {
+    if(idx != i) {
+      uint32_t other_idx = node_indices[i];
+      vec3 mi = vec3_min(curr_min, nodes[other_idx].min);
+      vec3 ma = vec3_max(curr_max, nodes[other_idx].max);
+      float cost = aabb_calc_area((aabb){ mi, ma });
+      if(cost < best_cost) {
+        best_cost = cost;
+        best_idx = i;
       }
     }
   }
 
-  return best;
+  return best_idx;
 }
 
-static void update_node_bounds(const bvh *b, bvh_node *n)
+// Walter et al: Fast Agglomerative Clustering for Rendering
+void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
 {
-  aabb box = aabb_init();
-  for(uint32_t i=0; i<n->obj_cnt; i++) {
-    const tri *t = &b->mesh->tris[b->indices[n->start_idx + i]];
-    aabb_grow(&box, t->v0);
-    aabb_grow(&box, t->v1);
-    aabb_grow(&box, t->v2);
+  uint32_t node_indices[tri_cnt]; 
+  uint32_t node_indices_cnt = 0;
+  uint32_t ofs = 1; // Reserve space for root node
+
+  // Construct a leaf node for each instance
+  for(uint32_t i=0; i<tri_cnt; i++) {
+      const tri *t = &tris[i];
+      aabb box = aabb_init();
+      aabb_grow(&box, t->v0);
+      aabb_grow(&box, t->v1);
+      aabb_grow(&box, t->v2);
+      aabb_pad(&box);
+      
+      node *n = &nodes[ofs + node_indices_cnt];
+      n->min = box.min;
+      n->max = box.max;
+      n->children = 0;
+      n->idx = i; // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
+      
+      node_indices[node_indices_cnt] = ofs + node_indices_cnt;
+      node_indices_cnt++;
   }
-  aabb_pad(&box);
-  n->min = box.min;
-  n->max = box.max;
-}
 
-static void subdivide_node(bvh *b, bvh_node *n)
-{
-  // Calculate if we need to split or not
-  split split = find_best_cost_interval_split(b, n);
-  float no_split_cost = n->obj_cnt * aabb_calc_area((aabb){ n->min, n->max });
-  if(no_split_cost <= split.cost)
-    return;
+  // Account for nodes so far
+  uint32_t node_cnt = ofs + node_indices_cnt;
 
-  // Partition object data into left and right of split pos
-  int32_t l = n->start_idx;
-  int32_t r = n->start_idx + n->obj_cnt - 1;
-  while(l <= r) {
-    if(vec3_get(b->mesh->centers[b->indices[l]], split.axis) < split.pos) {
-      l++;
+  // Bottom up combining of nodes
+  uint32_t a = 0;
+  uint32_t b = find_best_node(nodes, a, node_indices, node_indices_cnt);
+  while(node_indices_cnt > 1) {
+    uint32_t c = find_best_node(nodes, b, node_indices, node_indices_cnt);
+    if(a == c) {
+      uint32_t idx_a = node_indices[a];
+      uint32_t idx_b = node_indices[b];
+
+      node *node_a = &nodes[idx_a];
+      node *node_b = &nodes[idx_b];
+
+      // Claim new node which is the combination of node A and B
+      node *new_node = &nodes[node_cnt];
+      new_node->min = vec3_min(node_a->min, node_b->min);
+      new_node->max = vec3_max(node_a->max, node_b->max);
+      // Each child node index gets 16 bits
+      new_node->children = (idx_b << 16) | idx_a;
+
+      // Replace node A with newly created combined node
+      node_indices[a] = node_cnt++;
+
+      // Remove node B by replacing its slot with last node
+      node_indices[b] = node_indices[--node_indices_cnt];
+
+      // Restart the loop for remaining nodes
+      b = find_best_node(nodes, a, node_indices, node_indices_cnt);
     } else {
-      // Swap object index left/right
-      uint32_t t = b->indices[l];
-      b->indices[l] = b->indices[r];
-      b->indices[r] = t;
-      r--;
+      // The best match B we found for A had itself a better match in C, thus
+      // A and B are not best matches and we continue searching with B and C.
+      a = b;
+      b = c;
     }
   }
 
-  // Stop if one side of the l/r partition is empty
-  uint32_t left_obj_cnt = l - n->start_idx;
-  if(left_obj_cnt == 0 || left_obj_cnt == n->obj_cnt)
-    return;
-
-  // Init child nodes
-  bvh_node *left_child = &b->nodes[b->node_cnt++];
-  left_child->start_idx = n->start_idx;
-  left_child->obj_cnt = left_obj_cnt;
-
-  update_node_bounds(b, left_child);
-
-  bvh_node *right_child = &b->nodes[b->node_cnt++];
-  right_child->start_idx = l;
-  right_child->obj_cnt = n->obj_cnt - left_obj_cnt;
-
-  update_node_bounds(b, right_child);
-
-  // Update current node with child link
-  n->start_idx = b->node_cnt - 2; // Right child implicitly + 1
-  n->obj_cnt = 0; // No leaf
-
-  subdivide_node(b, left_child);
-  subdivide_node(b, right_child);
+  // Root node was formed last (at 2*n), move it to reserved index 0
+  nodes[0] = nodes[--node_cnt];
 }
 
-void bvh_build(bvh *b)
+void tlas_build(node *nodes, const inst *instances, const inst_info *inst_info, uint32_t inst_cnt)
 {
-  b->node_cnt = 0;
+  uint32_t node_indices[inst_cnt]; 
+  uint32_t node_indices_cnt = 0;
+  uint32_t ofs = 1; // Reserve space for root node
 
-  for(uint32_t i=0; i<b->mesh->tri_cnt; i++)
-    b->indices[i] = i;
-
-  bvh_node *root = &b->nodes[b->node_cnt++];
-  root->start_idx = 0;
-  root->obj_cnt = b->mesh->tri_cnt;
-
-  // Skip node 1 to have children aligned in mem
-  b->node_cnt++;
-
-  update_node_bounds(b, root);
-  subdivide_node(b, root);
-}
-
-void bvh_update(bvh *b)
-{
-  for(int32_t i=b->node_cnt; i>=0; i--) {
-    if(i == 1)
-      // Skip node 1 due to mem alignment
-      continue;
-    bvh_node *n = &b->nodes[i];
-    if(n->obj_cnt > 0) {
-      // Leaf with objects
-      update_node_bounds(b, n);
-    } else {
-      // Interior node. Just update bounds as per child bounds.
-      bvh_node *l = &b->nodes[n->start_idx];
-      bvh_node *r = &b->nodes[n->start_idx + 1];
-      n->min = vec3_min(l->min, r->min);
-      n->max = vec3_max(l->max, r->max);
+  // Construct a leaf node for each instance
+  for(uint32_t i=0; i<inst_cnt; i++) {
+    if(!(inst_info[i].state & IS_DISABLED)) {
+      node *n = &nodes[ofs + node_indices_cnt];
+      n->min = instances[i].min;
+      n->max = instances[i].max;
+      n->children = 0; // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
+      n->idx = i;
+      node_indices[node_indices_cnt] = ofs + node_indices_cnt;
+      node_indices_cnt++;
     }
   }
+
+  // Account for nodes so far
+  uint32_t node_cnt = ofs + node_indices_cnt;
+
+  // Bottom up combining of nodes
+  uint32_t a = 0;
+  uint32_t b = find_best_node(nodes, a, node_indices, node_indices_cnt);
+  while(node_indices_cnt > 1) {
+    uint32_t c = find_best_node(nodes, b, node_indices, node_indices_cnt);
+    if(a == c) {
+      uint32_t idx_a = node_indices[a];
+      uint32_t idx_b = node_indices[b];
+
+      node *node_a = &nodes[idx_a];
+      node *node_b = &nodes[idx_b];
+
+      // Claim new node which is the combination of node A and B
+      node *new_node = &nodes[node_cnt];
+      new_node->min = vec3_min(node_a->min, node_b->min);
+      new_node->max = vec3_max(node_a->max, node_b->max);
+      // Each child node index gets 16 bits
+      new_node->children = (idx_b << 16) | idx_a;
+
+      // Replace node A with newly created combined node
+      node_indices[a] = node_cnt++;
+
+      // Remove node B by replacing its slot with last node
+      node_indices[b] = node_indices[--node_indices_cnt];
+
+      // Restart the loop for remaining nodes
+      b = find_best_node(nodes, a, node_indices, node_indices_cnt);
+    } else {
+      // The best match B we found for A had itself a better match in C, thus
+      // A and B are not best matches and we continue searching with B and C.
+      a = b;
+      b = c;
+    }
+  }
+
+  // Root node was formed last (at 2*n), move it to reserved index 0
+  nodes[0] = nodes[--node_cnt];
+}
+
+static uint32_t find_best_lnode(lnode *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
+{
+  float best_cost = FLT_MAX;
+  uint32_t best_idx;
+
+  lnode *curr = &nodes[node_indices[idx]];
+
+  // Find smallest cost of combining current node and any other node
+  for(uint32_t i=0; i<node_indices_cnt; i++) {
+    if(idx != i) {
+      lnode *other = &nodes[node_indices[i]];
+      vec3 diag = vec3_sub(vec3_max(curr->max, other->max), vec3_min(curr->min, other->min));
+      float cost = (curr->intensity + other->intensity) * vec3_dot(diag, diag);
+      if(cost < best_cost) {
+        best_cost = cost;
+        best_idx = i;
+      }
+    }
+  }
+
+  return best_idx;
+}
+
+void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
+{
+  uint32_t node_indices[ltri_cnt];
+  uint32_t node_indices_cnt = 0;
+  uint32_t ofs = 1; // Reserve space for root node
+
+  // Construct a leaf node for each light
+  for(uint32_t i=0; i<ltri_cnt; i++) {
+    const ltri *lt = &ltris[i];
+    aabb box;
+    aabb_grow(&box, lt->v0);
+    aabb_grow(&box, lt->v1);
+    aabb_grow(&box, lt->v2);
+    aabb_pad(&box);
+
+    lnode *n = &nodes[ofs + node_indices_cnt];
+    n->min = box.min;
+    n->max = box.max;
+    n->children = 0; // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
+    n->idx = i; // lnode i + 1 references light i
+    n->nrm = lt->nrm;
+    n->intensity = lt->emission.x + lt->emission.y + lt->emission.z;
+
+    node_indices[node_indices_cnt] = ofs + node_indices_cnt;
+    node_indices_cnt++;
+  }
+
+  // Account for nodes so far
+  uint32_t node_cnt = ofs + node_indices_cnt;
+
+  // Bottom up combining of nodes
+  uint32_t a = 0;
+  uint32_t b = find_best_lnode(nodes, a, node_indices, node_indices_cnt);
+  while(node_indices_cnt > 1) {
+    uint32_t c = find_best_lnode(nodes, b, node_indices, node_indices_cnt);
+    if(a == c) {
+      uint32_t idx_a = node_indices[a];
+      uint32_t idx_b = node_indices[b];
+
+      lnode *node_a = &nodes[idx_a];
+      lnode *node_b = &nodes[idx_b];
+
+      // Claim new node which is the combination of node A and B
+      lnode *new_node = &nodes[node_cnt];
+
+      // Set light index (ltri id). We will add parent node id later on.
+      // Root node will end up with wrong (unset) parent node id of 0. But we will handle this during traversal.
+      new_node->idx = node_a->idx;
+
+      new_node->min = vec3_min(node_a->min, node_b->min);
+      new_node->max = vec3_max(node_a->max, node_b->max);
+
+      new_node->intensity = node_a->intensity + node_b->intensity;
+
+      // Each child node index gets 16 bits 
+      new_node->children = (idx_b << 16) | idx_a;
+
+      if(vec3_dot(node_a->nrm, node_b->nrm) > 0.9f)
+        // Keep the "same" normal of the children
+        new_node->nrm = vec3_unit(vec3_add(node_a->nrm, node_b->nrm));
+      else
+        // No good normal possible. We won't consider the lights normal during light tree evaluation.
+        new_node->nrm = (vec3){ 0.0f, 0.0f, 0.0f };
+
+      // Set new node as parent of child nodes (consider final move of root node!)
+      // Lower 16 bits are index to light (ltri), upper 16 bits are idx of parent node
+      uint32_t parent_idx = node_indices_cnt >= 2 ? node_cnt : 0;
+      node_a->idx = (parent_idx << 16) | (node_a->idx & 0xffff);
+      node_b->idx = (parent_idx << 16) | (node_b->idx & 0xffff);
+
+      // Replace node A with newly created combined node
+      node_indices[a] = node_cnt++;
+
+      // Remove node B by replacing its slot with last node
+      node_indices[b] = node_indices[--node_indices_cnt];
+
+      // Restart the loop for remaining nodes
+      b = find_best_lnode(nodes, a, node_indices, node_indices_cnt);
+    } else {
+      // The best match B we found for A had itself a better match in C, thus
+      // A and B are not best matches and we continue searching with B and C.
+      a = b;
+      b = c;
+    }
+  }
+
+  // Root node was formed last (at 2*n), move it to reserved index 0
+  nodes[0] = nodes[--node_cnt];
 }

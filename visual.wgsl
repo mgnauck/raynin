@@ -43,28 +43,20 @@ struct Inst
   data:         u32             // See comment on data in inst.h
 }
 
-struct TlasNode
+struct Node
 {
   aabbMin:      vec3f,
   children:     u32,            // 2x 16 bits for left and right child
   aabbMax:      vec3f,
-  inst:         u32             // Assigned on leaf nodes only
+  idx:          u32             // Assigned on leaf nodes only
 }
 
-struct BvhNode
+struct LNode
 {
   aabbMin:      vec3f,
-  startIndex:   u32,            // Either index of first object or left child node
-  aabbMax:      vec3f,
-  objCount:     u32
-}
-
-struct LightNode
-{
-  aabbMin:      vec3f,
-  id:           u32,            // Upper 16 bits is parent node id, lower 16 bits is light id (ltri id)
-  aabbMax:      vec3f,
   children:     u32,            // 2x 16 bits for left and right child
+  aabbMax:      vec3f,
+  idx:          u32,            // Upper 16 bits is parent node id, lower 16 bits is light id (ltri id)
   nrm:          vec3f,
   intensity:    f32
 }
@@ -119,7 +111,7 @@ struct IA
 // Scene data bit handling
 const INST_ID_MASK        = 0xffffu;
 const MTL_ID_MASK         = 0xffffu;
-const TLAS_NODE_MASK      = 0xffffu;
+const NODE_MASK           = 0xffffu;
 
 const SHAPE_TYPE_BIT      = 0x40000000u;
 const MESH_SHAPE_MASK     = 0x3fffffffu;
@@ -146,23 +138,20 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<uniform> materials: array<Mtl, 819>;
 @group(0) @binding(2) var<uniform> instances: array<Inst, 819>;
-
-@group(0) @binding(3) var<storage, read> tlasNodes: array<TlasNode>;
+@group(0) @binding(3) var<storage, read> tlasNodes: array<Node>;
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
-@group(0) @binding(5) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(6) var<storage, read> lightNodes: array<LightNode>;
-@group(0) @binding(7) var<storage, read> indices: array<u32>;
-@group(0) @binding(8) var<storage, read> bvhNodes: array<BvhNode>;
+@group(0) @binding(5) var<storage, read> blasNodes: array<Node>;
+@group(0) @binding(6) var<storage, read> ltris: array<LTri>;
+@group(0) @binding(7) var<storage, read> lightNodes: array<LNode>;
+@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
 
-@group(0) @binding(9) var<storage, read_write> buffer: array<vec4f>;
-
-// Traversal stacks for bvhs
+// Traversal stacks
 const MAX_NODE_CNT = 32u;
-var<private> bvhNodeStack: array<u32, MAX_NODE_CNT>;
+var<private> blasNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
 // Ltri contributions
-const MAX_LTRI_CNT = 256u;
+const MAX_LTRI_CNT = 64u;
 var<private> ltriContributions: array<f32, MAX_LTRI_CNT>;
 
 // State of prng
@@ -461,31 +450,28 @@ fn intersectTriAnyHit(ori: vec3f, dir: vec3f, tfar: f32, tri: Tri) -> bool
   return dist > EPS && dist < tfar;
 }
 
-fn intersectBvh(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
+fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-  let bvhOfs = dataOfs << 1;
+  let blasOfs = dataOfs << 1;
 
   // Sorted DF traversal (near child first + skip far child if not within current dist)
   loop {
-    let node = &bvhNodes[bvhOfs + nodeIndex];
-    let nodeStartIndex = (*node).startIndex;
-    let nodeObjCount = (*node).objCount;
+    let node = &blasNodes[blasOfs + nodeIndex];
+    let nodeChildren = (*node).children;
    
-    if(nodeObjCount != 0) {
-      // Leaf node, intersect all contained triangles
-      for(var i=0u; i<nodeObjCount; i++) {
-        let triId = indices[dataOfs + nodeStartIndex + i];
-        intersectTriClosest(ori, dir, tris[dataOfs + triId], (triId << 16) | (instId & INST_ID_MASK), hit);
-      }
+    if(nodeChildren == 0) {
+      // Leaf node, intersect contained triangle
+      let nodeIdx = (*node).idx;
+      intersectTriClosest(ori, dir, tris[dataOfs + nodeIdx], (nodeIdx << 16) | (instId & INST_ID_MASK), hit);
     } else {
       // Interior node
-      var leftChildIndex = nodeStartIndex;
-      var rightChildIndex = nodeStartIndex + 1;
+      var leftChildIndex = nodeChildren & NODE_MASK;
+      var rightChildIndex = nodeChildren >> 16;
 
-      let leftChildNode = &bvhNodes[bvhOfs + leftChildIndex];
-      let rightChildNode = &bvhNodes[bvhOfs + rightChildIndex];
+      let leftChildNode = &blasNodes[blasOfs + leftChildIndex];
+      let rightChildNode = &blasNodes[blasOfs + rightChildIndex];
 
       // Intersect both child node aabbs
       var leftDist = intersectAabb(ori, invDir, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
@@ -497,8 +483,9 @@ fn intersectBvh(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32
         rightDist = leftDist;
         leftDist = td;
 
-        leftChildIndex += 1u;
-        rightChildIndex -= 1u;
+        let ti = rightChildIndex;
+        rightChildIndex = leftChildIndex;
+        leftChildIndex = ti;
       }
 
       if(leftDist < INF) {
@@ -506,7 +493,7 @@ fn intersectBvh(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32
         nodeIndex = leftChildIndex;
         if(rightDist < INF) {
           // Push farther child on stack if also a hit
-          bvhNodeStack[nodeStackIndex] = rightChildIndex;
+          blasNodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
         }
         continue;
@@ -516,38 +503,34 @@ fn intersectBvh(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32
     // Check the stack and continue traversal if something left
     if(nodeStackIndex > 0) {
       nodeStackIndex--;
-      nodeIndex = bvhNodeStack[nodeStackIndex];
+      nodeIndex = blasNodeStack[nodeStackIndex];
     } else {
       return;
     }
   }
 }
 
-fn intersectBvhAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
+fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
 {
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-  let bvhOfs = dataOfs << 1;
+  let blasOfs = dataOfs << 1;
 
   // Early exit, unordered DF traversal
   loop {
-    let node = &bvhNodes[bvhOfs + nodeIndex];
+    let node = &blasNodes[blasOfs + nodeIndex];
     if(intersectAabbAnyHit(ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
-      let nodeStartIndex = (*node).startIndex;
-      let nodeObjCount = (*node).objCount; 
-      if(nodeObjCount != 0) {
-        // Leaf node, intersect all contained triangles
-        for(var i=0u; i<nodeObjCount; i++) {
-          let triId = indices[dataOfs + nodeStartIndex + i];
-          if(intersectTriAnyHit(ori, dir, tfar, tris[dataOfs + triId])) {
-            return true;
-          }
+      let nodeChildren = (*node).children;
+      if(nodeChildren == 0) {
+        // Leaf node, intersect contained triangle
+        if(intersectTriAnyHit(ori, dir, tfar, tris[dataOfs + (*node).idx])) {
+          return true;
         }
       } else {
         // Interior node, continue with left child
-        nodeIndex = nodeStartIndex;
+        nodeIndex = nodeChildren & NODE_MASK;
         // Push right child node on stack
-        bvhNodeStack[nodeStackIndex] = nodeStartIndex + 1;
+        blasNodeStack[nodeStackIndex] = nodeChildren >> 16;
         nodeStackIndex++;
         continue;
       }
@@ -555,7 +538,7 @@ fn intersectBvhAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs:
     // Check the stack and continue traversal if something left
     if(nodeStackIndex > 0) {
       nodeStackIndex--;
-      nodeIndex = bvhNodeStack[nodeStackIndex];
+      nodeIndex = blasNodeStack[nodeStackIndex];
     } else {
       return false;
     }
@@ -584,7 +567,7 @@ fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, Hit>)
     }
     default: {
       // Mesh type
-      intersectBvh(oriObj, dirObj, 1 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
+      intersectBlas(oriObj, dirObj, 1 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
     }
   }
 }
@@ -609,7 +592,7 @@ fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, inst: Inst) -> bool
     }
     default: {
       // Mesh type
-      return intersectBvhAnyHit(oriObj, dirObj, 1 / dirObj, tfar, inst.data & MESH_SHAPE_MASK);
+      return intersectBlasAnyHit(oriObj, dirObj, 1 / dirObj, tfar, inst.data & MESH_SHAPE_MASK);
     }
   }
 }
@@ -631,10 +614,10 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 
     if(nodeChildren == 0) {
       // Leaf node, intersect the single assigned instance 
-      intersectInst(ori, dir, instances[(*node).inst], &hit);
+      intersectInst(ori, dir, instances[(*node).idx], &hit);
     } else {
       // Interior node
-      var leftChildIndex = nodeChildren & TLAS_NODE_MASK;
+      var leftChildIndex = nodeChildren & NODE_MASK;
       var rightChildIndex = nodeChildren >> 16;
 
       let leftChildNode = &tlasNodes[leftChildIndex];
@@ -696,12 +679,12 @@ fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
       let nodeChildren = (*node).children;
       if(nodeChildren == 0) {
         // Leaf node, intersect the single assigned instance
-        if(intersectInstAnyHit(p0, dir, tfar, instances[(*node).inst])) {
+        if(intersectInstAnyHit(p0, dir, tfar, instances[(*node).idx])) {
           return true;
         }
       } else {
         // Interior node, continue traversal with left child node
-        nodeIndex = nodeChildren & TLAS_NODE_MASK;
+        nodeIndex = nodeChildren & NODE_MASK;
         // Push right child node on stack
         tlasNodeStack[nodeStackIndex] = nodeChildren >> 16;
         nodeStackIndex++;
@@ -1093,7 +1076,7 @@ fn sampleLTriPdf(pos: vec3f, n: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
   return pickProb / ltris[ltriId].area;
 }
 
-fn calcChildNodeProb(node: LightNode, pos: vec3f, n: vec3f) -> f32
+fn calcChildNodeProb(node: LNode, pos: vec3f, n: vec3f) -> f32
 {
   let left = lightNodes[node.children & 0xffff];
   let right = lightNodes[node.children >> 16];
@@ -1167,7 +1150,7 @@ fn sampleLightTree(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec
   loop {
     let node = &lightNodes[nid];
     if((*node).children == 0) {
-      ltriId = (*node).id & 0xffff; // Assign ltri contained at leaf
+      ltriId = (*node).idx & 0xffff; // Assign ltri contained at leaf
       break;
     } else {
       let prob = calcChildNodeProb(*node, pos, nrm);
@@ -1209,7 +1192,7 @@ fn sampleLightTreePdf(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f3
       break;
     }
 
-    let pid = lightNodes[nid].id >> 16; // Parent node id
+    let pid = lightNodes[nid].idx >> 16; // Parent node id
     let parent = &lightNodes[pid];
 
     let prob = calcChildNodeProb(*parent, pos, nrm);
@@ -1306,9 +1289,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    //if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
     //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-    if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    //if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       // Apply MIS
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
       var ltriWi = normalize(ltriPos - ia.pos);
@@ -1353,9 +1336,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       if(dot(ia.wo, ia.nrm) > 0) {
         // Apply MIS
         let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
-        //let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
+        let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
         //let ltriPdf = sampleLTriPdf(lastPos, lastNrm, ia.pos, ia.ltriId);
-        let ltriPdf = sampleLightTreePdf(lastPos, lastNrm, ia.pos, ia.ltriId);
+        //let ltriPdf = sampleLightTreePdf(lastPos, lastNrm, ia.pos, ia.ltriId);
         let weight = pdf * gsa / (pdf * gsa + ltriPdf);
         col += throughput * weight * mtl.col;
       }

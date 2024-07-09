@@ -1,7 +1,5 @@
 #include "scene.h"
 #include "../acc/bvh.h"
-#include "../acc/lighttree.h"
-#include "../acc/tlas.h"
 #include "../settings.h"
 #include "../sys/mutil.h"
 #include "../sys/sutil.h"
@@ -13,23 +11,20 @@
 #include "mtl.h"
 #include "tri.h"
 
-void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t cam_cnt, uint32_t inst_cnt)
+void scene_init(scene *s, uint32_t max_mesh_cnt, uint32_t max_mtl_cnt, uint32_t max_cam_cnt, uint32_t max_inst_cnt)
 {
-  s->mtls         = malloc(mtl_cnt * sizeof(*s->mtls)); 
-  s->max_mtl_cnt  = mtl_cnt;
+  s->mtls         = malloc(max_mtl_cnt * sizeof(*s->mtls)); 
+  s->max_mtl_cnt  = max_mtl_cnt;
   s->mtl_cnt      = 0;
  
-  s->meshes       = malloc(mesh_cnt * sizeof(*s->meshes));
-  s->max_mesh_cnt = mesh_cnt;
+  s->meshes       = malloc(max_mesh_cnt * sizeof(*s->meshes));
+  s->max_mesh_cnt = max_mesh_cnt;
   s->mesh_cnt     = 0;
  
-  s->bvhs         = malloc(mesh_cnt * sizeof(*s->bvhs));
-  s->bvh_cnt      = 0;
-  
-  s->instances    = malloc(inst_cnt * sizeof(*s->instances));
-  s->inst_info    = malloc(inst_cnt * sizeof(*s->inst_info));
-  s->tlas_nodes   = malloc(2 * inst_cnt * sizeof(*s->tlas_nodes));
-  s->max_inst_cnt = inst_cnt;
+  s->instances    = malloc(max_inst_cnt * sizeof(*s->instances));
+  s->inst_info    = malloc(max_inst_cnt * sizeof(*s->inst_info));
+  s->tlas_nodes   = malloc(2 * max_inst_cnt * sizeof(*s->tlas_nodes));
+  s->max_inst_cnt = max_inst_cnt;
   s->inst_cnt     = 0;
   
   s->ltris        = NULL; // Attach all meshes before initializing ltris and lnodes
@@ -37,11 +32,12 @@ void scene_init(scene *s, uint32_t mesh_cnt, uint32_t mtl_cnt, uint32_t cam_cnt,
   s->max_ltri_cnt = 0;
   s->ltri_cnt     = 0;
 
-  s->cams         = malloc(cam_cnt * sizeof(*s->cams));
-  s->cam_cnt      = cam_cnt;
-  s->active_cam   = &s->cams[0];
-
   s->max_tri_cnt  = 0; // Attach all meshes before calculating this
+  s->blas_nodes   = NULL;
+
+  s->cams         = malloc(max_cam_cnt * sizeof(*s->cams));
+  s->cam_cnt      = max_cam_cnt;
+  s->active_cam   = &s->cams[0];
 
   s->bg_col       = (vec3){ 0.0f, 0.0f, 0.0f };
 
@@ -56,12 +52,12 @@ void scene_release(scene *s)
     mesh_release(&s->meshes[i]);
 
   free(s->cams);
+  free(s->blas_nodes);
   free(s->lnodes);
   free(s->ltris);
   free(s->tlas_nodes);
   free(s->inst_info);
   free(s->instances);
-  free(s->bvhs);
   free(s->meshes);
   free(s->mtls);
 }
@@ -76,48 +72,32 @@ void scene_clr_dirty(scene *s, res_type r)
   s->dirty &= ~r;
 }
 
-void scene_build_bvhs(scene *s)
-{
-  if(s->dirty & RT_MESH) {
-    for(uint32_t i=0; i<s->mesh_cnt; i++) {
-      if(s->bvh_cnt == i) {
-        bvh_init(&s->bvhs[i], &s->meshes[i]);
-        s->bvh_cnt++;
-      }
-      bvh_build(&s->bvhs[i]);
-    }
-  }
-}
-
-void scene_prepare_ltris(scene *s)
-{
-  if(!s->ltris) {
-    // Count the tris and ltris of all the meshes
-    uint32_t ltri_cnt = 0;
-    uint32_t tri_cnt = 0;
-    for(uint32_t i=0; i<s->mesh_cnt; i++) {
-      mesh *m = &s->meshes[i];
-      if(m->is_emissive)
-        ltri_cnt += m->tri_cnt;
-      tri_cnt += m->tri_cnt;
-    }
-
-    // Remeber total tri cnt (renderer needs to reserve gpu resources)
-    s->max_tri_cnt = tri_cnt;
-
-    // Allocate space for given ltri cnt
-    s->max_ltri_cnt = ltri_cnt;
-    s->ltris = malloc(ltri_cnt * sizeof(*s->ltris));
-  }
-}
-
 void scene_finalize(scene *s)
 {
-  scene_build_bvhs(s);
-  scene_prepare_ltris(s);
+  // Count tris and ltris of all the meshes
+  s->max_tri_cnt = 0;
+  s->max_ltri_cnt = 0;
+  for(uint32_t i=0; i<s->mesh_cnt; i++) {
+    mesh *m = &s->meshes[i];
+    if(m->is_emissive)
+      s->max_ltri_cnt += m->tri_cnt;
+    s->max_tri_cnt += m->tri_cnt;
+  }
+
+  // Allocate space for given ltri cnt
+  s->ltris = malloc(s->max_ltri_cnt * sizeof(*s->ltris));
 
   // Allocate light nodes of light tree according to scene's max ltri cnt
   s->lnodes = malloc(2 * s->max_ltri_cnt * sizeof(*s->lnodes));
+
+  // Allocate enough blas nodes to cover the tris of all meshes
+  s->blas_nodes = malloc(2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
+
+  // Build a blas for each mesh
+  for(uint32_t i=0; i<s->mesh_cnt; i++) {
+    mesh *m = &s->meshes[i];
+    blas_build(&s->blas_nodes[2 * m->ofs], m->tris, m->tri_cnt);
+  }
 }
 
 void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
@@ -228,9 +208,10 @@ void scene_prepare_render(scene *s)
             ma = (vec3){  P,  EPSILON,  P };
           }
         } else {
-          // Mesh type, use (object space) BVH root nodes
-          mi = s->bvhs[info->mesh_shape].nodes[0].min;
-          ma = s->bvhs[info->mesh_shape].nodes[0].max;
+          // Mesh type, use root node object-space aabb
+          node *n = &s->blas_nodes[2 * (inst->data & MESH_SHAPE_MASK)];
+          mi = n->min;
+          ma = n->max;
         }
 
         // Transform instance aabb to world space
@@ -260,12 +241,17 @@ void scene_prepare_render(scene *s)
   s->ltri_cnt = ltri_cnt;
 
   // Ltris got an update, so the light tree needs to be re-built as well
-  if(rebuild_ltris || s->dirty & RT_LTRI)
-    lighttree_build(s->lnodes, s->ltris, ltri_cnt);
+  if(s->dirty & RT_LTRI) {
+    //logc("Rebuild light tree with max ltris: %i, ltris: %i", s->max_ltri_cnt, s->ltri_cnt);
+    memset(s->lnodes, 0, 2 * s->max_ltri_cnt * sizeof(*s->lnodes));
+    lighttree_build(s->lnodes, s->ltris, s->ltri_cnt);
+  }
 
   ///uint64_t inst_upd_end = SDL_GetTicks64();
 
   if(rebuild_tlas) {
+    //logc("Rebuild tlas with max inst: %i, inst: %i", s->max_inst_cnt, s->inst_cnt);
+    memset(s->tlas_nodes, 0, 2 * s->max_inst_cnt * sizeof(*s->tlas_nodes));
     tlas_build(s->tlas_nodes, s->instances, s->inst_info, s->inst_cnt);
     scene_set_dirty(s, RT_INST);
   }
@@ -321,7 +307,7 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
 
 #ifndef NATIVE_BUILD
   // Lowest 30 bits are shape type (if bit 31 is set) or
-  // offset into tris/indices and 2 * data into bvhs
+  // offset into tris and 2 * data into blas
   // i.e. max offset is triangle 1073741823 :)
   inst->data = (mesh_shape & SHAPE_TYPE_BIT) ? mesh_shape : s->meshes[mesh_shape].ofs;
 #else
@@ -424,15 +410,14 @@ mesh *scene_acquire_mesh(scene *s)
 
 uint32_t scene_attach_mesh(scene *s, mesh *m, bool is_mesh_emissive)
 {
+  scene_set_dirty(s, RT_MESH);
+
   // Set and update offset into tri buffer
   m->ofs = s->curr_ofs;
   s->curr_ofs += m->tri_cnt;
 
   // Meshes with emissive mtl receive special treatment
   m->is_emissive = is_mesh_emissive;
-
-  // Flag to trigger bvh calculation
-  scene_set_dirty(s, RT_MESH);
 
   // Return mesh id
   return s->mesh_cnt++;

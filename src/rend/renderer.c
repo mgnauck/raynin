@@ -1,7 +1,5 @@
 #include "renderer.h"
 #include "../acc/bvh.h"
-#include "../acc/lighttree.h"
-#include "../acc/tlas.h"
 #include "../scene/cam.h"
 #include "../scene/inst.h"
 #include "../scene/mesh.h"
@@ -39,10 +37,9 @@ typedef enum buf_type {
   BT_INST,
   BT_TLAS_NODE,
   BT_TRI,
+  BT_BLAS_NODE,
   BT_LTRI,
   BT_LNODE,
-  BT_INDEX,
-  BT_BVH_NODE,
 } buf_type;
 
 typedef struct render_data {
@@ -57,9 +54,10 @@ typedef struct render_data {
 
 #ifndef NATIVE_BUILD
 
-extern void gpu_create_res(uint32_t glob_sz, uint32_t mtl_sz,  uint32_t inst_sz,
-    uint32_t tlas_node_sz, uint32_t tri_sz, uint32_t ltri_sz, uint32_t lnode_sz,
-    uint32_t index_sz, uint32_t bvh_node_sz);
+extern void gpu_create_res(uint32_t glob_sz, uint32_t mtl_sz,
+    uint32_t inst_sz, uint32_t tlas_node_sz,
+    uint32_t tri_sz, uint32_t blas_node_sz,
+    uint32_t ltri_sz, uint32_t lnode_sz);
 
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
@@ -75,7 +73,7 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
     uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
   // Sanity check for implicitly assumed sizes/counts
-  if(sizeof(mtl) > sizeof(inst) || 2 * sizeof(tlas_node) > sizeof(inst) ||
+  if(sizeof(mtl) > sizeof(inst) || 2 * sizeof(node) > sizeof(inst) ||
       total_inst_cnt * sizeof(inst) > MAX_UNIFORM_BUF_SIZE || total_mtl_cnt > total_inst_cnt)
     return 1;
 
@@ -90,12 +88,11 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
       GLOB_BUF_SIZE, // Globals (uniform buf)
       total_mtl_cnt * sizeof(mtl), // Materials (uniform buf)
       total_inst_cnt * sizeof(inst), // Instances (uniform buf)
-      2 * total_inst_cnt * sizeof(tlas_node), // TLAS nodes (storage buf)
+      2 * total_inst_cnt * sizeof(node), // TLAS nodes (storage buf)
       total_tri_cnt * sizeof(tri), // Tris (storage buf)
+      2 * total_tri_cnt * sizeof(node), // BLAS nodes (storage buf)
       total_ltri_cnt * sizeof(ltri), // LTris (storage buf)
-      2 * total_ltri_cnt * sizeof(lnode), // Light nodes (storage buf)
-      total_tri_cnt * sizeof(uint32_t), // Indices (storage buf)
-      2 * total_tri_cnt * sizeof(bvh_node)); // BVH nodes (storage buf)
+      2 * total_ltri_cnt * sizeof(lnode)); // Light nodes (storage buf)
 
   return 0;
 }
@@ -133,28 +130,32 @@ void push_mtls(render_data *rd)
   scene_clr_dirty(s, RT_MTL);
 }
 
+void push_tris(render_data *rd)
+{
+  scene *s = rd->scene;
+#ifndef NATIVE_BUILD
+  for(uint32_t i=0; i<s->mesh_cnt; i++) {    
+    mesh *m = &s->meshes[i];
+    gpu_write_buf(BT_TRI, m->ofs * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
+  }
+#endif
+  scene_clr_dirty(s, RT_TRI);
+}
+
 void push_ltris_lnodes(render_data *rd)
 {
   scene *s = rd->scene;
-
-#ifndef NATIVE_BUILD
-  // Push ltris and light nodes
   gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
   gpu_write_buf(BT_LNODE, 0, s->lnodes, 2 * s->ltri_cnt * sizeof(*s->lnodes));
-
-  if(s->dirty & RT_TRI) {
-    // Push tris because their ltri id has changed during a ltri rebuild
-    uint32_t cnt = 0;
-    for(uint32_t i=0; i<s->mesh_cnt; i++) {    
-      mesh *m = &s->meshes[i];
-      gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
-      cnt += m->tri_cnt;
-    }
-    scene_clr_dirty(s, RT_TRI);
-  }
-#endif
-
   scene_clr_dirty(s, RT_LTRI);
+}
+
+void push_blas(render_data *rd)
+{
+#ifndef NATIVE_BUILD
+  scene *s = rd->scene;
+  gpu_write_buf(BT_BLAS_NODE, 0, s->blas_nodes, 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
+#endif
 }
 
 void renderer_update_static(render_data *rd)
@@ -170,24 +171,10 @@ void renderer_update_static(render_data *rd)
   // Update instances, build ltris and tlas
   scene_prepare_render(s);
 
-  // Prepare bvhs
   if(s->dirty & RT_MESH) {
-#ifndef NATIVE_BUILD
-    // Push tris, indices and bvh nodes
-    uint32_t cnt = 0;
-    for(uint32_t i=0; i<s->mesh_cnt; i++) {    
-      mesh *m = &s->meshes[i];
-      gpu_write_buf(BT_TRI, cnt * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
-
-      bvh *b = &s->bvhs[i];
-      gpu_write_buf(BT_INDEX, cnt * sizeof(*b->indices), b->indices, m->tri_cnt * sizeof(*b->indices));
-      gpu_write_buf(BT_BVH_NODE, 2 * cnt * sizeof(*b->nodes), b->nodes, 2 * m->tri_cnt * sizeof(*b->nodes));
-
-      cnt += m->tri_cnt;
-    }
-#endif
+    push_tris(rd);
+    push_blas(rd);
     scene_clr_dirty(s, RT_MESH);
-    scene_clr_dirty(s, RT_TRI);
   } 
  
   if(s->dirty & RT_MTL)
@@ -222,8 +209,11 @@ void renderer_update(render_data *rd, float time)
     push_mtls(rd);
 
   // Push ltris
-  if(rd->scene->dirty & RT_LTRI)
+  if(rd->scene->dirty & RT_LTRI) {
     push_ltris_lnodes(rd);
+    if(rd->scene->dirty & RT_TRI) // Ltri id in tri is modified by ltri rebuild
+      push_tris(rd);
+  }
 
   // Push TLAS and instances
   if(rd->scene->dirty & RT_INST) {
@@ -247,7 +237,6 @@ void renderer_update(render_data *rd, float time)
 }
 
 #ifdef NATIVE_BUILD
-
 void renderer_render(render_data *rd, SDL_Surface *surface)
 {
   float weight = rd->spp / (float)rd->gathered_spp;
@@ -260,7 +249,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
           cam *cam = scene_get_active_cam(rd->scene);
           cam_create_primary_ray(cam, &r, (float)(i + x), (float)(j + y), &rd->scene->view);
           hit h = (hit){ .t = MAX_DISTANCE };
-          intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, rd->scene->bvhs, &h);
+          intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, rd->scene->meshes, rd->scene->blas_nodes, &h);
           vec3 c = rd->scene->bg_col;
           if(h.t < MAX_DISTANCE) {
             inst *inst = &rd->scene->instances[h.e & INST_ID_MASK];

@@ -7,12 +7,11 @@
 
 #define MAX_DISTANCE  FLT_MAX
 
+typedef struct inst inst;
+typedef struct mesh mesh;
+typedef struct node node;
 typedef struct ray ray;
 typedef struct tri tri;
-typedef struct bvh_node bvh_node;
-typedef struct bvh bvh;
-typedef struct tlas_node tlas_node;
-typedef struct inst inst;
 
 typedef struct hit {
   float     t;
@@ -26,8 +25,8 @@ void  intersect_plane(const ray *r, uint32_t inst_id, hit *h);
 void  intersect_unitbox(const ray *r, uint32_t inst_id, hit *h);
 void  intersect_unitsphere(const ray *r, uint32_t inst_id, hit *h);
 void  intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id, hit *h);
-void  intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices, const tri *tris, uint32_t inst_id, hit *h);
-void  intersect_inst(const ray *r, const inst *b, const bvh *bvh, hit *h);
-void  intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, const bvh *bvhs, hit *h);
+void  intersect_blas(const ray *r, const node *blas_nodes, const tri *tris, uint32_t inst_id, hit *h);
+void  intersect_inst(const ray *r, const inst *b, const mesh *meshes, const node *blas_nodes, hit *h);
+void  intersect_tlas(const ray *r, const node *tlas_nodes, const inst *instances, const mesh *meshes, const node *blas_nodes, hit *h);
 
 #endif

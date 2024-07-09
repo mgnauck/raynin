@@ -4,24 +4,31 @@
 #include <stdint.h>
 #include "../util/vec3.h"
 
-typedef struct mesh mesh;
+typedef struct inst inst;
+typedef struct inst_info inst_info;
+typedef struct ltri ltri;
+typedef struct tri tri;
 
-typedef struct bvh_node {
+// BLAS and TLAS node
+typedef struct node {
   vec3      min;
-  uint32_t  start_idx; // obj start or node index
+  uint32_t  children;     // 2x 16 bit child node id
   vec3      max;
-  uint32_t  obj_cnt;
-} bvh_node;
+  uint32_t  idx;          // Only set at leaf nodes
+} node;
 
-typedef struct bvh {
-  uint32_t  node_cnt;
-  bvh_node  *nodes;
-  uint32_t  *indices;
-  mesh      *mesh;
-} bvh;
+// Light node
+typedef struct lnode {
+  vec3      min;
+  uint32_t  children;     // 2x 16 bit child node id
+  vec3      max;
+  uint32_t  idx;          // 16 bit parent node id, 16 bit light id (= ltri id for now)
+  vec3      nrm;
+  float     intensity;    // Sum of emission terms
+} lnode;
 
-void  bvh_init(bvh *b, mesh *m);
-void  bvh_build(bvh *b);
-void  bvh_update(bvh *b);
+void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt);
+void tlas_build(node *nodes, const inst *instances, const inst_info *inst_info, uint32_t inst_cnt);
+void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt);
 
 #endif

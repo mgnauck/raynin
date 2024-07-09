@@ -1,11 +1,11 @@
 #include "intersect.h"
 #include "../acc/bvh.h"
-#include "../acc/tlas.h"
 #include "../scene/inst.h"
 #include "../scene/mesh.h"
 #include "../scene/tri.h"
 #include "../scene/types.h"
 #include "../sys/mutil.h"
+#include "../sys/log.h"
 #include "../util/ray.h"
 
 // GPU efficient slabs test [Laine et al. 2013; Afra et al. 2016]
@@ -122,28 +122,25 @@ void intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id
   }
 }
 
-void intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices, const tri *tris, uint32_t inst_id, hit *h)
+void intersect_blas(const ray *r, const node *blas_nodes, const tri *tris, uint32_t inst_id, hit *h)
 {
 #define NODE_STACK_SIZE 32
-  uint32_t        stack_pos = 0;
-  const bvh_node  *node_stack[NODE_STACK_SIZE];
-  const bvh_node  *node = nodes;
+  uint32_t    stack_pos = 0;
+  const node  *node_stack[NODE_STACK_SIZE];
+  const node  *n = blas_nodes;
 
   while(true) {
-    if(node->obj_cnt > 0) {
-      // Leaf node, check triangles
-      for(uint32_t i=0; i<node->obj_cnt; i++) {
-        uint32_t tri_id = indices[node->start_idx + i];
-        intersect_tri(r, &tris[tri_id], inst_id, tri_id, h);
-      }
+    if(n->children == 0) {
+      // Leaf node, check triangle
+      intersect_tri(r, &tris[n->idx], inst_id, n->idx, h);
       if(stack_pos > 0)
-        node = node_stack[--stack_pos];
+        n = node_stack[--stack_pos];
       else
         break;
     } else {
       // Interior node, check aabbs of children
-      const bvh_node *c1 = &nodes[node->start_idx];
-      const bvh_node *c2 = &nodes[node->start_idx + 1];
+      const node *c1 = &blas_nodes[n->children & 0xffff];
+      const node *c2 = &blas_nodes[n->children >> 16];
       float d1 = intersect_aabb(r, h->t, c1->min, c1->max);
       float d2 = intersect_aabb(r, h->t, c2->min, c2->max);
       if(d1 > d2) {
@@ -151,28 +148,30 @@ void intersect_bvh(const ray *r, const bvh_node *nodes, const uint32_t *indices,
         float td = d1;
         d1 = d2;
         d2 = td;
-        const bvh_node *tc = c1;
+        const node *tc = c1;
         c1 = c2;
         c2 = tc;
       }
       if(d1 == MAX_DISTANCE) {
         // Did miss both children, so check stack
         if(stack_pos > 0)
-          node = node_stack[--stack_pos];
+          n = node_stack[--stack_pos];
         else
           break;
       } else {
         // Continue with nearer child node
-        node = c1;
+        n = c1;
         // Push farther child on stack if also a hit
         if(d2 < MAX_DISTANCE)
           node_stack[stack_pos++] = c2;
+        if(stack_pos >= NODE_STACK_SIZE)
+          logc("Exceeded node stack size!!");
       }
     }
   }
 }
 
-void intersect_inst(const ray *r, const inst *inst, const bvh *bvhs, hit *h)
+void intersect_inst(const ray *r, const inst *inst, const mesh *meshes, const node *blas_nodes, hit *h)
 {
   ray r_obj;
   mat4 inv_transform;
@@ -193,32 +192,32 @@ void intersect_inst(const ray *r, const inst *inst, const bvh *bvhs, hit *h)
         break;
     }
   } else {
-    // Intersect mesh type via its bvh
-    const bvh *bvh = &bvhs[inst->data & MESH_SHAPE_MASK];
-    intersect_bvh(&r_obj, bvh->nodes, bvh->indices, bvh->mesh->tris, inst->id, h);
+    // Intersect mesh type via its blas
+    const mesh *mesh = &meshes[inst->data & MESH_SHAPE_MASK];
+    const node *node = &blas_nodes[2 * mesh->ofs];
+    intersect_blas(&r_obj, node, mesh->tris, inst->id, h);
   }
 }
 
-void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances, const bvh *bvhs, hit *h)
+void intersect_tlas(const ray *r, const node *tlas_nodes, const inst *instances, const mesh *meshes, const node *blas_nodes, hit *h)
 {
 #define NODE_STACK_SIZE 32
-  uint32_t        stack_pos = 0;
-  const tlas_node *node_stack[NODE_STACK_SIZE];
-  const tlas_node *node = nodes;
+  uint32_t    stack_pos = 0;
+  const node  *node_stack[NODE_STACK_SIZE];
+  const node  *n = tlas_nodes;
 
   while(true) {
-    if(node->children == 0) {
+    if(n->children == 0) {
       // Leaf node with a single instance assigned
-      const inst *inst = &instances[node->inst];
-      intersect_inst(r, inst, bvhs, h);
+      intersect_inst(r, &instances[n->idx], meshes, blas_nodes, h);
       if(stack_pos > 0)
-        node = node_stack[--stack_pos];
+        n = node_stack[--stack_pos];
       else
         break;
     } else {
       // Interior node, check aabbs of children
-      const tlas_node *c1 = &nodes[node->children & TLAS_NODE_MASK];
-      const tlas_node *c2 = &nodes[node->children >> 16];
+      const node *c1 = &tlas_nodes[n->children & 0xffff];
+      const node *c2 = &tlas_nodes[n->children >> 16];
       float d1 = intersect_aabb(r, h->t, c1->min, c1->max);
       float d2 = intersect_aabb(r, h->t, c2->min, c2->max);
       if(d1 > d2) {
@@ -226,22 +225,24 @@ void intersect_tlas(const ray *r, const tlas_node *nodes, const inst *instances,
         float td = d1;
         d1 = d2;
         d2 = td;
-        const tlas_node *tc = c1;
+        const node *tc = c1;
         c1 = c2;
         c2 = tc;
       }
       if(d1 == MAX_DISTANCE) {
         // Did miss both children, so check stack
         if(stack_pos > 0)
-          node = node_stack[--stack_pos];
+          n = node_stack[--stack_pos];
         else
           break;
       } else {
         // Continue with nearer child node
-        node = c1;
+        n = c1;
         // Push farther child on stack if also a hit
         if(d2 < MAX_DISTANCE)
           node_stack[stack_pos++] = c2;
+        if(stack_pos >= NODE_STACK_SIZE)
+          logc("Exceeded node stack size!!");
       }
     }
   }

@@ -18,7 +18,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TLAS_NODE: 3, TRI: 4, LTRI: 5, LNODE: 6, INDEX: 7, BVH_NODE: 8, ACC: 9 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TLAS_NODE: 3, TRI: 4, BLAS_NODE: 5, LTRI: 6, LNODE: 7, ACC: 8 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -33,7 +33,8 @@ function installEventHandler()
 {
   canvas.addEventListener("click", async () => {
     if(!document.pointerLockElement)
-      await canvas.requestPointerLock({ unadjustedMovement: true });
+      //await canvas.requestPointerLock({ unadjustedMovement: true });
+      await canvas.requestPointerLock();
   });
 
   document.addEventListener("keydown",
@@ -74,7 +75,7 @@ function Wasm(module)
       }
       return parseFloat(s); 
     },
-    gpu_create_res: (g, m, i, tn, t, lt, ln, idx, bn) => createGpuResources(g, m, i, tn, t, lt, ln, idx, bn),
+    gpu_create_res: (g, m, i, tn, t, bn, lt, ln) => createGpuResources(g, m, i, tn, t, bn, lt, ln),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
   };
 
@@ -133,7 +134,7 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, ltriSz, lnodeSz, indexSz, bvhNodeSz)
+function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, blasNodeSz, ltriSz, lnodeSz)
 {
   res.buf = [];
 
@@ -159,13 +160,17 @@ function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, ltriSz, ln
 
   // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
   triSz = triSz == 0 ? 96 : triSz;
+  blasNodeSz = blasNodeSz == 0 ? 32 : blasNodeSz;
   ltriSz = ltriSz == 0 ? 80 : ltriSz;
   lnodeSz = lnodeSz == 0 ? 64 : lnodeSz;
-  indexSz = indexSz == 0 ? 32 : indexSz;
-  bvhNodeSz = bvhNodeSz == 0 ? 32 : bvhNodeSz;
 
   res.buf[bufType.TRI] = device.createBuffer({
     size: triSz,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.BLAS_NODE] = device.createBuffer({
+    size: blasNodeSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -176,16 +181,6 @@ function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, ltriSz, ln
 
   res.buf[bufType.LNODE] = device.createBuffer({
     size: lnodeSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.INDEX] = device.createBuffer({
-    size: indexSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.BVH_NODE] = device.createBuffer({
-    size: bvhNodeSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -211,16 +206,13 @@ function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, ltriSz, ln
       { binding: bufType.TRI,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
+      { binding: bufType.BLAS_NODE,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage" } },
       { binding: bufType.LTRI,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
       { binding: bufType.LNODE,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.INDEX,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.BVH_NODE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
       { binding: bufType.ACC,
@@ -237,10 +229,9 @@ function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, ltriSz, ln
       { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
       { binding: bufType.TLAS_NODE, resource: { buffer: res.buf[bufType.TLAS_NODE] } },
       { binding: bufType.TRI, resource: { buffer: res.buf[bufType.TRI] } },
+      { binding: bufType.BLAS_NODE, resource: { buffer: res.buf[bufType.BLAS_NODE] } },
       { binding: bufType.LTRI, resource: { buffer: res.buf[bufType.LTRI] } },
       { binding: bufType.LNODE, resource: { buffer: res.buf[bufType.LNODE] } },
-      { binding: bufType.INDEX, resource: { buffer: res.buf[bufType.INDEX] } },
-      { binding: bufType.BVH_NODE, resource: { buffer: res.buf[bufType.BVH_NODE] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });

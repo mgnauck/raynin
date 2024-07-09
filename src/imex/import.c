@@ -1,5 +1,4 @@
 #include "import.h"
-#include "../acc/bvh.h"
 #include "../scene/cam.h"
 #include "../scene/mesh.h"
 #include "../scene/mtl.h"
@@ -438,8 +437,8 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   // Set scene attributes
   s->bg_col = data.bg_col;
 
-  // Finalize the scene data (bvhs and ltris)
-  logc("-------- Creating bvhs and preparing ltris");
+  // Finalize the scene data (blas and ltris)
+  logc("-------- Finalizing scene (blas and ltri/lnode creation)");
   scene_finalize(s);
  
   gltf_release(&data);

@@ -6,7 +6,6 @@
 #include "types.h"
 #include "view.h"
 
-typedef struct bvh bvh;
 typedef struct cam cam;
 typedef struct inst inst;
 typedef struct inst_info inst_info;
@@ -14,27 +13,26 @@ typedef struct ltri ltri;
 typedef struct lnode lnode;
 typedef struct mesh mesh;
 typedef struct mtl mtl;
-typedef struct tlas_node tlas_node;
+typedef struct node node;
 
 typedef struct scene {
   uint32_t    max_mtl_cnt;
   uint32_t    mtl_cnt;
   mtl         *mtls;
-  uint32_t    max_tri_cnt;
   uint32_t    max_mesh_cnt;
   uint32_t    mesh_cnt;
   mesh        *meshes;
-  uint32_t    bvh_cnt;
-  bvh         *bvhs;
   uint32_t    max_inst_cnt;
   uint32_t    inst_cnt;
   inst        *instances;
   inst_info   *inst_info;
-  tlas_node   *tlas_nodes;
+  node        *tlas_nodes;
   uint32_t    max_ltri_cnt;
   uint32_t    ltri_cnt;
   ltri        *ltris;
   lnode       *lnodes;
+  uint32_t    max_tri_cnt;
+  node        *blas_nodes;
   cam         *cams;
   uint32_t    cam_cnt;
   cam         *active_cam;

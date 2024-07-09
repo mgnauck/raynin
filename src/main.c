@@ -1,6 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include "acc/tlas.h"
+#include "acc/bvh.h"
 #include "imex/import.h"
 #include "scene/cam.h"
 #include "scene/inst.h"
@@ -133,15 +133,11 @@ void init_scene_riow(scene *s)
     scene_attach_mesh(s, mesh, true);
   }
 
-  /*
   // Sphere mesh
   uint32_t sid = 0;
   mesh = scene_acquire_mesh(s);
   mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false, false);
-  //mesh_create_uvcylinder(mesh, 1.0f, 2.0f, 20, 20, 1, false, false);
-  //mesh_create_icosphere(mesh, 3, mtl_id, false, false);
   sid = scene_attach_mesh(s, mesh, false);
-  //*/
   
   // Floor mesh
   uint32_t fid = 0;
@@ -177,8 +173,8 @@ void init_scene_riow(scene *s)
   m.ior = 2.3f;
   m.roughness = 0.0f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_mesh_inst(s, sid, mtl_id, translation);
+  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Reflecting sphere (white)
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -188,8 +184,8 @@ void init_scene_riow(scene *s)
   m.ior = 1.5f;
   m.roughness = 0.0f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_mesh_inst(s, sid, mtl_id, translation);
+  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   // Metallic sphere
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -199,8 +195,8 @@ void init_scene_riow(scene *s)
   m.metallic = 1.0f;
   m.roughness = 0.5f;
   mtl_id = scene_add_mtl(s, &m);
-  scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  //scene_add_mesh_inst(s, sid, mtl_id, translation);
+  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
+  scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   mat4_scale_u(scale, 0.2f);
   
