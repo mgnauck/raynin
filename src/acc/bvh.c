@@ -34,7 +34,7 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
   uint32_t node_indices_cnt = 0;
   uint32_t ofs = 1; // Reserve space for root node
 
-  // Construct a leaf node for each instance
+  // Construct a leaf node for each tri
   for(uint32_t i=0; i<tri_cnt; i++) {
       const tri *t = &tris[i];
 
@@ -95,7 +95,7 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
   nodes[0] = nodes[--node_cnt];
 }
 
-void tlas_build(node *nodes, const inst *instances, const inst_info *inst_info, uint32_t inst_cnt)
+void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
 {
   uint32_t node_indices[inst_cnt]; 
   uint32_t node_indices_cnt = 0;
@@ -103,10 +103,10 @@ void tlas_build(node *nodes, const inst *instances, const inst_info *inst_info, 
 
   // Construct a leaf node for each instance
   for(uint32_t i=0; i<inst_cnt; i++) {
-    if(!(inst_info[i].state & IS_DISABLED)) {
+    if(!(instances[i].state & IS_DISABLED)) {
       node *n = &nodes[ofs + node_indices_cnt];
-      n->min = instances[i].min;
-      n->max = instances[i].max;
+      n->min = instances[i].box.min;
+      n->max = instances[i].box.max;
       n->children = 0;
       n->idx = i;
       

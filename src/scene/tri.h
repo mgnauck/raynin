@@ -25,9 +25,9 @@ typedef struct tri {
 // Light tri
 typedef struct ltri {
   vec3      v0;
-  uint32_t  inst_id;
+  uint32_t  inst_id;    // (inst_id & 0xffff)
   vec3      v1;
-  uint32_t  tri_id;
+  uint32_t  tri_id;     // Actual index into tri buf
   vec3      v2;
   float     area;
   vec3      nrm;

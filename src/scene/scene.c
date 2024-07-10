@@ -192,9 +192,7 @@ void scene_prepare_render(scene *s)
         mat4_inv(inv_transform, info->transform);
         memcpy(inst->inv_transform, inv_transform, 12 * sizeof(float));
     
-        aabb a = aabb_init();
         vec3 mi, ma;
-
         if(inst->data & SHAPE_TYPE_BIT) {
           // Shape type
           if((inst->data & MESH_SHAPE_MASK) != ST_PLANE) {
@@ -215,17 +213,16 @@ void scene_prepare_render(scene *s)
         }
 
         // Transform instance aabb to world space
-        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ mi.x, mi.y, mi.z }));
-        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ ma.x, mi.y, mi.z }));
-        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ mi.x, ma.y, mi.z }));
-        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ ma.x, ma.y, mi.z }));
-        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ mi.x, mi.y, ma.z }));
-        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ ma.x, mi.y, ma.z }));
-        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ mi.x, ma.y, ma.z }));
-        aabb_grow(&a, mat4_mul_pos(info->transform, (vec3){ ma.x, ma.y, ma.z }));
-
-        inst->min = a.min;
-        inst->max = a.max;
+        aabb *a = &info->box;
+        *a = aabb_init();
+        aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ mi.x, mi.y, mi.z }));
+        aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ ma.x, mi.y, mi.z }));
+        aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ mi.x, ma.y, mi.z }));
+        aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ ma.x, ma.y, mi.z }));
+        aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ mi.x, mi.y, ma.z }));
+        aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ ma.x, mi.y, ma.z }));
+        aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ mi.x, ma.y, ma.z }));
+        aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ ma.x, ma.y, ma.z }));
       }
 
       info->state &= ~IS_TRANS_DIRTY;
@@ -251,7 +248,7 @@ void scene_prepare_render(scene *s)
   if(rebuild_tlas) {
     //logc("Rebuild tlas with max inst: %i, inst: %i", s->max_inst_cnt, s->inst_cnt);
     memset(s->tlas_nodes, 0, 2 * s->max_inst_cnt * sizeof(*s->tlas_nodes));
-    tlas_build(s->tlas_nodes, s->instances, s->inst_info, s->inst_cnt);
+    tlas_build(s->tlas_nodes, s->inst_info, s->inst_cnt);
     scene_set_dirty(s, RT_INST);
   }
 

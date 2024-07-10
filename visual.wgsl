@@ -37,10 +37,10 @@ struct Mtl
 struct Inst
 {
   invTransform: mat3x4f,
-  aabbMin:      vec3f,
   id:           u32,            // (mtl override id << 16) | (inst id & 0xffff)
-  aabbMax:      vec3f,
-  data:         u32             // See comment on data in inst.h
+  data:         u32,            // See comment on data in inst.h
+  pad0:         u32,
+  pad1:         u32
 }
 
 struct Node
@@ -133,8 +133,8 @@ const FLOAT_SCALE         = 1 / 65536.0;
 const INT_SCALE           = 256.0;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<uniform> materials: array<Mtl, 819>;
-@group(0) @binding(2) var<uniform> instances: array<Inst, 819>;
+@group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
+@group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(3) var<storage, read> tlasNodes: array<Node>;
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
 @group(0) @binding(5) var<storage, read> blasNodes: array<Node>;
@@ -1240,16 +1240,17 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
  
   if((inst.data & SHAPE_TYPE_BIT) > 0) {
     // Shape
-    *mtl = materials[(inst.id >> 16) & SHORT_MASK];
+    *mtl = materials[inst.id >> 16];
     (*ia).nrm = calcShapeNormal(inst, (*ia).pos);
   } else {
     // Mesh
     let ofs = inst.data & MESH_SHAPE_MASK;
     let tri = tris[ofs + (hit.e >> 16)];
     // Either use the material id from the triangle or the material override from the instance
-    *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & SHORT_MASK];
-    (*ia).nrm = select(calcTriNormal(hit, inst, tri), normalToWorldSpace(tri.n0, inst), tri.face_nrm > 0.0);
-    (*ia).ltriId = select(MAX_LTRI_CNT + 1u, tri.ltriId, (*mtl).emissive > 0.0);
+    *mtl = materials[select(tri.mtl & SHORT_MASK, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0)];
+    //(*ia).nrm = select(calcTriNormal(hit, inst, tri), normalToWorldSpace(tri.n0, inst), tri.face_nrm > 0.0);
+    (*ia).nrm = calcTriNormal(hit, inst, tri);
+    (*ia).ltriId = tri.ltriId; // Is not set if not emissive
   }
 
   // Flip normal if backside, except if we hit a ltri or refractive mtl

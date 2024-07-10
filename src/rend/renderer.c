@@ -78,7 +78,7 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
     return 1;
 
   // Adjust max inst count to what the uniform buffer can take.
-  // 65536 bytes uniform buf / 80 bytes inst size = 819 insts and is hardcoded in the shader.
+  // 65536 bytes uniform buf / 64 bytes inst size = 1024 insts and is hardcoded in the shader.
   total_inst_cnt = MAX_UNIFORM_BUF_SIZE / sizeof(inst);
 
   // Each instance can have its own mtl (assuming that inst size is greater/equal than mtl)

@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include "../util/vec3.h"
 
-typedef struct inst inst;
 typedef struct inst_info inst_info;
 typedef struct ltri ltri;
 typedef struct tri tri;
@@ -28,7 +27,7 @@ typedef struct lnode {
 } lnode;
 
 void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt);
-void tlas_build(node *nodes, const inst *instances, const inst_info *inst_info, uint32_t inst_cnt);
+void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt);
 void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt);
 
 #endif
