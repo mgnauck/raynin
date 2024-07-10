@@ -108,15 +108,12 @@ struct IA
   wo:           vec3f
 }
 
-// Scene data bit handling
-const INST_ID_MASK        = 0xffffu;
-const MTL_ID_MASK         = 0xffffu;
-const NODE_MASK           = 0xffffu;
-
-const SHAPE_TYPE_BIT      = 0x40000000u;
-const MESH_SHAPE_MASK     = 0x3fffffffu;
-const MTL_OVERRIDE_BIT    = 0x80000000u;
-const INST_DATA_MASK      = 0x7fffffffu;
+// Scene data handling
+const SHORT_MASK          = 0xffffu;
+const MTL_OVERRIDE_BIT    = 0x80000000u; // Bit 32
+const SHAPE_TYPE_BIT      = 0x40000000u; // Bit 31
+const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0 (includes shape type bit)
+const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
 
 // Shape types
 const ST_PLANE            = 0u;
@@ -299,7 +296,7 @@ fn intersectPlane(ori: vec3f, dir: vec3f, instId: u32, h: ptr<function, Hit>) ->
     let t = -ori.y / d;
     if(t < (*h).t && t > EPS) {
       (*h).t = t;
-      (*h).e = (ST_PLANE << 16) | (instId & INST_ID_MASK);
+      (*h).e = (ST_PLANE << 16) | (instId & SHORT_MASK);
       return true;
     }
   }
@@ -327,12 +324,12 @@ fn intersectUnitBox(ori: vec3f, invDir: vec3f, instId: u32, h: ptr<function, Hit
   if(tmin <= tmax) {
     if(tmin < (*h).t && tmin > EPS) {
       (*h).t = tmin;
-      (*h).e = (ST_BOX << 16) | (instId & INST_ID_MASK);
+      (*h).e = (ST_BOX << 16) | (instId & SHORT_MASK);
       return true;
     }
     if(tmax < (*h).t && tmax > EPS) {
       (*h).t = tmax;
-      (*h).e = (ST_BOX << 16) | (instId & INST_ID_MASK);
+      (*h).e = (ST_BOX << 16) | (instId & SHORT_MASK);
       return true;
     }
   }
@@ -360,7 +357,7 @@ fn intersectUnitSphere(ori: vec3f, dir: vec3f, instId: u32, h: ptr<function, Hit
   }
 
   (*h).t = t;
-  (*h).e = (ST_SPHERE << 16) | (instId & INST_ID_MASK);
+  (*h).e = (ST_SPHERE << 16) | (instId & SHORT_MASK);
   return true;
 }
 
@@ -464,10 +461,10 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     if(nodeChildren == 0) {
       // Leaf node, intersect contained triangle
       let nodeIdx = (*node).idx;
-      intersectTriClosest(ori, dir, tris[dataOfs + nodeIdx], (nodeIdx << 16) | (instId & INST_ID_MASK), hit);
+      intersectTriClosest(ori, dir, tris[dataOfs + nodeIdx], (nodeIdx << 16) | (instId & SHORT_MASK), hit);
     } else {
       // Interior node
-      var leftChildIndex = nodeChildren & NODE_MASK;
+      var leftChildIndex = nodeChildren & SHORT_MASK;
       var rightChildIndex = nodeChildren >> 16;
 
       let leftChildNode = &blasNodes[blasOfs + leftChildIndex];
@@ -528,7 +525,7 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
         }
       } else {
         // Interior node, continue with left child
-        nodeIndex = nodeChildren & NODE_MASK;
+        nodeIndex = nodeChildren & SHORT_MASK;
         // Push right child node on stack
         blasNodeStack[nodeStackIndex] = nodeChildren >> 16;
         nodeStackIndex++;
@@ -617,7 +614,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
       intersectInst(ori, dir, instances[(*node).idx], &hit);
     } else {
       // Interior node
-      var leftChildIndex = nodeChildren & NODE_MASK;
+      var leftChildIndex = nodeChildren & SHORT_MASK;
       var rightChildIndex = nodeChildren >> 16;
 
       let leftChildNode = &tlasNodes[leftChildIndex];
@@ -684,7 +681,7 @@ fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
         }
       } else {
         // Interior node, continue traversal with left child node
-        nodeIndex = nodeChildren & NODE_MASK;
+        nodeIndex = nodeChildren & SHORT_MASK;
         // Push right child node on stack
         tlasNodeStack[nodeStackIndex] = nodeChildren >> 16;
         nodeStackIndex++;
@@ -1150,14 +1147,14 @@ fn sampleLightTree(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec
   loop {
     let node = &lightNodes[nid];
     if((*node).children == 0) {
-      ltriId = (*node).idx & 0xffff; // Assign ltri contained at leaf
+      ltriId = (*node).idx & SHORT_MASK; // Assign ltri contained at leaf
       break;
     } else {
       let prob = calcChildNodeProb(*node, pos, nrm);
       if(r < prob) {
         pickProb *= prob; // Update probability
         r = r / prob; // Rescale random value
-        nid = (*node).children & 0xffff; // Left
+        nid = (*node).children & SHORT_MASK; // Left
       } else {
         pickProb *= 1.0 - prob; // Update
         r = (r - prob) / (1.0 - prob); // Rescale
@@ -1196,7 +1193,7 @@ fn sampleLightTreePdf(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f3
     let parent = &lightNodes[pid];
 
     let prob = calcChildNodeProb(*parent, pos, nrm);
-    pickProb *= select(1.0 - prob, prob, ((*parent).children & 0xffff) == nid);
+    pickProb *= select(1.0 - prob, prob, ((*parent).children & SHORT_MASK) == nid);
 
     nid = pid;
   }
@@ -1235,7 +1232,7 @@ fn sampleEye(r: vec2f) -> vec3f
 
 fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr<function, Mtl>)
 {
-  let inst = instances[hit.e & INST_ID_MASK];
+  let inst = instances[hit.e & SHORT_MASK];
 
   (*ia).dist = hit.t;
   (*ia).pos = ori + hit.t * dir;
@@ -1243,14 +1240,14 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
  
   if((inst.data & SHAPE_TYPE_BIT) > 0) {
     // Shape
-    *mtl = materials[(inst.id >> 16) & MTL_ID_MASK];
+    *mtl = materials[(inst.id >> 16) & SHORT_MASK];
     (*ia).nrm = calcShapeNormal(inst, (*ia).pos);
   } else {
     // Mesh
     let ofs = inst.data & MESH_SHAPE_MASK;
     let tri = tris[ofs + (hit.e >> 16)];
     // Either use the material id from the triangle or the material override from the instance
-    *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & MTL_ID_MASK];
+    *mtl = materials[select(tri.mtl, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0) & SHORT_MASK];
     (*ia).nrm = select(calcTriNormal(hit, inst, tri), normalToWorldSpace(tri.n0, inst), tri.face_nrm > 0.0);
     (*ia).ltriId = select(MAX_LTRI_CNT + 1u, tri.ltriId, (*mtl).emissive > 0.0);
   }
