@@ -32,7 +32,6 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
 {
   uint32_t node_indices[tri_cnt]; 
   uint32_t node_indices_cnt = 0;
-  uint32_t ofs = 1; // Reserve space for root node
 
   // Construct a leaf node for each tri
   for(uint32_t i=0; i<tri_cnt; i++) {
@@ -42,19 +41,20 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
       aabb_grow(&box, t->v0);
       aabb_grow(&box, t->v1);
       aabb_grow(&box, t->v2);
-      
-      node *n = &nodes[ofs + node_indices_cnt];
+
+      // +1 due to reserved space for root node
+      node *n = &nodes[1 + node_indices_cnt];
       n->min = box.min;
       n->max = box.max;
       n->children = 0;
       n->idx = i;
       
-      node_indices[node_indices_cnt] = ofs + node_indices_cnt;
+      node_indices[node_indices_cnt] = 1 + node_indices_cnt;
       node_indices_cnt++;
   }
 
   // Account for nodes so far
-  uint32_t node_cnt = ofs + node_indices_cnt;
+  uint32_t node_cnt = 1 + node_indices_cnt;
 
   // Bottom up combining of nodes
   uint32_t a = 0;
@@ -99,24 +99,23 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
 {
   uint32_t node_indices[inst_cnt]; 
   uint32_t node_indices_cnt = 0;
-  uint32_t ofs = 1; // Reserve space for root node
 
   // Construct a leaf node for each instance
   for(uint32_t i=0; i<inst_cnt; i++) {
-    if(!(instances[i].state & IS_DISABLED)) {
-      node *n = &nodes[ofs + node_indices_cnt];
+    if(!(instances[i].state & IS_DISABLED)) { 
+      node *n = &nodes[1 + node_indices_cnt]; // +1 due to reserved space for root node
       n->min = instances[i].box.min;
       n->max = instances[i].box.max;
       n->children = 0;
       n->idx = i;
       
-      node_indices[node_indices_cnt] = ofs + node_indices_cnt;
+      node_indices[node_indices_cnt] = 1 + node_indices_cnt;
       node_indices_cnt++;
     }
   }
 
   // Account for nodes so far
-  uint32_t node_cnt = ofs + node_indices_cnt;
+  uint32_t node_cnt = 1 + node_indices_cnt;
 
   // Bottom up combining of nodes
   uint32_t a = 0;
@@ -184,7 +183,6 @@ void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
 {
   uint32_t node_indices[ltri_cnt];
   uint32_t node_indices_cnt = 0;
-  uint32_t ofs = 1; // Reserve space for root node
 
   // Construct a leaf node for each light
   for(uint32_t i=0; i<ltri_cnt; i++) {
@@ -195,7 +193,8 @@ void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
     aabb_grow(&box, lt->v1);
     aabb_grow(&box, lt->v2);
 
-    lnode *n = &nodes[ofs + node_indices_cnt];
+    // +1 due to reserved space for root node
+    lnode *n = &nodes[1 + node_indices_cnt];
     n->min = box.min;
     n->max = box.max;
     n->children = 0;
@@ -203,12 +202,12 @@ void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
     n->nrm = lt->nrm;
     n->intensity = lt->emission.x + lt->emission.y + lt->emission.z;
 
-    node_indices[node_indices_cnt] = ofs + node_indices_cnt;
+    node_indices[node_indices_cnt] = 1 + node_indices_cnt;
     node_indices_cnt++;
   }
 
   // Account for nodes so far
-  uint32_t node_cnt = ofs + node_indices_cnt;
+  uint32_t node_cnt = 1 + node_indices_cnt;
 
   // Bottom up combining of nodes
   uint32_t a = 0;
@@ -225,9 +224,8 @@ void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
       // Claim new node which is the combination of node A and B
       lnode *new_node = &nodes[node_cnt];
 
-      // Set light index (ltri id). We will add parent node id later on.
-      // Root node will end up with wrong (unset) parent node id of 0. But we will handle this during traversal.
-      new_node->idx = node_a->idx;
+      // Interior nodes do not need a light idx
+      new_node->idx = 0;
 
       new_node->min = vec3_min(node_a->min, node_b->min);
       new_node->max = vec3_max(node_a->max, node_b->max);
@@ -245,6 +243,7 @@ void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
         new_node->nrm = (vec3){ 0.0f, 0.0f, 0.0f };
 
       // Set new node as parent of child nodes (consider final move of root node!)
+      // Root node will end up with wrong (unset) parent node id of 0. But we will handle this during traversal.
       // Lower 16 bits are index to light (ltri), upper 16 bits are idx of parent node
       uint32_t parent_idx = node_indices_cnt >= 2 ? node_cnt : 0;
       node_a->idx = (parent_idx << 16) | (node_a->idx & 0xffff);

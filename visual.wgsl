@@ -1118,6 +1118,7 @@ fn calcChildNodeProb(node: LNode, pos: vec3f, n: vec3f) -> f32
     fRight *= max(dot(node.nrm, -lvRight), EPS);
   }
 
+  // Yuksel et al: Real-Time Stochastic Lightcuts
   // Calculate weights and node probability
   let inside = select(false, true, minDistLeft == 0.0 && minDistRight == 0.0);
 
@@ -1135,7 +1136,6 @@ fn calcChildNodeProb(node: LNode, pos: vec3f, n: vec3f) -> f32
 
 // Walter et al: Real-Time Stochastic Lightcuts
 // Cem Yuksel: Stochastic Lightcuts for Sampling Many Lights
-// Yuksel et al: Real-Time Stochastic Lightcuts
 fn sampleLightTree(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   var ltriId: u32;

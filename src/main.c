@@ -24,7 +24,7 @@ scene         *cs = &scn;
 render_data   *rd;
 uint32_t      active_cam = 0;
 bool          orbit_cam = false;
-bool          converge = true;
+bool          converge = false;
 
   __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
