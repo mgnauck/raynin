@@ -1141,7 +1141,7 @@ fn sampleLightTree(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec
   var pickProb = 1.0;
   var r = r0.z;
 
-  // Code from the 2nd paper w/o dead branch handling
+  // Hierarchical importance sampling w/o dead branch handling
   loop {
     let node = &lightNodes[nid];
     if((*node).children == 0) {

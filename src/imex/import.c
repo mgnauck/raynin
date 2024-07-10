@@ -18,7 +18,6 @@ typedef struct mesh_ref {
 typedef enum obj_type {
   OT_QUAD,
   OT_BOX,
-  OT_ICOSPHERE,
   OT_SPHERE,
   OT_CYLINDER,
   OT_TORUS,
@@ -31,9 +30,7 @@ obj_type get_type(const char *name)
     return OT_QUAD;
   else if(strstr_lower(name, "cube") || strstr_lower(name, "box"))
     return OT_BOX;
-  else if(strstr_lower(name, "icosphere"))
-    return OT_ICOSPHERE;
-  else if(strstr_lower(name, "sphere"))
+  else if(strstr_lower(name, "sphere") || strstr_lower(name, "icosphere"))
     return OT_SPHERE;
   else if(strstr_lower(name, "cylinder"))
     return OT_CYLINDER;
@@ -144,25 +141,14 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
         read_ubyte(bin, ind_bv->byte_ofs, i + 2) : (ind_acc->comp_type == 5123) ?
           read_ushort(bin, ind_bv->byte_ofs, i + 2) : /* 5125 */ read_uint(bin, ind_bv->byte_ofs, i + 2);
 
-      //logc("Triangle %i with indices %i, %i, %i", j, i0, i1, i2);
-
       t->v0 = read_vec(bin, pos_bv->byte_ofs, i0);
       t->v1 = read_vec(bin, pos_bv->byte_ofs, i1);
       t->v2 = read_vec(bin, pos_bv->byte_ofs, i2);
-
-      //vec3_logc("Tri with p0: ", t->v0);
-      //vec3_logc("Tri with p1: ", t->v1);
-      //vec3_logc("Tri with p2: ", t->v2);
 
       t->n0 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i0), inv);
       t->n1 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i1), inv);
       t->n2 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i2), inv);
 
-      //vec3_logc("Tri with n0: ", t->n0);
-      //vec3_logc("Tri with n1: ", t->n1);
-      //vec3_logc("Tri with n2: ", t->n2);
-
-      m->centers[tri_cnt] = tri_calc_center(t);
       t->mtl = p->mtl_idx;
       tri_cnt++;
     }
@@ -185,18 +171,15 @@ void generate_mesh_data(mesh *m, gltf_mesh *gm, bool is_emissive)
     uint32_t suby = (gm->suby > 0) ? gm->suby : TORUS_DEFAULT_SUB_OUTER;
     mesh_create_torus(m, gm->in_radius, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated torus with %i triangles.", m->tri_cnt);
-  } else if(type == OT_ICOSPHERE) {
-    mesh_create_icosphere(m, gm->steps > 0 ? gm->steps : ICOSPHERE_DEFAULT_STEPS, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
-    logc("Generated icosphere with %i triangles.", m->tri_cnt);
   } else if(type == OT_SPHERE) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : SPHERE_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : SPHERE_DEFAULT_SUBY;
-    mesh_create_uvsphere(m, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
+    mesh_create_sphere(m, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated uvsphere with %i triangles.", m->tri_cnt);
   } else if(type == OT_CYLINDER) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : CYLINDER_DEFAULT_SUBX;
     uint32_t suby = (gm->suby > 0) ? gm->suby : CYLINDER_DEFAULT_SUBY;
-    mesh_create_uvcylinder(m, 1.0f, 2.0f, subx, suby, !gm->no_caps, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
+    mesh_create_cylinder(m, 1.0f, 2.0f, subx, suby, !gm->no_caps, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
   } else if(type == OT_BOX) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : BOX_DEFAULT_SUBX;

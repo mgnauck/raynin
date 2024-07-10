@@ -1,11 +1,6 @@
 #include "tri.h"
 #include "../sys/mutil.h"
 
-vec3 tri_calc_center(tri *t)
-{
-  return vec3_scale(vec3_add(vec3_add(t->v0, t->v1), t->v2), 0.3333f);
-}
-
 float tri_calc_area(vec3 v0, vec3 v1, vec3 v2)
 {
   float a = vec3_len(vec3_sub(v2, v0));

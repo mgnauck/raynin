@@ -1,7 +1,6 @@
 #ifndef IMPORT_H
 #define IMPORT_H
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 

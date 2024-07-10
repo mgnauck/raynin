@@ -136,7 +136,7 @@ void init_scene_riow(scene *s)
   // Sphere mesh
   uint32_t sid = 0;
   mesh = scene_acquire_mesh(s);
-  mesh_create_uvsphere(mesh, 1.0f, 20, 20, mtl_id, false, false);
+  mesh_create_sphere(mesh, 1.0f, 20, 20, mtl_id, false, false);
   sid = scene_attach_mesh(s, mesh, false);
   
   // Floor mesh

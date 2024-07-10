@@ -15,7 +15,6 @@
 #define CYLINDER_DEFAULT_SUBY     2
 #define TORUS_DEFAULT_SUB_INNER   18
 #define TORUS_DEFAULT_SUB_OUTER   18
-#define ICOSPHERE_DEFAULT_STEPS   0 // Lowest level
 
 typedef struct vec3 vec3;
 typedef struct tri tri;
@@ -23,7 +22,6 @@ typedef struct tri tri;
 typedef struct mesh {
   uint32_t  tri_cnt;
   tri       *tris;
-  vec3      *centers;
   bool      is_emissive;
   uint32_t  ofs;
 } mesh;
@@ -33,9 +31,8 @@ void mesh_release(mesh *m);
 
 void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals);
 void mesh_create_box(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals);
-void mesh_create_uvsphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uint32_t mtl, bool face_normals, bool invert_normals);
-void mesh_create_uvcylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, bool caps, uint32_t mtl, bool face_normals, bool invert_normals);
+void mesh_create_sphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uint32_t mtl, bool face_normals, bool invert_normals);
+void mesh_create_cylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, bool caps, uint32_t mtl, bool face_normals, bool invert_normals);
 void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint32_t sub_inner, uint32_t sub_outer, uint32_t mtl, bool face_normals, bool invert_normals);
-void mesh_create_icosphere(mesh *m, uint8_t steps, uint32_t mtl, bool face_normals, bool invert_normals);
 
 #endif
