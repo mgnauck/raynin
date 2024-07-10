@@ -19,8 +19,10 @@ typedef enum inst_state {
   IS_WAS_EMISSIVE = 16
 } inst_state;
 
+// Additional CPU side data for instances
 typedef struct inst_info {
   mat4        transform;
+  mat4        inv_transform;
   aabb        box;
   uint32_t    mesh_shape;
   uint32_t    ltri_ofs;

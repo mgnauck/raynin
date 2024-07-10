@@ -25,7 +25,7 @@ typedef struct tri {
 // Light tri
 typedef struct ltri {
   vec3      v0;
-  uint32_t  inst_id;    // (inst_id & 0xffff)
+  uint32_t  inst_id;    // (inst_id & 0xffff) // TODO: Not in use? Can we remove it?
   vec3      v1;
   uint32_t  tri_id;     // Actual index into tri buf
   vec3      v2;
@@ -37,7 +37,7 @@ typedef struct ltri {
 } ltri;
 
 float tri_calc_area(vec3 v0, vec3 v1, vec3 v2);
-void  tri_build_ltri(ltri *lt, const tri *t, uint32_t inst_id, uint32_t tri_id, mat4 transform, vec3 emission);
-void  tri_update_ltri(ltri *lt, const tri *t, mat4 transform);
+void  tri_build_ltri(ltri *lt, const tri *t, uint32_t inst_id, uint32_t tri_id, mat4 transform, mat4 inv_transform, vec3 emission);
+void  tri_update_ltri(ltri *lt, const tri *t, mat4 transform, mat4 inv_transform);
 
 #endif

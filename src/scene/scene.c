@@ -112,8 +112,8 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
     for(uint32_t i=0; i<tri_cnt; i++) {
       tri *t = &tris[i];
       uint32_t ltri_id = ltri_ofs + ltri_cnt++;
-      tri_build_ltri(&s->ltris[ltri_id], &tris[i],
-          inst->id & 0xffff, i, info->transform,
+      tri_build_ltri(&s->ltris[ltri_id], &tris[i], inst->id & 0xffff,
+          i, info->transform, info->inv_transform,
           s->mtls[t->mtl & 0xffff].col);
       // A tri links its ltri: Tris that emit light need to be unique, i.e.
       // multiple instances of the same light mesh/tri are not allowed :(
@@ -126,8 +126,8 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
       mtl *mtl = &s->mtls[t->mtl & 0xffff];
       if(mtl->emissive > 0.0f) {
         uint32_t ltri_id = ltri_ofs + ltri_cnt++;
-        tri_build_ltri(&s->ltris[ltri_id], t,
-            inst->id & 0xffff, i, info->transform, mtl->col);
+        tri_build_ltri(&s->ltris[ltri_id], t, inst->id & 0xffff,
+            i, info->transform, info->inv_transform, mtl->col);
         t->ltri_id = ltri_id;
       }
     }
@@ -146,7 +146,7 @@ void update_ltris(scene *s, inst_info *info)
   tri *tris = s->meshes[info->mesh_shape].tris;
   for(uint32_t i=0; i<info->ltri_cnt; i++) {
     ltri *lt = &s->ltris[info->ltri_ofs + i];
-    tri_update_ltri(lt, &tris[lt->tri_id], info->transform);
+    tri_update_ltri(lt, &tris[lt->tri_id], info->transform, info->inv_transform);
   }
 
   scene_set_dirty(s, RT_LTRI);
@@ -187,10 +187,8 @@ void scene_prepare_render(scene *s)
         if(!rebuild_ltris && (info->state & IS_EMISSIVE))
           update_ltris(s, info);
 
-        // Calc inverse transform
-        mat4 inv_transform;
-        mat4_inv(inv_transform, info->transform);
-        memcpy(inst->inv_transform, inv_transform, 12 * sizeof(float));
+        // Instances receives inverse transform only
+        memcpy(inst->inv_transform, info->inv_transform, 12 * sizeof(float));
     
         vec3 mi, ma;
         if(inst->data & SHAPE_TYPE_BIT) {
@@ -335,6 +333,7 @@ void scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform)
 {
   inst_info *info = &s->inst_info[inst_id];
   memcpy(info->transform, transform, sizeof(mat4));
+  mat4_inv(info->inv_transform, transform);
   info->state |= IS_TRANS_DIRTY;
 }
 
