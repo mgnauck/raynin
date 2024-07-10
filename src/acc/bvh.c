@@ -6,20 +6,17 @@
 
 static uint32_t find_best_node(node *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
 {
-  float best_cost = FLT_MAX;
-  uint32_t best_idx;
+  float     best_cost = FLT_MAX;
+  uint32_t  best_idx;
 
-  uint32_t curr_idx = node_indices[idx];
-  vec3 curr_min = nodes[curr_idx].min;
-  vec3 curr_max = nodes[curr_idx].max;
+  node *n = &nodes[node_indices[idx]];
 
   // Find smallest combined aabb of current node and any other node
   for(uint32_t i=0; i<node_indices_cnt; i++) {
     if(idx != i) {
-      uint32_t other_idx = node_indices[i];
-      vec3 mi = vec3_min(curr_min, nodes[other_idx].min);
-      vec3 ma = vec3_max(curr_max, nodes[other_idx].max);
-      float cost = aabb_calc_area((aabb){ mi, ma });
+      node *n2 = &nodes[node_indices[i]];
+      vec3 d = vec3_sub(vec3_max(n->max, n2->max), vec3_min(n->min, n2->min));
+      float cost = vec3_dot(d, d);
       if(cost < best_cost) {
         best_cost = cost;
         best_idx = i;
@@ -40,17 +37,17 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
   // Construct a leaf node for each instance
   for(uint32_t i=0; i<tri_cnt; i++) {
       const tri *t = &tris[i];
+
       aabb box = aabb_init();
       aabb_grow(&box, t->v0);
       aabb_grow(&box, t->v1);
       aabb_grow(&box, t->v2);
-      aabb_pad(&box);
       
       node *n = &nodes[ofs + node_indices_cnt];
       n->min = box.min;
       n->max = box.max;
       n->children = 0;
-      n->idx = i; // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
+      n->idx = i;
       
       node_indices[node_indices_cnt] = ofs + node_indices_cnt;
       node_indices_cnt++;
@@ -110,8 +107,9 @@ void tlas_build(node *nodes, const inst *instances, const inst_info *inst_info, 
       node *n = &nodes[ofs + node_indices_cnt];
       n->min = instances[i].min;
       n->max = instances[i].max;
-      n->children = 0; // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
+      n->children = 0;
       n->idx = i;
+      
       node_indices[node_indices_cnt] = ofs + node_indices_cnt;
       node_indices_cnt++;
     }
@@ -164,14 +162,14 @@ static uint32_t find_best_lnode(lnode *nodes, uint32_t idx, uint32_t *node_indic
   float best_cost = FLT_MAX;
   uint32_t best_idx;
 
-  lnode *curr = &nodes[node_indices[idx]];
+  lnode *n = &nodes[node_indices[idx]];
 
   // Find smallest cost of combining current node and any other node
   for(uint32_t i=0; i<node_indices_cnt; i++) {
     if(idx != i) {
-      lnode *other = &nodes[node_indices[i]];
-      vec3 diag = vec3_sub(vec3_max(curr->max, other->max), vec3_min(curr->min, other->min));
-      float cost = (curr->intensity + other->intensity) * vec3_dot(diag, diag);
+      lnode *n2 = &nodes[node_indices[i]];
+      vec3 d = vec3_sub(vec3_max(n->max, n2->max), vec3_min(n->min, n2->min));
+      float cost = (n->intensity + n2->intensity) * vec3_dot(d, d);
       if(cost < best_cost) {
         best_cost = cost;
         best_idx = i;
@@ -191,16 +189,16 @@ void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
   // Construct a leaf node for each light
   for(uint32_t i=0; i<ltri_cnt; i++) {
     const ltri *lt = &ltris[i];
+
     aabb box;
     aabb_grow(&box, lt->v0);
     aabb_grow(&box, lt->v1);
     aabb_grow(&box, lt->v2);
-    aabb_pad(&box);
 
     lnode *n = &nodes[ofs + node_indices_cnt];
     n->min = box.min;
     n->max = box.max;
-    n->children = 0; // 2x 16 bits for left and right child. Interior nodes will have at least one child > 0.
+    n->children = 0;
     n->idx = i; // lnode i + 1 references light i
     n->nrm = lt->nrm;
     n->intensity = lt->emission.x + lt->emission.y + lt->emission.z;
