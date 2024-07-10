@@ -200,7 +200,7 @@ void lighttree_build(lnode *nodes, const ltri *ltris, uint32_t ltri_cnt)
     n->children = 0;
     n->idx = i; // lnode i + 1 references light i
     n->nrm = lt->nrm;
-    n->intensity = lt->emission.x + lt->emission.y + lt->emission.z;
+    n->intensity = lt->power;
 
     node_indices[node_indices_cnt] = 1 + node_indices_cnt;
     node_indices_cnt++;

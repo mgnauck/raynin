@@ -1287,9 +1287,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    //if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
     //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-    //if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       // Apply MIS
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
       var ltriWi = normalize(ltriPos - ia.pos);
@@ -1334,9 +1334,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       if(dot(ia.wo, ia.nrm) > 0) {
         // Apply MIS
         let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
-        let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
+        //let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
         //let ltriPdf = sampleLTriPdf(lastPos, lastNrm, ia.pos, ia.ltriId);
-        //let ltriPdf = sampleLightTreePdf(lastPos, lastNrm, ia.pos, ia.ltriId);
+        let ltriPdf = sampleLightTreePdf(lastPos, lastNrm, ia.pos, ia.ltriId);
         let weight = pdf * gsa / (pdf * gsa + ltriPdf);
         col += throughput * weight * mtl.col;
       }
