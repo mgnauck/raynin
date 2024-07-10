@@ -16,7 +16,7 @@ static uint32_t find_best_node(node *nodes, uint32_t idx, uint32_t *node_indices
     if(idx != i) {
       node *n2 = &nodes[node_indices[i]];
       vec3 d = vec3_sub(vec3_max(n->max, n2->max), vec3_min(n->min, n2->min));
-      float cost = d.x * d.y + d.y * d.z + d.z * d.x;
+      float cost = d.x * d.y + d.y * d.z + d.z * d.x; /// Half surface area
       if(cost < best_cost) {
         best_cost = cost;
         best_idx = i;
@@ -169,7 +169,7 @@ static uint32_t find_best_lnode(lnode *nodes, uint32_t idx, uint32_t *node_indic
     if(idx != i) {
       lnode *n2 = &nodes[node_indices[i]];
       vec3 d = vec3_sub(vec3_max(n->max, n2->max), vec3_min(n->min, n2->min));
-      float cost = (n->intensity + n2->intensity) * d.x * d.y + d.y * d.z + d.z * d.x;
+      float cost = (n->intensity + n2->intensity) * (d.x * d.y + d.y * d.z + d.z * d.x);
       if(cost < best_cost) {
         best_cost = cost;
         best_idx = i;
