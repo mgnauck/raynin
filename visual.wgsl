@@ -1100,8 +1100,7 @@ fn calcChildNodeProb(node: LNode, pos: vec3f, n: vec3f) -> f32
   let maxDistLeft = dot(maxVLeft, maxVLeft); // Squared max distances
   let maxDistRight = dot(maxVRight, maxVRight);
 
-  // Calculate geometry term of reflectance bound F
-  // TODO Can we include a quick but suitable material term?
+  // Calculate geometry term of reflectance bound f
   // TODO Provide rand from outside
   let pLeft = left.aabbMin + 2.0 * diagHalfLeft * rand4().xyz; // Random point "on light"
   let pRight = right.aabbMin + 2.0 * diagHalfRight * rand4().xyz;
@@ -1119,7 +1118,6 @@ fn calcChildNodeProb(node: LNode, pos: vec3f, n: vec3f) -> f32
   }
 
   // Yuksel et al: Real-Time Stochastic Lightcuts
-  // Calculate weights and node probability
   let inside = select(false, true, minDistLeft == 0.0 && minDistRight == 0.0);
 
   let minWeightLeft = (left.intensity * fLeft) / select(max(minDistLeft, EPS), 1.0, inside);

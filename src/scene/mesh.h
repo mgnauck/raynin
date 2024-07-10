@@ -5,14 +5,14 @@
 #include <stdint.h>
 
 #define QUAD_DEFAULT_SIZE         2.0f
-#define QUAD_DEFAULT_SUBX         1
-#define QUAD_DEFAULT_SUBY         1
-#define BOX_DEFAULT_SUBY          1
-#define BOX_DEFAULT_SUBX          1
+#define QUAD_DEFAULT_SUBX         2
+#define QUAD_DEFAULT_SUBY         2
+#define BOX_DEFAULT_SUBY          2
+#define BOX_DEFAULT_SUBX          2
 #define SPHERE_DEFAULT_SUBX       18
 #define SPHERE_DEFAULT_SUBY       18
 #define CYLINDER_DEFAULT_SUBX     18
-#define CYLINDER_DEFAULT_SUBY     1
+#define CYLINDER_DEFAULT_SUBY     2
 #define TORUS_DEFAULT_SUB_INNER   18
 #define TORUS_DEFAULT_SUB_OUTER   18
 #define ICOSPHERE_DEFAULT_STEPS   0 // Lowest level
