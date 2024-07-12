@@ -1202,6 +1202,52 @@ fn sampleLightTreePdf(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f3
   return pickProb / ltris[ltriId].area;
 }
 
+fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+{
+  let sampleCnt = 8u;
+  
+  // Source pdf is uniform selection of ltris
+  let ltriCnt = f32(arrayLength(&ltris));
+  let sourcePdf = 1.0 / f32(ltriCnt);
+
+  // Reservoir data
+  var totalWeight = 0.0;
+  var sampleTargetPdf = 0.0;
+
+  var area: f32;
+
+  for(var i=0u; i<sampleCnt; i++) {
+
+    let r = rand4(); // TODO
+    let bc = sampleBarycentric(r.xy);
+
+    // Select a candidate ltri from all ltris with 'cheap' source pdf
+    let ltriCandidate = &ltris[u32(floor(r.z * ltriCnt))];
+    let ltriCandidatePos = (*ltriCandidate).v0 * bc.x + (*ltriCandidate).v1 * bc.y + (*ltriCandidate).v2 * bc.z;
+    
+    // Resample to more accurate target pdf
+    let targetPdf = calcLTriContribution(pos, nrm, ltriCandidatePos, (*ltriCandidate).nrm, (*ltriCandidate).power);
+
+    let risWeight = targetPdf / sourcePdf;
+
+    totalWeight += risWeight;
+
+    if(r.w < risWeight / totalWeight) {
+      // Store data of our latest accepted sample/candidate
+      *ltriPos = ltriCandidatePos;
+      *ltriNrm = (*ltriCandidate).nrm;
+      *emission = (*ltriCandidate).emission;
+      area = (*ltriCandidate).area;
+      // Track pdf of the selection
+      sampleTargetPdf = targetPdf;
+    }
+  }
+
+  *pdf = 1.0 / (totalWeight / f32(sampleCnt) / sampleTargetPdf * area);
+
+  return *pdf > 0.0;
+}
+
 // Lessig: The Area Formulation of Light Transport
 fn geomSolidAngle(pos: vec3f, surfPos: vec3f, surfNrm: vec3f) -> f32
 {
@@ -1280,7 +1326,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
-    let r0 = rand4();
+    let r0 = rand4(); // TODO Can remove for NEE with RIS
     let r1 = rand4();
 
     // Sample lights directly (NEE)
@@ -1290,7 +1336,8 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriPdf: f32;
     //if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
     //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-    if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    //if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       // Apply MIS
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
       var ltriWi = normalize(ltriPos - ia.pos);
@@ -1335,9 +1382,9 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       if(dot(ia.wo, ia.nrm) > 0) {
         // Apply MIS
         let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
-        //let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
+        let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
         //let ltriPdf = sampleLTriPdf(lastPos, lastNrm, ia.pos, ia.ltriId);
-        let ltriPdf = sampleLightTreePdf(lastPos, lastNrm, ia.pos, ia.ltriId);
+        //let ltriPdf = sampleLightTreePdf(lastPos, lastNrm, ia.pos, ia.ltriId);
         let weight = pdf * gsa / (pdf * gsa + ltriPdf);
         col += throughput * weight * mtl.col;
       }
