@@ -18,7 +18,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TLAS_NODE: 3, TRI: 4, BLAS_NODE: 5, LTRI: 6, LNODE: 7, ACC: 8 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, LNODE: 5, NODE: 6, ACC: 7 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -75,7 +75,7 @@ function Wasm(module)
       }
       return parseFloat(s); 
     },
-    gpu_create_res: (g, m, i, tn, t, bn, lt, ln) => createGpuResources(g, m, i, tn, t, bn, lt, ln),
+    gpu_create_res: (g, m, i, t, lt, ln, bn) => createGpuResources(g, m, i, t, lt, ln, bn),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
   };
 
@@ -134,7 +134,7 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, blasNodeSz, ltriSz, lnodeSz)
+function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, lnodeSz, nodeSz)
 {
   res.buf = [];
 
@@ -153,24 +153,14 @@ function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, blasNodeSz
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[bufType.TLAS_NODE] = device.createBuffer({
-    size: tlasNodeSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
   // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
   triSz = triSz == 0 ? 96 : triSz;
-  blasNodeSz = blasNodeSz == 0 ? 32 : blasNodeSz;
   ltriSz = ltriSz == 0 ? 80 : ltriSz;
   lnodeSz = lnodeSz == 0 ? 64 : lnodeSz;
+  nodeSz = nodeSz == 0 ? 32 : nodeSz;
 
   res.buf[bufType.TRI] = device.createBuffer({
     size: triSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.BLAS_NODE] = device.createBuffer({
-    size: blasNodeSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -181,6 +171,11 @@ function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, blasNodeSz
 
   res.buf[bufType.LNODE] = device.createBuffer({
     size: lnodeSz,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[bufType.NODE] = device.createBuffer({
+    size: nodeSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -200,19 +195,16 @@ function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, blasNodeSz
       { binding: bufType.INST,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "uniform" } },
-      { binding: bufType.TLAS_NODE,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
       { binding: bufType.TRI,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.BLAS_NODE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
       { binding: bufType.LTRI,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
       { binding: bufType.LNODE,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "read-only-storage" } },
+      { binding: bufType.NODE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
       { binding: bufType.ACC,
@@ -227,11 +219,10 @@ function createGpuResources(globSz, mtlSz, instSz, tlasNodeSz, triSz, blasNodeSz
       { binding: bufType.GLOB, resource: { buffer: res.buf[bufType.GLOB] } },
       { binding: bufType.MTL, resource: { buffer: res.buf[bufType.MTL] } },
       { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
-      { binding: bufType.TLAS_NODE, resource: { buffer: res.buf[bufType.TLAS_NODE] } },
       { binding: bufType.TRI, resource: { buffer: res.buf[bufType.TRI] } },
-      { binding: bufType.BLAS_NODE, resource: { buffer: res.buf[bufType.BLAS_NODE] } },
       { binding: bufType.LTRI, resource: { buffer: res.buf[bufType.LTRI] } },
       { binding: bufType.LNODE, resource: { buffer: res.buf[bufType.LNODE] } },
+      { binding: bufType.NODE, resource: { buffer: res.buf[bufType.NODE] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });

@@ -4,10 +4,10 @@ struct Global
   height:       u32,
   spp:          u32,
   maxBounces:   u32,
+  tlasNodeOfs:  u32,
+  pad0:         u32,
   frame:        u32,
   gatheredSpp:  u32,
-  pad0:         u32,
-  pad1:         u32,
   bgColor:      vec3f,
   weight:       f32,
   eye:          vec3f,
@@ -17,11 +17,11 @@ struct Global
   up:           vec3f,
   focAngle:     f32,
   pixelDeltaX:  vec3f,
-  pad2:         f32,
+  pad1:         f32,
   pixelDeltaY:  vec3f,
-  pad3:         f32,
+  pad2:         f32,
   pixelTopLeft: vec3f,
-  pad4:         f32,
+  pad3:         f32,
 }
 
 struct Mtl
@@ -135,12 +135,11 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
 @group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
-@group(0) @binding(3) var<storage, read> tlasNodes: array<Node>;
-@group(0) @binding(4) var<storage, read> tris: array<Tri>;
-@group(0) @binding(5) var<storage, read> blasNodes: array<Node>;
-@group(0) @binding(6) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(7) var<storage, read> lightNodes: array<LNode>;
-@group(0) @binding(8) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(3) var<storage, read> tris: array<Tri>;
+@group(0) @binding(4) var<storage, read> ltris: array<LTri>;
+@group(0) @binding(5) var<storage, read> lightNodes: array<LNode>;
+@group(0) @binding(6) var<storage, read> nodes: array<Node>;
+@group(0) @binding(7) var<storage, read_write> buffer: array<vec4f>;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -455,7 +454,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
 
   // Sorted DF traversal (near child first + skip far child if not within current dist)
   loop {
-    let node = &blasNodes[blasOfs + nodeIndex];
+    let node = &nodes[blasOfs + nodeIndex];
     let nodeChildren = (*node).children;
    
     if(nodeChildren == 0) {
@@ -467,8 +466,8 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       var leftChildIndex = nodeChildren & SHORT_MASK;
       var rightChildIndex = nodeChildren >> 16;
 
-      let leftChildNode = &blasNodes[blasOfs + leftChildIndex];
-      let rightChildNode = &blasNodes[blasOfs + rightChildIndex];
+      let leftChildNode = &nodes[blasOfs + leftChildIndex];
+      let rightChildNode = &nodes[blasOfs + rightChildIndex];
 
       // Intersect both child node aabbs
       var leftDist = intersectAabb(ori, invDir, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
@@ -515,7 +514,7 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
 
   // Early exit, unordered DF traversal
   loop {
-    let node = &blasNodes[blasOfs + nodeIndex];
+    let node = &nodes[blasOfs + nodeIndex];
     if(intersectAabbAnyHit(ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
       let nodeChildren = (*node).children;
       if(nodeChildren == 0) {
@@ -601,12 +600,14 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 
   let invDir = 1 / dir;
 
+  let tlasOfs = globals.tlasNodeOfs;
+
   var hit: Hit;
   hit.t = tfar;
 
   // Ordered DF traversal (near child first + skip far child if not within current dist)
   loop {
-    let node = &tlasNodes[nodeIndex];
+    let node = &nodes[tlasOfs + nodeIndex];
     let nodeChildren = (*node).children;
 
     if(nodeChildren == 0) {
@@ -617,8 +618,8 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
       var leftChildIndex = nodeChildren & SHORT_MASK;
       var rightChildIndex = nodeChildren >> 16;
 
-      let leftChildNode = &tlasNodes[leftChildIndex];
-      let rightChildNode = &tlasNodes[rightChildIndex];
+      let leftChildNode = &nodes[tlasOfs + leftChildIndex];
+      let rightChildNode = &nodes[tlasOfs + rightChildIndex];
 
       // Intersect both child node aabbs
       var leftDist = intersectAabb(ori, invDir, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
@@ -665,13 +666,15 @@ fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
   let tfar = length(dir);
   dir /= tfar;
   let invDir = 1 / dir;
+  
+  let tlasOfs = globals.tlasNodeOfs;
 
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
 
   // Early exit, unordered DF traversal
   loop {
-    let node = &tlasNodes[nodeIndex];
+    let node = &nodes[tlasOfs + nodeIndex];
     if(intersectAabbAnyHit(p0, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
       let nodeChildren = (*node).children;
       if(nodeChildren == 0) {

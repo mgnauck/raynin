@@ -21,7 +21,7 @@
 
 // Global uniform buffer offsets
 #define GLOB_BUF_OFS_CFG      0
-#define GLOB_BUF_OFS_FRAME    16
+#define GLOB_BUF_OFS_FRAME    24
 #define GLOB_BUF_OFS_CAM      48
 #define GLOB_BUF_OFS_VIEW     96
 #define GLOB_BUF_SIZE         144
@@ -35,12 +35,13 @@ typedef enum buf_type {
   BT_GLOB = 0,
   BT_MTL,
   BT_INST,
-  BT_TLAS_NODE,
   BT_TRI,
-  BT_BLAS_NODE,
   BT_LTRI,
   BT_LNODE,
+  BT_NODE, // blas + tlas
 } buf_type;
+
+static uint32_t tlas_node_ofs = 0;
 
 typedef struct render_data {
   scene     *scene;
@@ -52,12 +53,18 @@ typedef struct render_data {
   uint32_t  gathered_spp;
 } render_data;
 
+typedef struct frame_data {
+  uint32_t  frame;
+  uint32_t  gathered_spp;
+  vec3      bg_col;
+  float     weight;
+} frame_data;
+
 #ifndef NATIVE_BUILD
 
 extern void gpu_create_res(uint32_t glob_sz, uint32_t mtl_sz,
-    uint32_t inst_sz, uint32_t tlas_node_sz,
-    uint32_t tri_sz, uint32_t blas_node_sz,
-    uint32_t ltri_sz, uint32_t lnode_sz);
+    uint32_t inst_sz, uint32_t tri_sz, uint32_t ltri_sz,
+    uint32_t lnode_sz, uint32_t node_sz);
 
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
@@ -88,11 +95,12 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
       GLOB_BUF_SIZE, // Globals (uniform buf)
       total_mtl_cnt * sizeof(mtl), // Materials (uniform buf)
       total_inst_cnt * sizeof(inst), // Instances (uniform buf)
-      2 * total_inst_cnt * sizeof(node), // TLAS nodes (storage buf)
       total_tri_cnt * sizeof(tri), // Tris (storage buf)
-      2 * total_tri_cnt * sizeof(node), // BLAS nodes (storage buf)
       total_ltri_cnt * sizeof(ltri), // LTris (storage buf)
-      2 * total_ltri_cnt * sizeof(lnode)); // Light nodes (storage buf)
+      2 * total_ltri_cnt * sizeof(lnode), // Light nodes (storage buf)
+      2 * (total_tri_cnt + total_inst_cnt) * sizeof(node)); // BLAS + TLAS nodes (storage buf)
+
+  tlas_node_ofs = 2 * total_tri_cnt;
 
   return 0;
 }
@@ -119,7 +127,6 @@ void renderer_release(render_data *rd)
 
 void reset_samples(render_data *rd)
 {
-  // Reset gathered samples
   rd->gathered_spp = TEMPORAL_WEIGHT * rd->gathered_spp;
 }
 
@@ -154,7 +161,7 @@ void push_blas(render_data *rd)
 {
 #ifndef NATIVE_BUILD
   scene *s = rd->scene;
-  gpu_write_buf(BT_BLAS_NODE, 0, s->blas_nodes, 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
+  gpu_write_buf(BT_NODE, 0, s->blas_nodes, 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
 #endif
 }
 
@@ -164,7 +171,7 @@ void renderer_update_static(render_data *rd)
 
 #ifndef NATIVE_BUILD
   // Push part of globals
-  uint32_t cfg[4] = { rd->width, rd->height, rd->spp, rd->bounces };
+  uint32_t cfg[6] = { rd->width, rd->height, rd->spp, rd->bounces, tlas_node_ofs, /* pad */0 };
   gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
 #endif
 
@@ -198,8 +205,8 @@ void renderer_update(render_data *rd, float time)
   // Push camera and view
   if(rd->scene->dirty & RT_CAM_VIEW) {
     cam *cam = scene_get_active_cam(s);
-    view_calc(&s->view, rd->width, rd->height, cam);
     gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, cam, CAM_BUF_SIZE);
+    view_calc(&s->view, rd->width, rd->height, cam);
     gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_VIEW, &s->view, sizeof(s->view));
     scene_clr_dirty(s, RT_CAM_VIEW);
   }
@@ -215,20 +222,22 @@ void renderer_update(render_data *rd, float time)
       push_tris(rd);
   }
 
-  // Push TLAS and instances
+  // Push tlas and instances
   if(rd->scene->dirty & RT_INST) {
-    gpu_write_buf(BT_TLAS_NODE, 0, s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
     gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
+    gpu_write_buf(BT_NODE, tlas_node_ofs * sizeof(*s->tlas_nodes), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
     scene_clr_dirty(s, RT_INST);
   }
 
 #ifndef NATIVE_BUILD
   // Push frame data
-  uint32_t frameUint[4] = { rd->frame, rd->gathered_spp, /* pad */ 0, /* pad */ 0 };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, frameUint, sizeof(frameUint));
-  float frameFloat[4] = { s->bg_col.x, s->bg_col.y, s->bg_col.z,
-    rd->spp / (float)(rd->gathered_spp + rd->spp) };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME + sizeof(frameUint), frameFloat, sizeof(frameFloat));
+  frame_data fd = (frame_data){
+    .frame = rd->frame,
+    .gathered_spp = rd->gathered_spp,
+    .bg_col = s->bg_col,
+    .weight = rd->spp / (float)(rd->gathered_spp + rd->spp)
+  };
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, &fd, sizeof(frame_data));
 #endif
 
   // Update frame and sample counter
