@@ -1,5 +1,4 @@
 #include "mtl.h"
-#include "../sys/mutil.h"
 
 mtl mtl_init(vec3 c)
 {

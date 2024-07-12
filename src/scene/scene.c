@@ -1,6 +1,5 @@
 #include "scene.h"
 #include "../acc/bvh.h"
-#include "../settings.h"
 #include "../sys/mutil.h"
 #include "../sys/sutil.h"
 #include "../sys/log.h"
@@ -13,20 +12,20 @@
 
 void scene_init(scene *s, uint32_t max_mesh_cnt, uint32_t max_mtl_cnt, uint32_t max_cam_cnt, uint32_t max_inst_cnt)
 {
-  s->mtls         = malloc(max_mtl_cnt * sizeof(*s->mtls)); 
+  s->mtls         = malloc(max_mtl_cnt * sizeof(*s->mtls));
   s->max_mtl_cnt  = max_mtl_cnt;
   s->mtl_cnt      = 0;
- 
+
   s->meshes       = malloc(max_mesh_cnt * sizeof(*s->meshes));
   s->max_mesh_cnt = max_mesh_cnt;
   s->mesh_cnt     = 0;
- 
+
   s->instances    = malloc(max_inst_cnt * sizeof(*s->instances));
   s->inst_info    = malloc(max_inst_cnt * sizeof(*s->inst_info));
   s->tlas_nodes   = malloc(2 * max_inst_cnt * sizeof(*s->tlas_nodes));
   s->max_inst_cnt = max_inst_cnt;
   s->inst_cnt     = 0;
-  
+
   s->ltris        = NULL; // Attach all meshes before initializing ltris and lnodes
   s->lnodes       = NULL;
   s->max_ltri_cnt = 0;
@@ -163,33 +162,33 @@ void scene_prepare_render(scene *s)
   for(uint32_t i=0; i<s->inst_cnt; i++) {
     inst_info *info = &s->inst_info[i];
     bool disabled = info->state & IS_DISABLED;
-    bool emissive = info->state & IS_EMISSIVE; 
-    
+    bool emissive = info->state & IS_EMISSIVE;
+
     // Reset ltri ofs/cnt for disabled instances
     if(disabled)
       info->ltri_ofs = info->ltri_cnt = 0;
-    
+
     // Start rebuilding all ltris once we hit the first dirty emissive or
     // previously emissive instance
     if(!rebuild_ltris && (info->state & IS_MTL_DIRTY) &&
         (emissive || (info->state & IS_WAS_EMISSIVE)))
       rebuild_ltris = true;
 
-    // Check if we are rebuilding ltris 
+    // Check if we are rebuilding ltris
     if(rebuild_ltris && emissive && !disabled)
       build_ltris(s, &s->instances[i], info, ltri_cnt);
 
     if(info->state & IS_TRANS_DIRTY) {
       if(!disabled) {
         inst *inst = &s->instances[i];
- 
+
         // Update transformation of existing ltris for this instance
         if(!rebuild_ltris && (info->state & IS_EMISSIVE))
           update_ltris(s, info);
 
         // Instances receives inverse transform only
         memcpy(inst->inv_transform, info->inv_transform, 12 * sizeof(float));
-    
+
         vec3 mi, ma;
         if(inst->data & SHAPE_TYPE_BIT) {
           // Shape type
@@ -350,7 +349,7 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
   if(mtl_id >= 0) {
     // Highest 16 bits are mtl override id, i.e. max 65536 materials
     inst->id = (mtl_id << 16) | (inst->id & INST_ID_MASK);
-    
+
     // Set highest bit to enable the material override
     inst->data |= MTL_OVERRIDE_BIT;
 
@@ -365,7 +364,7 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
   // Reset mtl override (for mesh types only)
   else if(!(inst->data & SHAPE_TYPE_BIT)) {
     inst->data = inst->data & INST_DATA_MASK;
-    
+
     // Flag instance if mesh is emissive
     if(s->meshes[info->mesh_shape].is_emissive)
       info->state |= IS_EMISSIVE;

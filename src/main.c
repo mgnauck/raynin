@@ -3,7 +3,6 @@
 #include "acc/bvh.h"
 #include "imex/import.h"
 #include "scene/cam.h"
-#include "scene/inst.h"
 #include "scene/mesh.h"
 #include "scene/mtl.h"
 #include "sys/log.h"
@@ -11,7 +10,6 @@
 #include "rend/renderer.h"
 #include "scene/scene.h"
 #include "util/vec3.h"
-#include "settings.h"
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
@@ -92,9 +90,9 @@ void mouse_move(int32_t dx, int32_t dy, float look_vel)
 
   float theta = min(max(acosf(-cam->fwd.y) + (float)dy * look_vel, 0.01f), 0.99f * PI);
   float phi = fmodf(atan2f(-cam->fwd.z, cam->fwd.x) + PI - (float)dx * look_vel, 2.0f * PI);
-  
+
   cam_set_dir(cam, vec3_spherical(theta, phi));
-  
+
   scene_set_dirty(cs, RT_CAM_VIEW);
 }
 
@@ -138,7 +136,7 @@ void init_scene_riow(scene *s)
   mesh = scene_acquire_mesh(s);
   mesh_create_sphere(mesh, 1.0f, 20, 20, mtl_id, false, false);
   sid = scene_attach_mesh(s, mesh, false);
-  
+
   // Floor mesh
   uint32_t fid = 0;
   m = mtl_init((vec3){ 0.25f, 0.25f, 0.25f });
@@ -148,9 +146,9 @@ void init_scene_riow(scene *s)
   mesh = scene_acquire_mesh(s);
   mesh_create_quad(mesh, 10, 10, mtl_id, false);
   fid = scene_attach_mesh(s, mesh, false);
- 
+
   // Light instances
-  for(uint8_t i=0; i<LIGHT_CNT; i++) { 
+  for(uint8_t i=0; i<LIGHT_CNT; i++) {
     mat4_scale_u(scale, 2.5f);
     mat4_rot_x(rotation, PI);
     mat4_mul(transform, scale, rotation);
@@ -164,7 +162,7 @@ void init_scene_riow(scene *s)
   mat4_scale_u(scale, 12.0f);
   //scene_add_shape_inst(s, ST_PLANE, mtl_id, scale);
   scene_add_mesh_inst(s, fid, -1, scale);
- 
+
   // Reflecting sphere (black)
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
@@ -199,7 +197,7 @@ void init_scene_riow(scene *s)
   scene_add_mesh_inst(s, sid, mtl_id, translation);
 
   mat4_scale_u(scale, 0.2f);
-  
+
   for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
     for(int b=-RIOW_SIZE/2; b<RIOW_SIZE/2; b++) {
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
@@ -239,7 +237,7 @@ void init(uint32_t width, uint32_t height, uint8_t spp)
 
   logc("max tris: %i, max ltris: %i, max mtls: %i, max insts: %i",
       cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
-  
+
   renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
   rd = renderer_init(cs, width, height, spp);
 
@@ -282,10 +280,10 @@ const char *gltf = "TODO";
 int main(int argc, char *argv[])
 {
   int32_t code = EXIT_SUCCESS;
- 
+
   if(SDL_Init(SDL_INIT_VIDEO) < 0)
     return EXIT_FAILURE;
-  
+
   SDL_Window *window = SDL_CreateWindow("unik",
       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
   if(!window) {
@@ -347,7 +345,7 @@ clean_window:
   SDL_DestroyWindow(window);
 clean_sdl:
   SDL_Quit();
- 
+
   return code;
 }
 

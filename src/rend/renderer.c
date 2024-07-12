@@ -134,7 +134,7 @@ void push_tris(render_data *rd)
 {
   scene *s = rd->scene;
 #ifndef NATIVE_BUILD
-  for(uint32_t i=0; i<s->mesh_cnt; i++) {    
+  for(uint32_t i=0; i<s->mesh_cnt; i++) {
     mesh *m = &s->meshes[i];
     gpu_write_buf(BT_TRI, m->ofs * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
   }
@@ -175,8 +175,8 @@ void renderer_update_static(render_data *rd)
     push_tris(rd);
     push_blas(rd);
     scene_clr_dirty(s, RT_MESH);
-  } 
- 
+  }
+
   if(s->dirty & RT_MTL)
     push_mtls(rd);
 
@@ -273,14 +273,14 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
               mat4 inv_transform_t;
               mat4_transpose(inv_transform_t, inv_transform);
               switch((shape_type)(h.e >> 16)) {
-                case ST_PLANE: 
+                case ST_PLANE:
                   nrm = vec3_unit(mat4_mul_dir(inv_transform_t, (vec3){ 0.0f, 1.0f, 0.0f }));
                   break;
                 case ST_BOX:
                   {
                     vec3 hit_pos = vec3_add(r.ori, vec3_scale(r.dir, h.t));
                     hit_pos = mat4_mul_pos(inv_transform, hit_pos);
-                    nrm = (vec3){ 
+                    nrm = (vec3){
                       (float)((int32_t)(hit_pos.x * 1.0001f)),
                       (float)((int32_t)(hit_pos.y * 1.0001f)),
                       (float)((int32_t)(hit_pos.z * 1.0001f)) };
@@ -299,12 +299,12 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
             nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
             mtl *m = &rd->scene->mtls[mtl_id];
             c = m->col;
-            //c = vec3_mul(nrm, c); 
+            //c = vec3_mul(nrm, c);
             //c = nrm;
           }
           uint32_t index = rd->width * (j + y) + (i + x);
           c = vec3_add(vec3_scale(vec3_uint32(((uint32_t *)surface->pixels)[index]), 1.0f - weight), vec3_scale(c, weight));
-          uint32_t cr = min(255, (uint32_t)(255 * c.x));  
+          uint32_t cr = min(255, (uint32_t)(255 * c.x));
           uint32_t cg = min(255, (uint32_t)(255 * c.y));
           uint32_t cb = min(255, (uint32_t)(255 * c.z));
           ((uint32_t *)surface->pixels)[index] = 0xff << 24 | cr << 16 | cg << 8 | cb;
