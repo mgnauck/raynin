@@ -1202,6 +1202,7 @@ fn sampleLightTreePdf(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f3
   return pickProb / ltris[ltriId].area;
 }
 
+// Talbot et al: Importance Resampling for Global Illumination
 fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let sampleCnt = 8u;
@@ -1210,7 +1211,7 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
   let ltriCnt = f32(arrayLength(&ltris));
   let sourcePdf = 1.0 / f32(ltriCnt);
 
-  // Reservoir data
+  // Weighted reservoir to facilitate the resampled importance sampling
   var totalWeight = 0.0;
   var sampleTargetPdf = 0.0;
 
@@ -1221,13 +1222,12 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
     let r = rand4(); // TODO
     let bc = sampleBarycentric(r.xy);
 
-    // Select a candidate ltri from all ltris with 'cheap' source pdf
+    // Sample a candidate ltri from all ltris with 'cheap' source pdf
     let ltriCandidate = &ltris[u32(floor(r.z * ltriCnt))];
     let ltriCandidatePos = (*ltriCandidate).v0 * bc.x + (*ltriCandidate).v1 * bc.y + (*ltriCandidate).v2 * bc.z;
     
-    // Resample to more accurate target pdf
+    // Re-sample the selected sample to approximate the more accurate target pdf
     let targetPdf = calcLTriContribution(pos, nrm, ltriCandidatePos, (*ltriCandidate).nrm, (*ltriCandidate).power);
-
     let risWeight = targetPdf / sourcePdf;
 
     totalWeight += risWeight;
@@ -1445,7 +1445,8 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
       var fres: vec3f;
@@ -1462,6 +1463,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(!sampleMaterial(mtl, ia.wo, ia.nrm, r1.xyz, &wi, &fres, &wasSpecular, &pdf)) {
       break;
     }
+
     throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, wasSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
     // Russian roulette
