@@ -1243,7 +1243,7 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
     }
   }
 
-  *pdf = 1.0 / (totalWeight / f32(sampleCnt) / sampleTargetPdf * area);
+  *pdf = (f32(sampleCnt) * sampleTargetPdf) / (area * totalWeight);
 
   return *pdf > 0.0;
 }
@@ -1326,7 +1326,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
-    let r0 = rand4(); // TODO Can remove for NEE with RIS
+    //let r0 = rand4(); // TODO Can remove for NEE with RIS
     let r1 = rand4();
 
     // Sample lights directly (NEE)
@@ -1334,10 +1334,11 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    //if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-    //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-    //if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-    if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    //if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
+    //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
+    //if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
+    if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)
+      && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
       // Apply MIS
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
       var ltriWi = normalize(ltriPos - ia.pos);
@@ -1346,9 +1347,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
       let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ltriWi, fres);
       let weight = ltriPdf / (ltriPdf + bsdfPdf * gsa);
-      if(any(bsdf * gsa * weight > vec3f(0)) && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
-        col += throughput * bsdf * gsa * weight * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
-      }
+      col += throughput * bsdf * gsa * weight * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
     }
 
     // Sample material
@@ -1445,15 +1444,14 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-    if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
+    if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)
+      && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
       var ltriWi = normalize(ltriPos - ia.pos);
       let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
       var fres: vec3f;
       let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
-      if(any(bsdf > vec3f(0)) && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
-        col += throughput * bsdf * gsa * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
-      }
+      col += throughput * bsdf * gsa * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
     }
 
     // Sample material
