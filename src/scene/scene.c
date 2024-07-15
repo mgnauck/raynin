@@ -26,8 +26,7 @@ void scene_init(scene *s, uint32_t max_mesh_cnt, uint32_t max_mtl_cnt, uint32_t 
   s->max_inst_cnt = max_inst_cnt;
   s->inst_cnt     = 0;
 
-  s->ltris        = NULL; // Attach all meshes before initializing ltris and lnodes
-  s->lnodes       = NULL;
+  s->ltris        = NULL; // Attach all meshes before initializing ltris
   s->max_ltri_cnt = 0;
   s->ltri_cnt     = 0;
 
@@ -52,7 +51,6 @@ void scene_release(scene *s)
 
   free(s->cams);
   free(s->blas_nodes);
-  free(s->lnodes);
   free(s->ltris);
   free(s->tlas_nodes);
   free(s->inst_info);
@@ -85,9 +83,6 @@ void scene_finalize(scene *s)
 
   // Allocate space for given ltri cnt
   s->ltris = malloc(s->max_ltri_cnt * sizeof(*s->ltris));
-
-  // Allocate light nodes of light tree according to scene's max ltri cnt
-  s->lnodes = malloc(2 * s->max_ltri_cnt * sizeof(*s->lnodes));
 
   // Allocate enough blas nodes to cover the tris of all meshes
   s->blas_nodes = malloc(2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
@@ -232,13 +227,6 @@ void scene_prepare_render(scene *s)
 
   // Current ltri cnt in the scene
   s->ltri_cnt = ltri_cnt;
-
-  // Ltris got an update, so the light tree needs to be re-built as well
-  if(s->dirty & RT_LTRI) {
-    //logc("Rebuild light tree with max ltris: %i, ltris: %i", s->max_ltri_cnt, s->ltri_cnt);
-    memset(s->lnodes, 0, 2 * s->max_ltri_cnt * sizeof(*s->lnodes));
-    lighttree_build(s->lnodes, s->ltris, s->ltri_cnt);
-  }
 
   ///uint64_t inst_upd_end = SDL_GetTicks64();
 

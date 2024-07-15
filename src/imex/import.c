@@ -421,7 +421,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   s->bg_col = data.bg_col;
 
   // Finalize the scene data (blas and ltris)
-  logc("-------- Finalizing scene (blas and ltri/lnode creation)");
+  logc("-------- Finalizing scene (blas and ltri creation)");
   scene_finalize(s);
  
   gltf_release(&data);

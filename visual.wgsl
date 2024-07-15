@@ -51,16 +51,6 @@ struct Node
   idx:          u32             // Assigned on leaf nodes only
 }
 
-struct LNode
-{
-  aabbMin:      vec3f,
-  children:     u32,            // 2x 16 bits for left and right child
-  aabbMax:      vec3f,
-  idx:          u32,            // Upper 16 bits is parent node id, lower 16 bits is light id (ltri id)
-  nrm:          vec3f,
-  intensity:    f32
-}
-
 struct Tri
 {
   v0:           vec3f,
@@ -137,18 +127,13 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(3) var<storage, read> tris: array<Tri>;
 @group(0) @binding(4) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(5) var<storage, read> lightNodes: array<LNode>;
-@group(0) @binding(6) var<storage, read> nodes: array<Node>;
-@group(0) @binding(7) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(5) var<storage, read> nodes: array<Node>;
+@group(0) @binding(6) var<storage, read_write> buffer: array<vec4f>;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
 var<private> blasNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
-
-// Ltri contributions
-const MAX_LTRI_CNT = 64u;
-var<private> ltriContributions: array<f32, MAX_LTRI_CNT>;
 
 // State of prng
 var<private> rng: vec4u;
@@ -957,9 +942,9 @@ fn sampleLTrisUniform(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, ve
   var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
   visible &= dot(ldir, n) < 0; // Not facing (behind)
 
-  *pdf = 1.0 / ((*ltri).area * f32(ltriCnt));
-
   *emission = (*ltri).emission;
+
+  *pdf = 1.0 / ((*ltri).area * f32(ltriCnt));
 
   return visible;
 }
@@ -987,221 +972,6 @@ fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriNrm: vec3f, 
   return lnDotL * nDotL * lightPower * invDist * invDist;
 }
 
-fn calcLTriPickProb(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
-{
-  // Calculate picking probability with respect to ltri contributions
-  var totalContrib = 0.0;
-  let ltriCnt = arrayLength(&ltris);
-
-  // Calc contribution of each ltri with the given light dir/pos and total of all contributions
-  for(var i=0u; i<ltriCnt; i++) {
-    let ltri = &ltris[i];
-    let curr = calcLTriContribution(pos, nrm, ltriPos, (*ltri).nrm, (*ltri).power);
-    ltriContributions[i] = curr;
-    totalContrib += curr;
-  }
-
-  // Scale contribution by total, so that our picking pdf integrates to 1
-  return select(0.0, ltriContributions[ltriId] / totalContrib, totalContrib > EPS);
-}
-
-// https://computergraphics.stackexchange.com/questions/4792/path-tracing-with-multiple-lights/
-fn pickLTriRandomly(pos: vec3f, nrm: vec3f, r: f32, bc: vec3f, pdf: ptr<function, f32>) -> u32
-{
-  // Calculate picking probability with respect to ltri contributions
-  var totalContrib = 0.0;
-  let ltriCnt = arrayLength(&ltris);
-
-  // Calc contribution of each ltri and total of all contributions
-  for(var i=0u; i<ltriCnt; i++) {
-    let ltri = &ltris[i];
-    let ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
-    let curr = calcLTriContribution(pos, nrm, ltriPos, (*ltri).nrm, (*ltri).power);
-    ltriContributions[i] = curr;
-    totalContrib += curr;
-  }
-
-  // No ltri can be picked, i.e. each ltri faces away
-  if(totalContrib < EPS) {
-    *pdf = 0.0;
-    return 0u;
-  }
-
-   // Same as scaling ltri contributions by totalContrib
-  let rScaled = r * totalContrib;
-
-  // Randomly pick the ltri according to the CDF
-  // CDF is pdf for value X or all smaller ones
-  var cumulative = 0.0;
-  var ltriId: u32;
-  for(var i=0u; i<ltriCnt; i++) {
-    cumulative += ltriContributions[i];
-    if(rScaled <= cumulative) {
-      ltriId = i;
-      break;
-    }
-  }
-
-  // Scale contribution by total, so that our picking pdf integrates to 1
-  *pdf = ltriContributions[ltriId] / totalContrib;
-  return ltriId;
-}
-
-fn sampleLTris(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
-{
-  let bc = sampleBarycentric(r0.xy);
-
-  // Pick ltri via contribution
-  var pickProb: f32;
-  let ltriId = pickLTriRandomly(pos, n, r0.z, bc, &pickProb);
-  if(pickProb < EPS) {
-    return false;
-  }
-
-  let ltri = &ltris[ltriId];
-
-  *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
-  *ltriNrm = (*ltri).nrm;
-
-  *pdf = pickProb / (*ltri).area;
-
-  *emission = (*ltri).emission;
-
-  return true;
-}
-
-fn sampleLTriPdf(pos: vec3f, n: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
-{
-  let pickProb = calcLTriPickProb(pos, n, ltriPos, ltriId);
-  return pickProb / ltris[ltriId].area;
-}
-
-fn calcChildNodeProb(node: LNode, pos: vec3f, n: vec3f) -> f32
-{
-  let left = lightNodes[node.children & 0xffff];
-  let right = lightNodes[node.children >> 16];
-
-  // Calculate squared min and max distance between pos and aabbs of left/right node
-  let diagHalfLeft = 0.5 * (left.aabbMax - left.aabbMin);
-  let diagHalfRight = 0.5 * (right.aabbMax - right.aabbMin);
-
-  let centLeft = 0.5 * (left.aabbMin + left.aabbMax);
-  let centRight = 0.5 * (right.aabbMin + right.aabbMax);
-
-  let vLeft = centLeft - pos;
-  let vRight = centRight - pos;
-
-  let minVLeft = max(vLeft - diagHalfLeft, vec3f(0)); // Handle inside via max
-  var minVRight = max(vRight - diagHalfRight, vec3f(0));
-
-  let minDistLeft = dot(minVLeft, minVLeft); // Squared min distances
-  let minDistRight = dot(minVRight, minVRight);
-
-  let maxVLeft = vLeft + diagHalfLeft;
-  let maxVRight = vRight + diagHalfRight;
-
-  let maxDistLeft = dot(maxVLeft, maxVLeft); // Squared max distances
-  let maxDistRight = dot(maxVRight, maxVRight);
-
-  // Calculate geometry term of reflectance bound f
-  // TODO Provide rand from outside
-  let pLeft = left.aabbMin + 2.0 * diagHalfLeft * rand4().xyz; // Random point "on light"
-  let pRight = right.aabbMin + 2.0 * diagHalfRight * rand4().xyz;
-
-  let lvLeft = normalize(pLeft - pos); // Light vector
-  let lvRight = normalize(pRight - pos);
-
-  var fLeft = max(dot(n, lvLeft), EPS);
-  var fRight = max(dot(n, lvRight), EPS);
-
-  if(dot(node.nrm, node.nrm) > EPS) {
-    // Nrm at node is valid, i.e. it's an actual or approximated ltri nrm (see light tree creation)
-    fLeft *= max(dot(node.nrm, -lvLeft), EPS);
-    fRight *= max(dot(node.nrm, -lvRight), EPS);
-  }
-
-  // Yuksel et al: Real-Time Stochastic Lightcuts
-  let inside = select(false, true, minDistLeft == 0.0 && minDistRight == 0.0);
-
-  let minWeightLeft = (left.intensity * fLeft) / select(max(minDistLeft, EPS), 1.0, inside);
-  let minWeightRight = (right.intensity * fRight) / select(max(minDistRight, EPS), 1.0, inside);
-
-  let maxWeightLeft = (left.intensity * fLeft) / max(maxDistLeft, EPS);
-  let maxWeightRight = (right.intensity * fRight) / max(maxDistRight, EPS);
-
-  let probMinLeft = minWeightLeft / (minWeightLeft + minWeightRight);
-  let probMaxLeft = maxWeightLeft / (maxWeightLeft + maxWeightRight);
-
-  return 0.5 * (probMinLeft + probMaxLeft); // probRight = 1.0 - probLeft
-}
-
-// Walter et al: Real-Time Stochastic Lightcuts
-// Cem Yuksel: Stochastic Lightcuts for Sampling Many Lights
-fn sampleLightTree(pos: vec3f, nrm: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
-{
-  var ltriId: u32;
-  var nid = 0u;
-  var pickProb = 1.0;
-  var r = r0.z;
-
-  // Hierarchical importance sampling w/o dead branch handling
-  loop {
-    let node = &lightNodes[nid];
-    if((*node).children == 0) {
-      ltriId = (*node).idx & SHORT_MASK; // Assign ltri contained at leaf
-      break;
-    } else {
-      let prob = calcChildNodeProb(*node, pos, nrm);
-      if(r < prob) {
-        pickProb *= prob; // Update probability
-        r = r / prob; // Rescale random value
-        nid = (*node).children & SHORT_MASK; // Left
-      } else {
-        pickProb *= 1.0 - prob; // Update
-        r = (r - prob) / (1.0 - prob); // Rescale
-        nid = (*node).children >> 16; // Right
-      }
-    }
-  }
-
-  let ltri = &ltris[ltriId];
-
-  let bc = sampleBarycentric(r0.xy);
-
-  *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
-  *ltriNrm = (*ltri).nrm;
-
-  *pdf = pickProb / (*ltri).area;
-
-  *emission = (*ltri).emission;
-
-  return true;
-}
-
-fn sampleLightTreePdf(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriId: u32) -> f32
-{
-  var pickProb = 1.0;
-  var nid = ltriId + 1; // Leaf node for given ltri is at 1 + ltri (because root light node is at 0)
-
-  // Calc probability of picking this ltri by going up the light tree from leaf to root
-  loop {
-    if(nid == 0) {
-      // Stop at root, we have the probability of the chosen ltri
-      break;
-    }
-
-    let pid = lightNodes[nid].idx >> 16; // Parent node id
-    let parent = &lightNodes[pid];
-
-    let prob = calcChildNodeProb(*parent, pos, nrm);
-    pickProb *= select(1.0 - prob, prob, ((*parent).children & SHORT_MASK) == nid);
-
-    nid = pid;
-  }
-
-  return pickProb / ltris[ltriId].area;
-}
-
 // Talbot et al: Importance Resampling for Global Illumination
 fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
@@ -1218,7 +988,7 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
 
   for(var i=0u; i<sampleCnt; i++) {
 
-    let r = rand4(); // TODO
+    let r = rand4();
     let bc = sampleBarycentric(r.xy);
 
     // Sample a candidate ltri from all ltris with 'cheap' source pdf
@@ -1237,7 +1007,7 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
       *ltriNrm = (*ltriCandidate).nrm;
       *emission = (*ltriCandidate).emission;
       area = (*ltriCandidate).area;
-      // Track pdf of the selection
+      // Track pdf of the selected sample
       sampleTargetPdf = targetPdf;
     }
   }
@@ -1294,7 +1064,6 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, ia: ptr<function, IA>, mtl: ptr
     let tri = tris[ofs + (hit.e >> 16)];
     // Either use the material id from the triangle or the material override from the instance
     *mtl = materials[select(tri.mtl & SHORT_MASK, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0)];
-    //(*ia).nrm = select(calcTriNormal(hit, inst, tri), normalToWorldSpace(tri.n0, inst), tri.face_nrm > 0.0);
     (*ia).nrm = calcTriNormal(hit, inst, tri);
     (*ia).ltriId = tri.ltriId; // Is not set if not emissive
   }
@@ -1325,17 +1094,14 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
   for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
 
-    //let r0 = rand4(); // TODO Can remove for NEE with RIS
-    let r1 = rand4();
+    let r0 = rand4();
 
     // Sample lights directly (NEE)
     var ltriPos: vec3f;
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    //if(sampleLTrisUniform(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
-    //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
-    //if(sampleLightTree(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
+    //if(sampleLTrisUniform(ia.pos, ia.nrm, rand4().xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
     if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)
       && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
       // Apply MIS
@@ -1353,7 +1119,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var wi: vec3f;
     var fres: vec3f;
     var pdf: f32;
-    if(!sampleMaterial(mtl, ia.wo, ia.nrm, r1.xyz, &wi, &fres, &wasSpecular, &pdf)) {
+    if(!sampleMaterial(mtl, ia.wo, ia.nrm, r0.xyz, &wi, &fres, &wasSpecular, &pdf)) {
       break;
     }
 
@@ -1381,8 +1147,6 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
         // Apply MIS
         let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
         let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
-        //let ltriPdf = sampleLTriPdf(lastPos, lastNrm, ia.pos, ia.ltriId);
-        //let ltriPdf = sampleLightTreePdf(lastPos, lastNrm, ia.pos, ia.ltriId);
         let weight = pdf * gsa / (pdf * gsa + ltriPdf);
         col += throughput * weight * mtl.col;
       }
@@ -1392,7 +1156,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     // Russian roulette
     // Terminate with prob inverse to throughput
     let p = min(0.95, maxComp3(throughput));
-    if(r1.w > p) {
+    if(r0.w > p) {
       break;
     }
     // Account for bias introduced by path termination (pdf = p)
@@ -1436,14 +1200,13 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     }
 
     let r0 = rand4();
-    let r1 = rand4();
 
     // Sample lights directly (NEE)
     var ltriPos: vec3f;
     var ltriNrm: vec3f;
     var emission: vec3f;
     var ltriPdf: f32;
-    //if(sampleLTris(ia.pos, ia.nrm, r0.xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
+    //if(sampleLTrisUniform(ia.pos, ia.nrm, rand4().xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
     if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)
       && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
       var ltriWi = normalize(ltriPos - ia.pos);
@@ -1457,7 +1220,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     var wi: vec3f;
     var fres: vec3f;
     var pdf: f32;
-    if(!sampleMaterial(mtl, ia.wo, ia.nrm, r1.xyz, &wi, &fres, &wasSpecular, &pdf)) {
+    if(!sampleMaterial(mtl, ia.wo, ia.nrm, r0.xyz, &wi, &fres, &wasSpecular, &pdf)) {
       break;
     }
 
@@ -1466,7 +1229,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     // Russian roulette
     // Terminate with prob inverse to throughput
     let p = min(0.95, maxComp3(throughput));
-    if(r1.w > p) {
+    if(r0.w > p) {
       break;
     }
     // Account for bias introduced by path termination (pdf = p)

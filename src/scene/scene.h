@@ -10,7 +10,6 @@ typedef struct cam cam;
 typedef struct inst inst;
 typedef struct inst_info inst_info;
 typedef struct ltri ltri;
-typedef struct lnode lnode;
 typedef struct mesh mesh;
 typedef struct mtl mtl;
 typedef struct node node;
@@ -30,7 +29,6 @@ typedef struct scene {
   uint32_t    max_ltri_cnt;
   uint32_t    ltri_cnt;
   ltri        *ltris;
-  lnode       *lnodes;
   uint32_t    max_tri_cnt;
   node        *blas_nodes;
   cam         *cams;

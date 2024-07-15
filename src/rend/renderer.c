@@ -37,7 +37,6 @@ typedef enum buf_type {
   BT_INST,
   BT_TRI,
   BT_LTRI,
-  BT_LNODE,
   BT_NODE, // blas + tlas
 } buf_type;
 
@@ -64,7 +63,7 @@ typedef struct frame_data {
 
 extern void gpu_create_res(uint32_t glob_sz, uint32_t mtl_sz,
     uint32_t inst_sz, uint32_t tri_sz, uint32_t ltri_sz,
-    uint32_t lnode_sz, uint32_t node_sz);
+    uint32_t node_sz);
 
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
@@ -97,7 +96,6 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
       total_inst_cnt * sizeof(inst), // Instances (uniform buf)
       total_tri_cnt * sizeof(tri), // Tris (storage buf)
       total_ltri_cnt * sizeof(ltri), // LTris (storage buf)
-      2 * total_ltri_cnt * sizeof(lnode), // Light nodes (storage buf)
       2 * (total_tri_cnt + total_inst_cnt) * sizeof(node)); // BLAS + TLAS nodes (storage buf)
 
   tlas_node_ofs = 2 * total_tri_cnt;
@@ -149,11 +147,10 @@ void push_tris(render_data *rd)
   scene_clr_dirty(s, RT_TRI);
 }
 
-void push_ltris_lnodes(render_data *rd)
+void push_ltris(render_data *rd)
 {
   scene *s = rd->scene;
   gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
-  gpu_write_buf(BT_LNODE, 0, s->lnodes, 2 * s->ltri_cnt * sizeof(*s->lnodes));
   scene_clr_dirty(s, RT_LTRI);
 }
 
@@ -188,7 +185,7 @@ void renderer_update_static(render_data *rd)
     push_mtls(rd);
 
   if(rd->scene->dirty & RT_LTRI)
-    push_ltris_lnodes(rd);
+    push_ltris(rd);
 }
 
 void renderer_update(render_data *rd, float time)
@@ -217,7 +214,7 @@ void renderer_update(render_data *rd, float time)
 
   // Push ltris
   if(rd->scene->dirty & RT_LTRI) {
-    push_ltris_lnodes(rd);
+    push_ltris(rd);
     if(rd->scene->dirty & RT_TRI) // Ltri id in tri is modified by ltri rebuild
       push_tris(rd);
   }

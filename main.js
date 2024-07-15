@@ -18,7 +18,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, LNODE: 5, NODE: 6, ACC: 7 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, ACC: 6 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -75,7 +75,7 @@ function Wasm(module)
       }
       return parseFloat(s); 
     },
-    gpu_create_res: (g, m, i, t, lt, ln, bn) => createGpuResources(g, m, i, t, lt, ln, bn),
+    gpu_create_res: (g, m, i, t, lt, bn) => createGpuResources(g, m, i, t, lt, bn),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
   };
 
@@ -134,7 +134,7 @@ function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPa
   passEncoder.end();
 }
 
-function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, lnodeSz, nodeSz)
+function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 {
   res.buf = [];
 
@@ -156,7 +156,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, lnodeSz, nodeS
   // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
   triSz = triSz == 0 ? 96 : triSz;
   ltriSz = ltriSz == 0 ? 80 : ltriSz;
-  lnodeSz = lnodeSz == 0 ? 64 : lnodeSz;
   nodeSz = nodeSz == 0 ? 32 : nodeSz;
 
   res.buf[bufType.TRI] = device.createBuffer({
@@ -166,11 +165,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, lnodeSz, nodeS
 
   res.buf[bufType.LTRI] = device.createBuffer({
     size: ltriSz,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[bufType.LNODE] = device.createBuffer({
-    size: lnodeSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -201,9 +195,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, lnodeSz, nodeS
       { binding: bufType.LTRI,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
-      { binding: bufType.LNODE,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
       { binding: bufType.NODE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
@@ -221,7 +212,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, lnodeSz, nodeS
       { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
       { binding: bufType.TRI, resource: { buffer: res.buf[bufType.TRI] } },
       { binding: bufType.LTRI, resource: { buffer: res.buf[bufType.LTRI] } },
-      { binding: bufType.LNODE, resource: { buffer: res.buf[bufType.LNODE] } },
       { binding: bufType.NODE, resource: { buffer: res.buf[bufType.NODE] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
     ]
