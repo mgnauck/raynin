@@ -1211,10 +1211,9 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
   let ltriCnt = f32(arrayLength(&ltris));
   let sourcePdf = 1.0 / f32(ltriCnt);
 
-  // Weighted reservoir to facilitate the resampled importance sampling
+  // Weighted reservoir to facilitate resampled importance sampling
   var totalWeight = 0.0;
-  var sampleTargetPdf = 0.0;
-
+  var sampleTargetPdf: f32;
   var area: f32;
 
   for(var i=0u; i<sampleCnt; i++) {
