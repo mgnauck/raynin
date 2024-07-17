@@ -142,18 +142,9 @@ var<private> rng: vec4u;
 fn rand4() -> vec4f
 {
   rng = rng * 1664525u + 1013904223u;
-
-  rng.x += rng.y * rng.w;
-  rng.y += rng.z * rng.x;
-  rng.z += rng.x * rng.y;
-  rng.w += rng.y * rng.z;
-
+  rng += rng.yzxy * rng.wxyz;
   rng = rng ^ (rng >> vec4u(16));
-  rng.x += rng.y * rng.w;
-  rng.y += rng.z * rng.x;
-  rng.z += rng.x * rng.y;
-  rng.w += rng.y * rng.z;
-
+  rng += rng.yzxy * rng.wxyz;
   return ldexp(vec4f((rng >> vec4u(22)) ^ rng), vec4i(-32));
 }
 
@@ -981,7 +972,7 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
   let ltriCnt = f32(arrayLength(&ltris));
   let sourcePdf = 1.0 / f32(ltriCnt);
 
-  // Weighted reservoir to facilitate resampled importance sampling
+  // Selected sample tracking
   var totalWeight = 0.0;
   var sampleTargetPdf: f32;
   var area: f32;
@@ -998,7 +989,6 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
     // Re-sample the selected sample to approximate the more accurate target pdf
     let targetPdf = calcLTriContribution(pos, nrm, ltriCandidatePos, (*ltriCandidate).nrm, (*ltriCandidate).power);
     let risWeight = targetPdf / sourcePdf;
-
     totalWeight += risWeight;
 
     if(r.w < risWeight / totalWeight) {
