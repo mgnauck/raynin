@@ -22,7 +22,6 @@ scene         *cs = &scn;
 render_data   *rd;
 uint32_t      active_cam = 0;
 bool          orbit_cam = false;
-bool          converge = false;
 
   __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
@@ -61,9 +60,6 @@ void key_down(unsigned char key, float move_vel)
       break;
     case 'u':
       cs->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, cs->bg_col);
-      break;
-    case 'c':
-      converge = !converge;
       break;
     case 'm':
       active_cam = (active_cam + 1) % cs->cam_cnt;
@@ -229,7 +225,7 @@ uint8_t init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, s
 }
 
 __attribute__((visibility("default")))
-void init(uint32_t width, uint32_t height, uint8_t spp)
+void init(uint32_t width, uint32_t height, uint32_t spp)
 {
   pcg_srand(42u, 303u);
 
@@ -239,15 +235,15 @@ void init(uint32_t width, uint32_t height, uint8_t spp)
       cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
 
   renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
-  rd = renderer_init(cs, width, height, spp);
 
-  renderer_update_static(rd);
+  rd = renderer_init(cs, width, height);
+  renderer_setup(rd, spp);
 }
 
-void update_scene(scene *s, float time)
+__attribute__((visibility("default")))
+void update(float time, uint32_t spp, bool converge)
 {
-  if(!converge)
-    scene_set_dirty(s, RT_CAM_VIEW);
+  scene *s = cs;
 
   // Update camera
   if(orbit_cam) {
@@ -257,13 +253,8 @@ void update_scene(scene *s, float time)
     cam_set(cam, pos, vec3_neg(pos));
     scene_set_dirty(s, RT_CAM_VIEW);
   }
-}
 
-__attribute__((visibility("default")))
-void update(float time)
-{
-  update_scene(cs, time);
-  renderer_update(rd, time);
+  renderer_update(rd, spp, converge);
 }
 
 __attribute__((visibility("default")))
@@ -333,7 +324,7 @@ int main(int argc, char *argv[])
     SDL_SetWindowTitle(window, title);
     last = SDL_GetTicks64();
 
-    update((last - start) / 1000.0f);
+    update((last - start) / 1000.0f, 1, false);
     renderer_render(rd, screen);
 
     SDL_UpdateWindowSurface(window);

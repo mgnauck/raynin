@@ -17,11 +17,9 @@
 #include "intersect.h"
 #endif
 
-#define TEMPORAL_WEIGHT       0.0f
-
 // Global uniform buffer offsets
 #define GLOB_BUF_OFS_CFG      0
-#define GLOB_BUF_OFS_FRAME    24
+#define GLOB_BUF_OFS_FRAME    16
 #define GLOB_BUF_OFS_CAM      48
 #define GLOB_BUF_OFS_VIEW     96
 #define GLOB_BUF_SIZE         144
@@ -46,7 +44,6 @@ typedef struct render_data {
   scene     *scene;
   uint16_t  width;
   uint16_t  height;
-  uint8_t   spp;
   uint8_t   bounces;
   uint32_t  frame;
   uint32_t  gathered_spp;
@@ -55,8 +52,10 @@ typedef struct render_data {
 typedef struct frame_data {
   uint32_t  frame;
   uint32_t  gathered_spp;
+  uint32_t  pad0;
+  uint32_t  pad1;
   vec3      bg_col;
-  float     weight;
+  float     pad2;
 } frame_data;
 
 #ifndef NATIVE_BUILD
@@ -103,17 +102,14 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
   return 0;
 }
 
-render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint8_t spp)
+render_data *renderer_init(scene *s, uint16_t width, uint16_t height)
 {
   render_data *rd = malloc(sizeof(*rd));
 
   rd->scene = s;
   rd->width = width;
   rd->height = height;
-  rd->spp = spp;
   rd->bounces = MAX_BOUNCES;
-  rd->frame = 0;
-  rd->gathered_spp = 0;
 
   return rd;
 }
@@ -123,9 +119,17 @@ void renderer_release(render_data *rd)
   free(rd);
 }
 
-void reset_samples(render_data *rd)
+void push_frame_data(render_data *rd)
 {
-  rd->gathered_spp = TEMPORAL_WEIGHT * rd->gathered_spp;
+#ifndef NATIVE_BUILD
+  scene *s = rd->scene;
+  frame_data fd = (frame_data){
+    .frame = rd->frame,
+    .gathered_spp = rd->gathered_spp,
+    .bg_col = s->bg_col,
+  };
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, &fd, sizeof(frame_data));
+#endif
 }
 
 void push_mtls(render_data *rd)
@@ -162,18 +166,18 @@ void push_blas(render_data *rd)
 #endif
 }
 
-void renderer_update_static(render_data *rd)
+void renderer_setup(render_data *rd, uint32_t spp)
 {
   scene *s = rd->scene;
 
-#ifndef NATIVE_BUILD
-  // Push part of globals
-  uint32_t cfg[6] = { rd->width, rd->height, rd->spp, rd->bounces, tlas_node_ofs, /* pad */0 };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
-#endif
-
   // Update instances, build ltris and tlas
   scene_prepare_render(s);
+
+#ifndef NATIVE_BUILD
+  // Push part of globals
+  uint32_t cfg[4] = { rd->width, rd->height, rd->bounces, tlas_node_ofs };
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
+#endif
 
   if(s->dirty & RT_MESH) {
     push_tris(rd);
@@ -186,20 +190,22 @@ void renderer_update_static(render_data *rd)
 
   if(rd->scene->dirty & RT_LTRI)
     push_ltris(rd);
+
+  rd->gathered_spp = spp; // Frame 0 will gather given spp
+  rd->frame = 0;
+
+  push_frame_data(rd);
 }
 
-void renderer_update(render_data *rd, float time)
+void renderer_update(render_data *rd, uint32_t spp, bool converge)
 {
   scene *s = rd->scene;
 
-  // In case something changed, revisit instances, ltris and tlas
   scene_prepare_render(s);
 
-  // Invalidate previous samples
-  if(rd->scene->dirty > 0)
-    reset_samples(rd);
+  if(!converge || rd->scene->dirty > 0)
+    rd->gathered_spp = 0;
 
-  // Push camera and view
   if(rd->scene->dirty & RT_CAM_VIEW) {
     cam *cam = scene_get_active_cam(s);
     gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, cam, CAM_BUF_SIZE);
@@ -208,44 +214,30 @@ void renderer_update(render_data *rd, float time)
     scene_clr_dirty(s, RT_CAM_VIEW);
   }
 
-  // Push materials
   if(rd->scene->dirty & RT_MTL)
     push_mtls(rd);
 
-  // Push ltris
   if(rd->scene->dirty & RT_LTRI) {
     push_ltris(rd);
     if(rd->scene->dirty & RT_TRI) // Ltri id in tri is modified by ltri rebuild
       push_tris(rd);
   }
 
-  // Push tlas and instances
   if(rd->scene->dirty & RT_INST) {
     gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
     gpu_write_buf(BT_NODE, tlas_node_ofs * sizeof(*s->tlas_nodes), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
     scene_clr_dirty(s, RT_INST);
   }
 
-#ifndef NATIVE_BUILD
-  // Push frame data
-  frame_data fd = (frame_data){
-    .frame = rd->frame,
-    .gathered_spp = rd->gathered_spp,
-    .bg_col = s->bg_col,
-    .weight = rd->spp / (float)(rd->gathered_spp + rd->spp)
-  };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, &fd, sizeof(frame_data));
-#endif
-
-  // Update frame and sample counter
+  rd->gathered_spp += spp;
   rd->frame++;
-  rd->gathered_spp += rd->spp;
+
+  push_frame_data(rd);
 }
 
 #ifdef NATIVE_BUILD
 void renderer_render(render_data *rd, SDL_Surface *surface)
 {
-  float weight = rd->spp / (float)rd->gathered_spp;
 #define BLOCK_SIZE 4
   for(uint32_t j=0; j<rd->height; j+=BLOCK_SIZE) {
     for(uint32_t i=0; i<rd->width; i+=BLOCK_SIZE) {
@@ -308,12 +300,10 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
             //c = vec3_mul(nrm, c);
             //c = nrm;
           }
-          uint32_t index = rd->width * (j + y) + (i + x);
-          c = vec3_add(vec3_scale(vec3_uint32(((uint32_t *)surface->pixels)[index]), 1.0f - weight), vec3_scale(c, weight));
           uint32_t cr = min(255, (uint32_t)(255 * c.x));
           uint32_t cg = min(255, (uint32_t)(255 * c.y));
           uint32_t cb = min(255, (uint32_t)(255 * c.z));
-          ((uint32_t *)surface->pixels)[index] = 0xff << 24 | cr << 16 | cg << 8 | cb;
+          ((uint32_t *)surface->pixels)[rd->width * (j + y) + (i + x)] = 0xff << 24 | cr << 16 | cg << 8 | cb;
         }
       }
     }

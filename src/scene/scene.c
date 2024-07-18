@@ -106,7 +106,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
     for(uint32_t i=0; i<tri_cnt; i++) {
       tri *t = &tris[i];
       uint32_t ltri_id = ltri_ofs + ltri_cnt++;
-      tri_build_ltri(&s->ltris[ltri_id], &tris[i], inst->id & 0xffff,
+      tri_build_ltri(&s->ltris[ltri_id], &tris[i],
           i, info->transform, info->inv_transform,
           s->mtls[t->mtl & 0xffff].col);
       // A tri links its ltri: Tris that emit light need to be unique, i.e.
@@ -120,7 +120,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
       mtl *mtl = &s->mtls[t->mtl & 0xffff];
       if(mtl->emissive > 0.0f) {
         uint32_t ltri_id = ltri_ofs + ltri_cnt++;
-        tri_build_ltri(&s->ltris[ltri_id], t, inst->id & 0xffff,
+        tri_build_ltri(&s->ltris[ltri_id], t,
             i, info->transform, info->inv_transform, mtl->col);
         t->ltri_id = ltri_id;
       }

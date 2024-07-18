@@ -1,27 +1,31 @@
 struct Global
 {
+  // Config
   width:        u32,
   height:       u32,
-  spp:          u32,
   maxBounces:   u32,
   tlasNodeOfs:  u32,
-  pad0:         u32,
+  // Frame
   frame:        u32,
   gatheredSpp:  u32,
+  pad0:         u32,
+  pad1:         u32,
   bgColor:      vec3f,
-  weight:       f32,
+  pad2:         f32,
+  // Camera
   eye:          vec3f,
   vertFov:      f32,
   right:        vec3f,
   focDist:      f32,
   up:           vec3f,
   focAngle:     f32,
+  // View
   pixelDeltaX:  vec3f,
-  pad1:         f32,
-  pixelDeltaY:  vec3f,
-  pad2:         f32,
-  pixelTopLeft: vec3f,
   pad3:         f32,
+  pixelDeltaY:  vec3f,
+  pad4:         f32,
+  pixelTopLeft: vec3f,
+  pad5:         f32,
 }
 
 struct Mtl
@@ -58,7 +62,7 @@ struct Tri
   v1:           vec3f,
   ltriId:       u32,            // Set only if tri has light emitting material
   v2:           vec3f,
-  face_nrm:     f32,            // 1.0f if tri has face normal
+  pad0:         f32,
   n0:           vec3f,
   pad1:         f32,
   n1:           vec3f,
@@ -70,15 +74,28 @@ struct Tri
 struct LTri
 {
   v0:           vec3f,
-  instId:       u32,
-  v1:           vec3f,
   triId:        u32,            // Original tri id of the mesh (w/o inst data ofs)
+  v1:           vec3f,
+  pad0:         f32,
   v2:           vec3f,
   area:         f32,
   nrm:          vec3f,
   power:        f32,            // Precalculated product of area and emission
   emission:     vec3f,
-  pad0:         f32
+  pad1:         f32
+}
+
+struct Ray
+{
+  ori:          vec4f,
+  dir:          vec4f
+}
+
+struct RayState
+{
+  throughput:   vec3f,          // Use vec4f and bitcast for pixel idx?
+  pixelIdx:     u32,
+  rngSeed:      vec4u
 }
 
 struct Hit
@@ -128,7 +145,9 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(3) var<storage, read> tris: array<Tri>;
 @group(0) @binding(4) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(5) var<storage, read> nodes: array<Node>;
-@group(0) @binding(6) var<storage, read_write> buffer: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> rays: array<Ray>;
+@group(0) @binding(7) var<storage, read_write> rayStates: array<RayState>;
+@group(0) @binding(8) var<storage, read_write> accum: array<vec4f>;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -642,7 +661,7 @@ fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
   let tfar = length(dir);
   dir /= tfar;
   let invDir = 1 / dir;
-  
+
   let tlasOfs = globals.tlasNodeOfs;
 
   var nodeIndex = 0u;
@@ -948,7 +967,7 @@ fn sampleLTriUniformPdf(ltriId: u32) -> f32
 fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriNrm: vec3f, lightPower: f32) -> f32
 {
   var lightDir = ltriPos - pos;
-  let invDist = 1.0 / length(lightDir);
+  let invDist = inverseSqrt(dot(lightDir, lightDir));
   lightDir *= invDist;
 
   // Inclination between light normal and light dir
@@ -1013,9 +1032,9 @@ fn geomSolidAngle(pos: vec3f, surfPos: vec3f, surfNrm: vec3f) -> f32
   // Distance attenuation
   // Converts from solid angle to surface area
   var dir = pos - surfPos;
-  let dist = length(dir);
-  dir /= dist;
-  return abs(dot(surfNrm, dir)) / (dist * dist);
+  let invDist = inverseSqrt(dot(dir, dir));
+  dir *= invDist;
+  return abs(dot(surfNrm, dir)) * invDist * invDist;
 }
 
 fn samplePixel(pixelPos: vec2f, r: vec2f) -> vec3f
@@ -1290,22 +1309,41 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 }
 
 @compute @workgroup_size(8,8)
+fn generatePrimaryRays(@builtin(global_invocation_id) globalId: vec3u)
+{
+  if(any(globalId.xy >= vec2u(globals.width, globals.height))) {
+    return;
+  }
+
+  let index = globals.width * globalId.y + globalId.x;
+
+  // Initialize new ray state
+  let state = &rayStates[index];
+  (*state).throughput = vec3f(1.0);
+  (*state).pixelIdx = index;
+
+  rng = vec4u(globalId.xy, globals.frame, (*state).rngSeed.w + 1);
+
+  // Create primary ray
+  let r0 = rand4();
+  let ray = &rays[index];
+  let eye = sampleEye(r0.xy);
+  (*ray).ori = vec4f(eye, 1.0);
+  (*ray).dir = vec4f(normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye), 0.0);
+
+  (*state).rngSeed = rng;
+}
+
+@compute @workgroup_size(8,8)
 fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 {
   if(any(globalId.xy >= vec2u(globals.width, globals.height))) {
     return;
   }
 
-  var col = vec3f(0);
-  for(var i=0u; i<globals.spp; i++) {
-    rng = vec4u(globalId.xy, globals.frame, i);
-    let r0 = rand4();
-    let eye = sampleEye(r0.xy);
-    col += renderMIS(eye, normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye));
-  }
-
   let index = globals.width * globalId.y + globalId.x;
-  buffer[index] = vec4f(mix(buffer[index].xyz, col / f32(globals.spp), globals.weight), 1);
+  rng = rayStates[index].rngSeed;
+  accum[index] += vec4f(renderMIS(rays[index].ori.xyz, rays[index].dir.xyz), 1.0);
 }
 
 @vertex
@@ -1332,22 +1370,19 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec
   //return vec4f(pos[vertexIndex], 0.0, 1.0);
 }
 
-
-// https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
-fn filmicToneACES(col: vec3f) -> vec3f
-{
-  let a = 2.51;
-  let b = 0.03;
-  let c = 2.43;
-  let d = 0.59;
-  let e = 0.14;
-  return saturate(col * (a * col + vec3(b)) / (col * (c * col + vec3(d)) + vec3(e)));
-}
-
 @fragment
 fn fragmentMain(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  // TODO Postprocessing
-  //return vec4f(pow(filmicToneACES(buffer[globals.width * u32(pos.y) + u32(pos.x)].xyz), vec3f(0.4545)), 1);
-  return vec4f(pow(buffer[globals.width * u32(pos.y) + u32(pos.x)].xyz, vec3f(0.4545)), 1);
+  let index = globals.width * u32(pos.y) + u32(pos.x);
+  let col = vec4f(pow(accum[index].xyz / f32(globals.gatheredSpp), vec3f(0.4545)), 1.0);
+  accum[index] = vec4f(0.0, 0.0, 0.0, 1.0);
+  return col;
+}
+
+@fragment
+fn fragmentMainConverge(@builtin(position) pos: vec4f) -> @location(0) vec4f
+{
+  let index = globals.width * u32(pos.y) + u32(pos.x);
+  let col = vec4f(pow(accum[index].xyz / f32(globals.gatheredSpp), vec3f(0.4545)), 1.0);
+  return col;
 }

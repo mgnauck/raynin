@@ -8,6 +8,7 @@ const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
 
 const SPP = 2;
+const CONVERGE = false;
 
 const CAM_LOOK_VELOCITY = 0.005;
 const CAM_MOVE_VELOCITY = 0.1;
@@ -18,7 +19,8 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, ACC: 6 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, RSTATE: 7, ACC: 8 };
+const pipelineType = { GENERATE: 0, MAIN: 1 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -87,53 +89,6 @@ function Wasm(module)
   }
 }
 
-function createComputePipeline(shaderModule, pipelineLayout, entryPoint)
-{
-  return device.createComputePipeline({
-    layout: pipelineLayout,
-    compute: {
-      module: shaderModule,
-      entryPoint: entryPoint
-    }
-  });
-}
-
-function createRenderPipeline(shaderModule, pipelineLayout, vertexEntry, fragmentEntry)
-{
-  return device.createRenderPipeline({
-    layout: pipelineLayout,
-    vertex: {
-      module: shaderModule,
-      entryPoint: vertexEntry
-    },
-    fragment: {
-      module: shaderModule,
-      entryPoint: fragmentEntry,
-      targets: [{ format: "bgra8unorm" }]
-    },
-    primitive: { topology: "triangle-strip" }
-  });
-}
-
-function encodeComputePassAndSubmit(commandEncoder, pipeline, bindGroup, countX, countY, countZ)
-{
-  const passEncoder = commandEncoder.beginComputePass();
-  passEncoder.setPipeline(pipeline);
-  passEncoder.setBindGroup(0, bindGroup);
-  passEncoder.dispatchWorkgroups(countX, countY, countZ);
-  passEncoder.end();
-}
-
-function encodeRenderPassAndSubmit(commandEncoder, pipeline, bindGroup, renderPassDescriptor, view)
-{
-  renderPassDescriptor.colorAttachments[0].view = view;
-  const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-  passEncoder.setPipeline(pipeline);
-  passEncoder.setBindGroup(0, bindGroup);
-  passEncoder.draw(4);
-  passEncoder.end();
-}
-
 function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 {
   res.buf = [];
@@ -173,6 +128,16 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
+  res.buf[bufType.RAY] = device.createBuffer({
+    size: CANVAS_WIDTH * CANVAS_HEIGHT * 8 * 4,
+    usage: GPUBufferUsage.STORAGE
+  });
+
+  res.buf[bufType.RSTATE] = device.createBuffer({
+    size: CANVAS_WIDTH * CANVAS_HEIGHT * 8 * 4,
+    usage: GPUBufferUsage.STORAGE
+  });
+
   res.buf[bufType.ACC] = device.createBuffer({
     size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
@@ -198,6 +163,12 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.NODE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "read-only-storage" } },
+      { binding: bufType.RAY,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "storage" } },
+      { binding: bufType.RSTATE,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "storage" } },
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
@@ -213,6 +184,8 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.TRI, resource: { buffer: res.buf[bufType.TRI] } },
       { binding: bufType.LTRI, resource: { buffer: res.buf[bufType.LTRI] } },
       { binding: bufType.NODE, resource: { buffer: res.buf[bufType.NODE] } },
+      { binding: bufType.RAY, resource: { buffer: res.buf[bufType.RAY] } },
+      { binding: bufType.RSTATE, resource: { buffer: res.buf[bufType.RSTATE] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });
@@ -232,8 +205,25 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 function createPipelines(shaderCode)
 {
   let shaderModule = device.createShaderModule({ code: shaderCode });
-  res.computePipeline = createComputePipeline(shaderModule, res.pipelineLayout, "computeMain");
-  res.renderPipeline = createRenderPipeline(shaderModule, res.pipelineLayout, "vertexMain", "fragmentMain");
+
+  res.computePipelines = [];
+
+  res.computePipelines[pipelineType.GENERATE] = device.createComputePipeline({
+      layout: res.pipelineLayout,
+      compute: { module: shaderModule, entryPoint: "generatePrimaryRays" }
+    });
+
+  res.computePipelines[pipelineType.MAIN] = device.createComputePipeline({
+      layout: res.pipelineLayout,
+      compute: { module: shaderModule, entryPoint: "computeMain" }
+    });
+
+  res.renderPipeline = device.createRenderPipeline({
+      layout: res.pipelineLayout,
+      vertex: { module: shaderModule, entryPoint: "vertexMain" },
+      fragment: { module: shaderModule, entryPoint: "fragmentMain", targets: [{ format: "bgra8unorm" }] },
+      primitive: { topology: "triangle-strip" }
+    });
 }
 
 function render()
@@ -241,14 +231,36 @@ function render()
   let frame = performance.now() - last;
   document.title = `${(frame).toFixed(2)} / ${(1000.0 / frame).toFixed(2)}`;
   last = performance.now();
- 
+
   let commandEncoder = device.createCommandEncoder();
-  encodeComputePassAndSubmit(commandEncoder, res.computePipeline, res.bindGroup, Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
-  encodeRenderPassAndSubmit(commandEncoder, res.renderPipeline, res.bindGroup, res.renderPassDescriptor, context.getCurrentTexture().createView());
+
+  // Compute passes
+  let passEncoder = commandEncoder.beginComputePass();
+
+  passEncoder.setBindGroup(0, res.bindGroup);
+
+  for(let i=0; i<SPP; i++) {
+    passEncoder.setPipeline(res.computePipelines[pipelineType.GENERATE]);
+    passEncoder.dispatchWorkgroups(Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
+
+    passEncoder.setPipeline(res.computePipelines[pipelineType.MAIN]);
+    passEncoder.dispatchWorkgroups(Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
+  }
+
+  passEncoder.end();
+
+  // Fragment pass
+  res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
+  passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
+  passEncoder.setPipeline(res.renderPipeline);
+  passEncoder.setBindGroup(0, res.bindGroup);
+  passEncoder.draw(4);
+  passEncoder.end();
+
   device.queue.submit([commandEncoder.finish()]);
 
-  wa.update((performance.now() - start) / 1000);
-  
+  wa.update((performance.now() - start) / 1000, SPP, CONVERGE);
+
   requestAnimationFrame(render);
 }
 

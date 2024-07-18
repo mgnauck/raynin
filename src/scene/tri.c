@@ -10,7 +10,7 @@ float tri_calc_area(vec3 v0, vec3 v1, vec3 v2)
   return sqrtf(s * (s - a) * (s - b) * (s - c));
 }
 
-void tri_build_ltri(ltri *lt, const tri *t, uint32_t inst_id, uint32_t tri_id, mat4 transform, mat4 inv_transform, vec3 emission)
+void tri_build_ltri(ltri *lt, const tri *t, uint32_t tri_id, mat4 transform, mat4 inv_transform, vec3 emission)
 {
   lt->v0 = mat4_mul_pos(transform, t->v0);
   lt->v1 = mat4_mul_pos(transform, t->v1);
@@ -21,7 +21,6 @@ void tri_build_ltri(ltri *lt, const tri *t, uint32_t inst_id, uint32_t tri_id, m
   mat4_transpose(inv_t, inv_transform);
   lt->nrm = vec3_unit(mat4_mul_dir(inv_t, t->n0));
  
-  lt->inst_id = inst_id;
   lt->tri_id = tri_id;
   
   lt->area = tri_calc_area(lt->v0, lt->v1, lt->v2);
