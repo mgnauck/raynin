@@ -163,17 +163,17 @@ const MAX_NODE_CNT = 32u;
 var<private> blasNodeStack: array<u32, MAX_NODE_CNT>;
 var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
-// State of prng
-var<private> rng: vec4u;
+// State of rng seed
+var<private> seed: vec4u;
 
 // PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
 fn rand4() -> vec4f
 {
-  rng = rng * 1664525u + 1013904223u;
-  rng += rng.yzxy * rng.wxyz;
-  rng = rng ^ (rng >> vec4u(16));
-  rng += rng.yzxy * rng.wxyz;
-  return ldexp(vec4f((rng >> vec4u(22)) ^ rng), vec4i(-32));
+  seed = seed * 1664525u + 1013904223u;
+  seed += seed.yzxy * seed.wxyz;
+  seed = seed ^ (seed >> vec4u(16));
+  seed += seed.yzxy * seed.wxyz;
+  return ldexp(vec4f((seed >> vec4u(22)) ^ seed), vec4i(-32));
 }
 
 fn minComp3(v: vec3f) -> f32
@@ -1324,7 +1324,7 @@ fn generatePrimaryRays(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  rng = vec4u(globalId.xy, globals.frame, cnt.sampleNum);
+  seed = vec4u(globalId.xy, globals.frame, cnt.sampleNum);
 
   let idx = atomicAdd(&cnt.rays, 1);
 
@@ -1339,7 +1339,7 @@ fn generatePrimaryRays(@builtin(global_invocation_id) globalId: vec3u)
   let state = &rayStates[idx];
   (*state).throughput = vec3f(1.0);
   (*state).pidx = globals.width * globalId.y + globalId.x;
-  (*state).seed = rng;
+  (*state).seed = seed;
 }
 
 @compute @workgroup_size(8, 8)
@@ -1351,7 +1351,7 @@ fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 
   let idx = globals.width * globalId.y + globalId.x;
 
-  rng = rayStates[idx].seed;
+  seed = rayStates[idx].seed;
 
   accum[rayStates[idx].pidx] += vec4f(renderMIS(rays[idx].ori.xyz, rays[idx].dir.xyz), 1.0);
 }
