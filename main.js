@@ -238,13 +238,9 @@ function createPipelines(shaderCode)
 
 function render()
 {
-  // 4: 360, 8: 640
-
   let frame = performance.now() - last;
   document.title = `${(frame).toFixed(2)} / ${(1000.0 / frame).toFixed(2)}`;
   last = performance.now();
-
-  // TODO Try with different command encoders
 
   // Compute passes
   for(let i=0; i<SPP; i++) {
@@ -254,15 +250,11 @@ function render()
     const commandEncoder = device.createCommandEncoder();
 
     let passEncoder = commandEncoder.beginComputePass();
-
     passEncoder.setBindGroup(0, res.bindGroup);
-
     passEncoder.setPipeline(res.computePipelines[pipelineType.GENERATE]);
     passEncoder.dispatchWorkgroups(Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
-
     passEncoder.setPipeline(res.computePipelines[pipelineType.MAIN]);
     passEncoder.dispatchWorkgroups(Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
-
     passEncoder.end();
 
     device.queue.submit([commandEncoder.finish()]);
@@ -272,14 +264,10 @@ function render()
   const commandEncoder = device.createCommandEncoder();
 
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
-
   passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
-
   passEncoder.setBindGroup(0, res.bindGroup);
-
   passEncoder.setPipeline(res.renderPipeline);
   passEncoder.draw(4);
-
   passEncoder.end();
 
   device.queue.submit([commandEncoder.finish()]);
