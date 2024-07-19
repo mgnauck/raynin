@@ -94,8 +94,16 @@ struct Ray
 struct RayState
 {
   throughput:   vec3f,          // Use vec4f and bitcast for pixel idx?
-  pixelIdx:     u32,
-  rngSeed:      vec4u
+  pidx:         u32,            // Pixel index
+  seed:         vec4u           // Last rng seed used
+}
+
+struct Counter
+{
+  rays:         atomic<u32>,
+  shadowRays:   atomic<u32>,
+  pad0:         u32,
+  sampleNum:    u32
 }
 
 struct Hit
@@ -148,6 +156,7 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(6) var<storage, read_write> rays: array<Ray>;
 @group(0) @binding(7) var<storage, read_write> rayStates: array<RayState>;
 @group(0) @binding(8) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> cnt: Counter;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -1308,42 +1317,43 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   return col;
 }
 
-@compute @workgroup_size(8,8)
+@compute @workgroup_size(8, 8)
 fn generatePrimaryRays(@builtin(global_invocation_id) globalId: vec3u)
 {
   if(any(globalId.xy >= vec2u(globals.width, globals.height))) {
     return;
   }
 
-  let index = globals.width * globalId.y + globalId.x;
+  rng = vec4u(globalId.xy, globals.frame, cnt.sampleNum);
 
-  // Initialize new ray state
-  let state = &rayStates[index];
-  (*state).throughput = vec3f(1.0);
-  (*state).pixelIdx = index;
-
-  rng = vec4u(globalId.xy, globals.frame, (*state).rngSeed.w + 1);
+  let idx = atomicAdd(&cnt.rays, 1);
 
   // Create primary ray
   let r0 = rand4();
-  let ray = &rays[index];
+  let ray = &rays[idx];
   let eye = sampleEye(r0.xy);
   (*ray).ori = vec4f(eye, 1.0);
   (*ray).dir = vec4f(normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye), 0.0);
 
-  (*state).rngSeed = rng;
+  // Initialize new ray state
+  let state = &rayStates[idx];
+  (*state).throughput = vec3f(1.0);
+  (*state).pidx = globals.width * globalId.y + globalId.x;
+  (*state).seed = rng;
 }
 
-@compute @workgroup_size(8,8)
+@compute @workgroup_size(8, 8)
 fn computeMain(@builtin(global_invocation_id) globalId: vec3u)
 {
   if(any(globalId.xy >= vec2u(globals.width, globals.height))) {
     return;
   }
 
-  let index = globals.width * globalId.y + globalId.x;
-  rng = rayStates[index].rngSeed;
-  accum[index] += vec4f(renderMIS(rays[index].ori.xyz, rays[index].dir.xyz), 1.0);
+  let idx = globals.width * globalId.y + globalId.x;
+
+  rng = rayStates[idx].seed;
+
+  accum[rayStates[idx].pidx] += vec4f(renderMIS(rays[idx].ori.xyz, rays[idx].dir.xyz), 1.0);
 }
 
 @vertex
@@ -1373,16 +1383,16 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec
 @fragment
 fn fragmentMain(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  let index = globals.width * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accum[index].xyz / f32(globals.gatheredSpp), vec3f(0.4545)), 1.0);
-  accum[index] = vec4f(0.0, 0.0, 0.0, 1.0);
+  let idx = globals.width * u32(pos.y) + u32(pos.x);
+  let col = vec4f(pow(accum[idx].xyz / f32(globals.gatheredSpp), vec3f(0.4545)), 1.0);
+  accum[idx] = vec4f(0.0, 0.0, 0.0, 1.0);
   return col;
 }
 
 @fragment
 fn fragmentMainConverge(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  let index = globals.width * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accum[index].xyz / f32(globals.gatheredSpp), vec3f(0.4545)), 1.0);
+  let idx = globals.width * u32(pos.y) + u32(pos.x);
+  let col = vec4f(pow(accum[idx].xyz / f32(globals.gatheredSpp), vec3f(0.4545)), 1.0);
   return col;
 }

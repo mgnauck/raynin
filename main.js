@@ -19,7 +19,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, RSTATE: 7, ACC: 8 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, RSTATE: 7, ACC: 8, CNT: 9 };
 const pipelineType = { GENERATE: 0, MAIN: 1 };
 
 let canvas, context, device;
@@ -143,6 +143,12 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE
   });
 
+  res.buf[bufType.CNT] = device.createBuffer({
+    size: 4 * 4,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+
   let bindGroupLayout = device.createBindGroupLayout({
     entries: [ 
       { binding: bufType.GLOB,
@@ -172,6 +178,9 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
+      { binding: bufType.CNT,
+        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+        buffer: { type: "storage" } },
     ]
   });
 
@@ -187,6 +196,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.RAY, resource: { buffer: res.buf[bufType.RAY] } },
       { binding: bufType.RSTATE, resource: { buffer: res.buf[bufType.RSTATE] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
+      { binding: bufType.CNT, resource: { buffer: res.buf[bufType.CNT] } },
     ]
   });
 
@@ -228,37 +238,53 @@ function createPipelines(shaderCode)
 
 function render()
 {
+  // 4: 360, 8: 640
+
   let frame = performance.now() - last;
   document.title = `${(frame).toFixed(2)} / ${(1000.0 / frame).toFixed(2)}`;
   last = performance.now();
 
-  let commandEncoder = device.createCommandEncoder();
+  // TODO Try with different command encoders
 
   // Compute passes
-  let passEncoder = commandEncoder.beginComputePass();
-
-  passEncoder.setBindGroup(0, res.bindGroup);
-
   for(let i=0; i<SPP; i++) {
+
+    device.queue.writeBuffer(res.buf[bufType.CNT], 0, new Uint32Array([0, 0, 0, i]));
+
+    const commandEncoder = device.createCommandEncoder();
+
+    let passEncoder = commandEncoder.beginComputePass();
+
+    passEncoder.setBindGroup(0, res.bindGroup);
+
     passEncoder.setPipeline(res.computePipelines[pipelineType.GENERATE]);
     passEncoder.dispatchWorkgroups(Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
 
     passEncoder.setPipeline(res.computePipelines[pipelineType.MAIN]);
     passEncoder.dispatchWorkgroups(Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
+
+    passEncoder.end();
+
+    device.queue.submit([commandEncoder.finish()]);
   }
 
-  passEncoder.end();
+  // Blit pass (fragment)
+  const commandEncoder = device.createCommandEncoder();
 
-  // Fragment pass
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
+
   passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
-  passEncoder.setPipeline(res.renderPipeline);
+
   passEncoder.setBindGroup(0, res.bindGroup);
+
+  passEncoder.setPipeline(res.renderPipeline);
   passEncoder.draw(4);
+
   passEncoder.end();
 
   device.queue.submit([commandEncoder.finish()]);
 
+  // Update scene and renderer for next frame
   wa.update((performance.now() - start) / 1000, SPP, CONVERGE);
 
   requestAnimationFrame(render);
