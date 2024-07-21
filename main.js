@@ -4,10 +4,11 @@ const GLTF_BIN_PATH = "scenes/scene.bin";
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 10.0;
 
-const CANVAS_WIDTH = 1280;
-const CANVAS_HEIGHT = Math.ceil(CANVAS_WIDTH / ASPECT);
+const WIDTH = 1280;
+const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 2;
+const MAX_BOUNCES = 5;
 const CONVERGE = false;
 
 const CAM_LOOK_VELOCITY = 0.005;
@@ -19,8 +20,8 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, RSTATE: 7, ACC: 8, CNT: 9 };
-const pipelineType = { GENERATE: 0, MAIN: 1 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, RSTATE: 7, HIT: 8, ACC: 9, CNT: 10 };
+const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, FULL: 3 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -129,17 +130,22 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[bufType.RAY] = device.createBuffer({
-    size: CANVAS_WIDTH * CANVAS_HEIGHT * 8 * 4,
+    size: WIDTH * HEIGHT * 8 * 4 * 2, // In and out buffer
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[bufType.RSTATE] = device.createBuffer({
-    size: CANVAS_WIDTH * CANVAS_HEIGHT * 8 * 4,
+    size: WIDTH * HEIGHT * 8 * 4 * 2, // In and out buffer
+    usage: GPUBufferUsage.STORAGE
+  });
+
+  res.buf[bufType.HIT] = device.createBuffer({
+    size: WIDTH * HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[bufType.ACC] = device.createBuffer({
-    size: CANVAS_WIDTH * CANVAS_HEIGHT * 4 * 4,
+    size: WIDTH * HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
@@ -147,7 +153,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     size: 4 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
-
 
   let bindGroupLayout = device.createBindGroupLayout({
     entries: [ 
@@ -175,6 +180,9 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.RSTATE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
+      { binding: bufType.HIT,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: "storage" } },
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
@@ -195,6 +203,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.NODE, resource: { buffer: res.buf[bufType.NODE] } },
       { binding: bufType.RAY, resource: { buffer: res.buf[bufType.RAY] } },
       { binding: bufType.RSTATE, resource: { buffer: res.buf[bufType.RSTATE] } },
+      { binding: bufType.HIT, resource: { buffer: res.buf[bufType.HIT] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
       { binding: bufType.CNT, resource: { buffer: res.buf[bufType.CNT] } },
     ]
@@ -220,18 +229,29 @@ function createPipelines(shaderCode)
 
   res.computePipelines[pipelineType.GENERATE] = device.createComputePipeline({
       layout: res.pipelineLayout,
-      compute: { module: shaderModule, entryPoint: "generatePrimaryRays" }
+      compute: { module: shaderModule, entryPoint: "generate" }
     });
 
-  res.computePipelines[pipelineType.MAIN] = device.createComputePipeline({
+  res.computePipelines[pipelineType.INTERSECT] = device.createComputePipeline({
       layout: res.pipelineLayout,
-      compute: { module: shaderModule, entryPoint: "computeMain" }
+      compute: { module: shaderModule, entryPoint: "intersect" }
+    });
+
+  res.computePipelines[pipelineType.SHADE] = device.createComputePipeline({
+      layout: res.pipelineLayout,
+      compute: { module: shaderModule, entryPoint: "shade" }
+    });
+
+  // TODO Remove
+  res.computePipelines[pipelineType.FULL] = device.createComputePipeline({
+      layout: res.pipelineLayout,
+      compute: { module: shaderModule, entryPoint: "full" }
     });
 
   res.renderPipeline = device.createRenderPipeline({
       layout: res.pipelineLayout,
-      vertex: { module: shaderModule, entryPoint: "vertexMain" },
-      fragment: { module: shaderModule, entryPoint: "fragmentMain", targets: [{ format: "bgra8unorm" }] },
+      vertex: { module: shaderModule, entryPoint: "quad" },
+      fragment: { module: shaderModule, entryPoint: "blit", targets: [{ format: "bgra8unorm" }] },
       primitive: { topology: "triangle-strip" }
     });
 }
@@ -242,29 +262,60 @@ function render()
   document.title = `${(frame).toFixed(2)} / ${(1000.0 / frame).toFixed(2)}`;
   last = performance.now();
 
-  // Compute passes
+  // Initialize counter index and values
+  let counterIndex = 0;
+  let counter = new Uint32Array([WIDTH * HEIGHT, 0, 0 /* shadow ray cnt */, counterIndex & 0x1]);
+  device.queue.writeBuffer(res.buf[bufType.CNT], 0, counter);
+
+  // Wavefront loop for render passes (compute)
   for(let i=0; i<SPP; i++) {
 
-    device.queue.writeBuffer(res.buf[bufType.CNT], 0, new Uint32Array([0, 0, 0, i]));
-
-    const commandEncoder = device.createCommandEncoder();
-
+    let commandEncoder = device.createCommandEncoder();
     let passEncoder = commandEncoder.beginComputePass();
     passEncoder.setBindGroup(0, res.bindGroup);
     passEncoder.setPipeline(res.computePipelines[pipelineType.GENERATE]);
-    passEncoder.dispatchWorkgroups(Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
-    passEncoder.setPipeline(res.computePipelines[pipelineType.MAIN]);
-    passEncoder.dispatchWorkgroups(Math.ceil(CANVAS_WIDTH / 8), Math.ceil(CANVAS_HEIGHT / 8), 1);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
     passEncoder.end();
-
     device.queue.submit([commandEncoder.finish()]);
+
+    for(let j=0; j<MAX_BOUNCES; j++) {
+
+      commandEncoder = device.createCommandEncoder();
+      passEncoder = commandEncoder.beginComputePass();
+      passEncoder.setBindGroup(0, res.bindGroup);
+      passEncoder.setPipeline(res.computePipelines[pipelineType.INTERSECT]);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+      passEncoder.setPipeline(res.computePipelines[pipelineType.SHADE]);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+      passEncoder.end();
+      device.queue.submit([commandEncoder.finish()]);
+
+      // Reset current counter to zero, we will start using the other one now
+      let sampleNum;
+      if(j < MAX_BOUNCES - 1) {
+        device.queue.writeBuffer(res.buf[bufType.CNT], (counterIndex & 0x1) * 4, new Uint32Array([0]));
+        sampleNum = i;
+      } else
+        sampleNum = i + 1;
+
+      // Update counter index (switch back and forth between the two counters)
+      counterIndex = 1 - counterIndex;
+      device.queue.writeBuffer(res.buf[bufType.CNT], 3 * 4, new Uint32Array([(sampleNum << 1) | (counterIndex & 0x1)]));
+    }
+
+    if(i < SPP - 1) {
+      // Reset counter values
+      counter[counterIndex & 0x1] = WIDTH * HEIGHT;
+      counter[1 - (counterIndex & 0x1)] = 0;
+      device.queue.writeBuffer(res.buf[bufType.CNT], 0, counter, 0, 2);
+    }
   }
 
   // Blit pass (fragment)
   const commandEncoder = device.createCommandEncoder();
 
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
-  passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
+  const passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
   passEncoder.setBindGroup(0, res.bindGroup);
   passEncoder.setPipeline(res.renderPipeline);
   passEncoder.draw(4);
@@ -283,8 +334,8 @@ function startRender()
   if(FULLSCREEN)
     canvas.requestFullscreen();
   else {
-    canvas.style.width = CANVAS_WIDTH;
-    canvas.style.height = CANVAS_HEIGHT;
+    canvas.style.width = WIDTH;
+    canvas.style.height = HEIGHT;
     canvas.style.position = "absolute";
     canvas.style.left = 0;
     canvas.style.top = 0;
@@ -319,8 +370,8 @@ async function main()
   // Canvas/context
   document.body.innerHTML = "CLICK<canvas style='width:0;cursor:none'>";
   canvas = document.querySelector("canvas");
-  canvas.width = CANVAS_WIDTH;
-  canvas.height = CANVAS_HEIGHT;
+  canvas.width = WIDTH;
+  canvas.height = HEIGHT;
 
   let presentationFormat = navigator.gpu.getPreferredCanvasFormat();
   if(presentationFormat !== "bgra8unorm") {
@@ -355,7 +406,7 @@ async function main()
   }
 
   // Init renderer
-  if(wa.init(CANVAS_WIDTH, CANVAS_HEIGHT, SPP) > 0) {
+  if(wa.init(WIDTH, HEIGHT, SPP) > 0) {
     alert("Failed to initialize render resources");
     return;
   }
