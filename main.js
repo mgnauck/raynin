@@ -9,7 +9,7 @@ const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 2;
 const MAX_BOUNCES = 5;
-const CONVERGE = false;
+const CONVERGE = true;
 
 const CAM_LOOK_VELOCITY = 0.005;
 const CAM_MOVE_VELOCITY = 0.1;
@@ -20,8 +20,8 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, RSTATE: 7, HIT: 8, ACC: 9, CNT: 10 };
-const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, FULL: 3 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, SRAY: 7, RSTATE: 8, ACC: 9, STATE: 10 };
+const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3, FULL: 4 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -134,13 +134,13 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[bufType.RSTATE] = device.createBuffer({
-    size: WIDTH * HEIGHT * 12 * 4 * 2, // In and out buffer
+  res.buf[bufType.SRAY] = device.createBuffer({
+    size: WIDTH * HEIGHT * 12 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[bufType.HIT] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4,
+  res.buf[bufType.RSTATE] = device.createBuffer({
+    size: WIDTH * HEIGHT * 12 * 4 * 2, // In and out buffer
     usage: GPUBufferUsage.STORAGE
   });
 
@@ -149,8 +149,8 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[bufType.CNT] = device.createBuffer({
-    size: 4 * 4,
+  res.buf[bufType.STATE] = device.createBuffer({
+    size: /* Counter */ 4 * 4 + /* Hit buffer */ WIDTH * HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -177,16 +177,16 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.RAY,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
-      { binding: bufType.RSTATE,
+      { binding: bufType.SRAY,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
-      { binding: bufType.HIT,
+      { binding: bufType.RSTATE,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
       { binding: bufType.ACC,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
-      { binding: bufType.CNT,
+      { binding: bufType.STATE,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
     ]
@@ -202,10 +202,10 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.LTRI, resource: { buffer: res.buf[bufType.LTRI] } },
       { binding: bufType.NODE, resource: { buffer: res.buf[bufType.NODE] } },
       { binding: bufType.RAY, resource: { buffer: res.buf[bufType.RAY] } },
+      { binding: bufType.SRAY, resource: { buffer: res.buf[bufType.SRAY] } },
       { binding: bufType.RSTATE, resource: { buffer: res.buf[bufType.RSTATE] } },
-      { binding: bufType.HIT, resource: { buffer: res.buf[bufType.HIT] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
-      { binding: bufType.CNT, resource: { buffer: res.buf[bufType.CNT] } },
+      { binding: bufType.STATE, resource: { buffer: res.buf[bufType.STATE] } },
     ]
   });
 
@@ -242,6 +242,11 @@ function createPipelines(shaderCode)
       compute: { module: shaderModule, entryPoint: "shade" }
     });
 
+  res.computePipelines[pipelineType.SHADOW] = device.createComputePipeline({
+      layout: res.pipelineLayout,
+      compute: { module: shaderModule, entryPoint: "traceShadowRay" }
+    });
+
   // TODO Remove
   res.computePipelines[pipelineType.FULL] = device.createComputePipeline({
       layout: res.pipelineLayout,
@@ -251,7 +256,7 @@ function createPipelines(shaderCode)
   res.renderPipeline = device.createRenderPipeline({
       layout: res.pipelineLayout,
       vertex: { module: shaderModule, entryPoint: "quad" },
-      fragment: { module: shaderModule, entryPoint: "blit", targets: [{ format: "bgra8unorm" }] },
+      fragment: { module: shaderModule, entryPoint: "blitConverge", targets: [{ format: "bgra8unorm" }] },
       primitive: { topology: "triangle-strip" }
     });
 }
@@ -265,7 +270,7 @@ function render()
   // Initialize counter index and values
   let counterIndex = 0;
   let counter = new Uint32Array([WIDTH * HEIGHT, 0, 0 /* shadow ray cnt */, counterIndex & 0x1]);
-  device.queue.writeBuffer(res.buf[bufType.CNT], 0, counter);
+  device.queue.writeBuffer(res.buf[bufType.STATE], 0, counter);
 
   // Wavefront loop for render passes (compute)
   for(let i=0; i<SPP; i++) {
@@ -278,6 +283,18 @@ function render()
     passEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
 
+    /// FULL
+    /*commandEncoder = device.createCommandEncoder();
+    passEncoder = commandEncoder.beginComputePass();
+    passEncoder.setBindGroup(0, res.bindGroup);
+    passEncoder.setPipeline(res.computePipelines[pipelineType.INTERSECT]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+    passEncoder.setPipeline(res.computePipelines[pipelineType.FULL]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+    passEncoder.end();
+    device.queue.submit([commandEncoder.finish()]);
+    //*/
+
     for(let j=0; j<MAX_BOUNCES; j++) {
 
       commandEncoder = device.createCommandEncoder();
@@ -287,27 +304,35 @@ function render()
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
       passEncoder.setPipeline(res.computePipelines[pipelineType.SHADE]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+      passEncoder.setPipeline(res.computePipelines[pipelineType.SHADOW]);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
       passEncoder.end();
       device.queue.submit([commandEncoder.finish()]);
 
       // Reset current counter to zero, we will start using the other one now
       let sampleNum;
       if(j < MAX_BOUNCES - 1) {
-        device.queue.writeBuffer(res.buf[bufType.CNT], (counterIndex & 0x1) * 4, new Uint32Array([0]));
+        device.queue.writeBuffer(res.buf[bufType.STATE], (counterIndex & 0x1) * 4, new Uint32Array([0]));
         sampleNum = i;
       } else
         sampleNum = i + 1;
 
-      // Update counter index (switch back and forth between the two counters)
+      // Switch between two counters and associated buffers (rays + path data)
       counterIndex = 1 - counterIndex;
-      device.queue.writeBuffer(res.buf[bufType.CNT], 3 * 4, new Uint32Array([(sampleNum << 1) | (counterIndex & 0x1)]));
+
+      // Reset shadow ray counter and update toggled counter index
+      device.queue.writeBuffer(res.buf[bufType.STATE], 2 * 4, new Uint32Array([0, (sampleNum << 1) | (counterIndex & 0x1)]));
     }
+    //*/
 
     if(i < SPP - 1) {
       // Reset counter values
       counter[counterIndex & 0x1] = WIDTH * HEIGHT;
       counter[1 - (counterIndex & 0x1)] = 0;
-      device.queue.writeBuffer(res.buf[bufType.CNT], 0, counter, 0, 2);
+      device.queue.writeBuffer(res.buf[bufType.STATE], 0, counter, 0, 2);
+
+      // FULL ONLY: Sample num update
+     // device.queue.writeBuffer(res.buf[bufType.STATE], 3 * 4, new Uint32Array([((i + 1) << 1) | (counterIndex & 0x1)]));
     }
   }
 

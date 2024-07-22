@@ -93,13 +93,23 @@ struct Ray
   pad1:         f32
 }
 
+struct ShadowRay
+{
+  pos:          vec3f,          // Shadow ray origin
+  pad0:         f32,
+  tgt:          vec3f,          // Position on the light (shadow ray target)
+  pad1:         f32,
+  contribution: vec3f,
+  pidx:         u32             // Pixel index where to deposit contribution
+}
+
 struct PathData
 {
-  throughput:   vec3f,
-  pidx:         u32,            // Pixel idx in bits 8-31, bits 4-7 empty (flags?), bounce num in bits 0-3
   seed:         vec4u,          // Last rng seed used
-  pad0:         vec3f,
-  pdf:          f32             // Last mtl pdf (for light hit MIS)
+  throughput:   vec3f,
+  pdf:          f32,
+  pad0:         vec3u,
+  pidx:         u32             // Pixel idx in bits 8-31, bits 4-7 empty (flags?), bounce num in bits 0-3
 }
 
 struct Hit
@@ -110,11 +120,12 @@ struct Hit
   e:            u32             // (tri id << 16) | (inst id & 0xffff)
 }
 
-struct Counter
+struct State
 {
   rayCnt:       array<atomic<u32>, 2u>,
   shadowRayCnt: atomic<u32>,
   sampleNum:    u32,            // Buffer/ray cnt switch in bit 0, Sample num in bits 1-31
+  hits:         array<Hit>      // TODO This is here because we have a limit of 8 storage buffers :(
 }
 
 struct IA
@@ -157,10 +168,10 @@ const INT_SCALE           = 256.0;
 @group(0) @binding(4) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(5) var<storage, read> nodes: array<Node>;
 @group(0) @binding(6) var<storage, read_write> rays: array<Ray>;
-@group(0) @binding(7) var<storage, read_write> pathData: array<PathData>;
-@group(0) @binding(8) var<storage, read_write> hits: array<Hit>;
+@group(0) @binding(7) var<storage, read_write> shadowRays: array<ShadowRay>;
+@group(0) @binding(8) var<storage, read_write> pathData: array<PathData>;
 @group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> cnt: Counter;
+@group(0) @binding(10) var<storage, read_write> state: State;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -1327,10 +1338,10 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  seed = vec4u(globalId.xy, globals.frame, cnt.sampleNum >> 1);
+  seed = vec4u(globalId.xy, globals.frame, state.sampleNum >> 1);
 
   let gidx = globals.width * globalId.y + globalId.x;
-  let bidx = (globals.width * globals.height * (cnt.sampleNum & 0x1)) + gidx;
+  let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
 
   // Create primary ray
   let r0 = rand4();
@@ -1342,6 +1353,7 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
   // Initialize new path data
   let data = &pathData[bidx];
   (*data).throughput = vec3f(1.0);
+  (*data).contribution = vec3f(1.0);
   (*data).pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
   (*data).seed = seed;
 }
@@ -1350,25 +1362,25 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
 fn intersect(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = globals.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&cnt.rayCnt[cnt.sampleNum & 0x1])) {
+  if(gidx >= atomicLoad(&state.rayCnt[state.sampleNum & 0x1])) {
     return;
   }
 
-  let bidx = (globals.width * globals.height * (cnt.sampleNum & 0x1)) + gidx;
-  hits[gidx] = intersectTlas(rays[bidx].ori.xyz, rays[bidx].dir.xyz, INF);
+  let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
+  state.hits[gidx] = intersectTlas(rays[bidx].ori.xyz, rays[bidx].dir.xyz, INF);
 }
 
 @compute @workgroup_size(8, 8)
 fn shade(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = globals.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&cnt.rayCnt[cnt.sampleNum & 0x1])) {
+  if(gidx >= atomicLoad(&state.rayCnt[state.sampleNum & 0x1])) {
     return;
   }
 
-  let bidx = (globals.width * globals.height * (cnt.sampleNum & 0x1)) + gidx;
+  let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
 
-  let hit = hits[gidx];
+  let hit = state.hits[gidx];
   let ray = rays[bidx];
   let data = pathData[bidx];
 
@@ -1392,10 +1404,9 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     if(dot(ia.wo, ia.nrm) > 0) {
       if((data.pidx & 0xf) > 0) {
         // Secondary ray hit light, apply MIS
-        let gsa = geomSolidAngle(ray.ori, ia.pos, ia.nrm); // Last surface pos, ltri pos and ltri nrm
+        let pdf = data.pdf * geomSolidAngle(ray.ori, ia.pos, ia.nrm);
         let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
-        let pdf = data.pdf;
-        let weight = pdf * gsa / (pdf * gsa + ltriPdf);
+        let weight = pdf / (pdf + ltriPdf);
         accum[data.pidx >> 8] += vec4f(throughput * weight * mtl.col, 1.0);
       } else {
         // Primary ray hit light
@@ -1406,14 +1417,51 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  // TODO Sample light
+  let r0 = rand4();
 
+  // Russian roulette
+  // Terminate with prob inverse to throughput
+  let p = min(0.95, maxComp3(throughput));
+  if((data.pidx & 0xf) > 0 && r0.w > p) {
+    // Terminate path due to russian roulette
+    return;
+  }
+  // Account for bias introduced by path termination
+  // Boost surviving paths by their probability to be terminated
+  throughput *= 1.0 / p;
+
+  // Sample lights directly (NEE)
+  var ltriPos: vec3f;
+  var ltriNrm: vec3f;
+  var emission: vec3f;
+  var ltriPdf: f32;
+  //if(sampleLTrisUniform(ia.pos, ia.nrm, rand4().xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+  if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+    // Apply MIS
+    // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
+    var ltriWi = normalize(ltriPos - ia.pos);
+    let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
+    var fres: vec3f;
+    let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
+    let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ltriWi, fres);
+    let weight = ltriPdf / (ltriPdf + bsdfPdf * gsa);
+    // Init shadow ray
+    let sidx = atomicAdd(&state.shadowRayCnt, 1);
+    shadowRays[sidx].pos = ia.pos;
+    shadowRays[sidx].tgt = posOfs(ltriPos, ltriNrm);
+    shadowRays[sidx].contribution = throughput * bsdf * gsa * weight * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
+    shadowRays[sidx].pidx = data.pidx >> 8;
+  }
+
+  // Check if we terminate path due to max bounces
   if((data.pidx & 0xf) >= globals.maxBounces) {
-    // Terminate path due to max bounces
     return;
   }
 
-  let r0 = rand4();
+  // TODO
+  // - Exclude specular bounce from light sampling (isSpecular / mtl.roughness) -> encode state in sampleNum bits
+  // - Exclude (purely?) refractive materials too?
+  // - Improve size of path data struct
 
   // Sample material
   var wi: vec3f;
@@ -1423,41 +1471,52 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   if(!sampleMaterial(mtl, ia.wo, ia.nrm, r0.xyz, &wi, &fres, &isSpecular, &pdf)) {
     return;
   }
+
+  // Apply brdf
   throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, isSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
-  // Russian roulette
-  // Terminate with prob inverse to throughput
-  let p = min(0.95, maxComp3(throughput));
-  if(r0.w > p) {
-    // Terminate path due to russian roulette
-    return;
-  }
-
-  let gidxNext = atomicAdd(&cnt.rayCnt[1 - (cnt.sampleNum & 0x1)], 1);
-  let bidxNext = (globals.width * globals.height * (1 - (cnt.sampleNum & 0x1))) + gidxNext;
+  // Get compacted index into the other rays and path data buffer
+  let gidxNext = atomicAdd(&state.rayCnt[1 - (state.sampleNum & 0x1)], 1);
+  let bidxNext = (globals.width * globals.height * (1 - (state.sampleNum & 0x1))) + gidxNext;
 
   // Init next ray
   rays[bidxNext].ori = ia.pos;
   rays[bidxNext].dir = wi;
 
-  // Account for survigin RR
-  pathData[bidxNext].throughput = throughput * 1.0 / p;
+  // Store throughput and material pdf for next path segment
+  pathData[bidxNext].throughput = throughput;
+  pathData[bidxNext].pdf = pdf;
+
   // Keep pixel index but increase bounce num
   pathData[bidxNext].pidx = (data.pidx & 0xffffff00) | ((data.pidx & 0xf) + 1);
+
   // Store latest seed of the path
   pathData[bidxNext].seed = seed;
-  pathData[bidxNext].pdf = pdf;
+}
+
+@compute @workgroup_size(8, 8)
+fn traceShadowRay(@builtin(global_invocation_id) globalId: vec3u)
+{
+  let gidx = globals.width * globalId.y + globalId.x;
+  if(gidx >= atomicLoad(&state.shadowRayCnt)) {
+    return;
+  }
+
+  let shadowRay = shadowRays[gidx];
+  if(!intersectTlasAnyHit(shadowRay.pos, shadowRay.tgt)) {
+    accum[shadowRay.pidx] += vec4f(shadowRay.contribution, 1.0);
+  }
 }
 
 @compute @workgroup_size(8, 8)
 fn full(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = globals.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&cnt.rayCnt[cnt.sampleNum & 0x1])) {
+  if(gidx >= atomicLoad(&state.rayCnt[state.sampleNum & 0x1])) {
     return;
   }
 
-  let bidx = (globals.width * globals.height * (cnt.sampleNum & 0x1)) + gidx;
+  let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
   seed = pathData[bidx].seed;
 
   accum[pathData[bidx].pidx >> 8] += vec4f(renderMIS(rays[bidx].ori.xyz, rays[bidx].dir.xyz), 1.0);
