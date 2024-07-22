@@ -225,7 +225,7 @@ uint8_t init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, s
 }
 
 __attribute__((visibility("default")))
-void init(uint32_t width, uint32_t height, uint32_t spp)
+void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t max_bounces)
 {
   pcg_srand(42u, 303u);
 
@@ -236,7 +236,7 @@ void init(uint32_t width, uint32_t height, uint32_t spp)
 
   renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
 
-  rd = renderer_init(cs, width, height);
+  rd = renderer_init(cs, width, height, max_bounces);
   renderer_setup(rd, spp);
 }
 

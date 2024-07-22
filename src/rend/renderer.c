@@ -24,8 +24,6 @@
 #define GLOB_BUF_OFS_VIEW     96
 #define GLOB_BUF_SIZE         144
 
-#define MAX_BOUNCES           5
-
 #define MAX_UNIFORM_BUF_SIZE  65536
 
 // GPU buffer types
@@ -102,14 +100,14 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
   return 0;
 }
 
-render_data *renderer_init(scene *s, uint16_t width, uint16_t height)
+render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint32_t max_bounces)
 {
   render_data *rd = malloc(sizeof(*rd));
 
   rd->scene = s;
   rd->width = width;
   rd->height = height;
-  rd->bounces = MAX_BOUNCES;
+  rd->bounces = max_bounces;
 
   return rd;
 }

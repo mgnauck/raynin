@@ -406,7 +406,7 @@ async function main()
   }
 
   // Init renderer
-  if(wa.init(WIDTH, HEIGHT, SPP) > 0) {
+  if(wa.init(WIDTH, HEIGHT, SPP, MAX_BOUNCES) > 0) {
     alert("Failed to initialize render resources");
     return;
   }
