@@ -96,9 +96,9 @@ struct Ray
 struct PathData
 {
   throughput:   vec3f,
-  pidx:         u32,            // Pixel idx in bits 8-31, bounce num in bits 0-3
+  pidx:         u32,            // Pixel idx in bits 8-31, bits 4-7 empty (flags?), bounce num in bits 0-3
   seed:         vec4u,          // Last rng seed used
-  pos:          vec3f,          // Last hit pos (for light hit MIS)
+  pad0:         vec3f,
   pdf:          f32             // Last mtl pdf (for light hit MIS)
 }
 
@@ -1392,7 +1392,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     if(dot(ia.wo, ia.nrm) > 0) {
       if((data.pidx & 0xf) > 0) {
         // Secondary ray hit light, apply MIS
-        let gsa = geomSolidAngle(data.pos, ia.pos, ia.nrm); // Last surface pos, ltri pos and ltri nrm
+        let gsa = geomSolidAngle(ray.ori, ia.pos, ia.nrm); // Last surface pos, ltri pos and ltri nrm
         let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
         let pdf = data.pdf;
         let weight = pdf * gsa / (pdf * gsa + ltriPdf);
@@ -1446,7 +1446,6 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   pathData[bidxNext].pidx = (data.pidx & 0xffffff00) | ((data.pidx & 0xf) + 1);
   // Store latest seed of the path
   pathData[bidxNext].seed = seed;
-  pathData[bidxNext].pos = ia.pos;
   pathData[bidxNext].pdf = pdf;
 }
 
