@@ -95,9 +95,11 @@ struct Ray
 
 struct PathData
 {
-  throughput:   vec3f,          // Use vec4f and bitcast for pixel idx?
+  throughput:   vec3f,
   pidx:         u32,            // Pixel idx in bits 8-31, bounce num in bits 0-3
-  seed:         vec4u           // Last rng seed used
+  seed:         vec4u,          // Last rng seed used
+  pos:          vec3f,          // Last hit pos (for light hit MIS)
+  pdf:          f32             // Last mtl pdf (for light hit MIS)
 }
 
 struct Hit
@@ -1156,7 +1158,6 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 
     // Save for light hit MIS calculation
     let lastPos = ia.pos;
-    let lastNrm = ia.nrm;
 
     finalizeHit(ori, dir, hit, &ia, &mtl);
 
@@ -1341,7 +1342,7 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
   // Initialize new path data
   let data = &pathData[bidx];
   (*data).throughput = vec3f(1.0);
-  (*data).pidx = gidx << 8;
+  (*data).pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
   (*data).seed = seed;
 }
 
@@ -1385,12 +1386,27 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   var mtl: Mtl;
   finalizeHit(ray.ori.xyz, ray.dir.xyz, hit, &ia, &mtl);
 
-  // Hit a light
+  // Hit light via material direction
   if(mtl.emissive > 0.0) {
-    // Update pixel and terminate path after light hit
-    accum[data.pidx >> 8] += vec4f(throughput * mtl.col * step(0.0, dot(ia.wo, ia.nrm)), 1.0);
+    // Lights emit from front side only
+    if(dot(ia.wo, ia.nrm) > 0) {
+      if((data.pidx & 0xf) > 0) {
+        // Secondary ray hit light, apply MIS
+        let gsa = geomSolidAngle(data.pos, ia.pos, ia.nrm); // Last surface pos, ltri pos and ltri nrm
+        let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
+        let pdf = data.pdf;
+        let weight = pdf * gsa / (pdf * gsa + ltriPdf);
+        accum[data.pidx >> 8] += vec4f(throughput * weight * mtl.col, 1.0);
+      } else {
+        // Primary ray hit light
+        accum[data.pidx >> 8] += vec4f(throughput * mtl.col, 1.0);
+      }
+    }
+    // Terminate ray after light hit (lights do not reflect)
     return;
   }
+
+  // TODO Sample light
 
   if((data.pidx & 0xf) >= globals.maxBounces) {
     // Terminate path due to max bounces
@@ -1424,10 +1440,14 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   rays[bidxNext].ori = ia.pos;
   rays[bidxNext].dir = wi;
 
-  // Init new path data
-  pathData[bidxNext].throughput = throughput * 1.0 / p; // Account for survigin RR
-  pathData[bidxNext].pidx = data.pidx; // Keep pixel index
-  pathData[bidxNext].seed = seed; // Store latest seed of the path
+  // Account for survigin RR
+  pathData[bidxNext].throughput = throughput * 1.0 / p;
+  // Keep pixel index but increase bounce num
+  pathData[bidxNext].pidx = (data.pidx & 0xffffff00) | ((data.pidx & 0xf) + 1);
+  // Store latest seed of the path
+  pathData[bidxNext].seed = seed;
+  pathData[bidxNext].pos = ia.pos;
+  pathData[bidxNext].pdf = pdf;
 }
 
 @compute @workgroup_size(8, 8)

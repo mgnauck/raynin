@@ -135,7 +135,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[bufType.RSTATE] = device.createBuffer({
-    size: WIDTH * HEIGHT * 8 * 4 * 2, // In and out buffer
+    size: WIDTH * HEIGHT * 12 * 4 * 2, // In and out buffer
     usage: GPUBufferUsage.STORAGE
   });
 
