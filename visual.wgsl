@@ -1466,9 +1466,6 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  // TODO
-  // - Improve size of path data struct
-
   // Sample material
   var wi: vec3f;
   var fres: vec3f;
