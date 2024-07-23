@@ -1387,8 +1387,8 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
 
   var throughput = data.throughput;
 
+  // No hit, terminate path
   if(hit.t == INF) {
-    // Update pixel and terminate path after hitting background
     accum[data.pidx >> 8] += vec4f(throughput * globals.bgColor, 1.0);
     return;
   }
@@ -1452,7 +1452,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     shadowRays[sidx].pidx = data.pidx >> 8;
   }
 
-  // Check if we terminate path due to max bounces
+  // Reached max bounces, terminate path
   if((data.pidx & 0xf) >= globals.maxBounces) {
     return;
   }
