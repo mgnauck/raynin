@@ -9,7 +9,7 @@ const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 2;
 const MAX_BOUNCES = 5;
-const CONVERGE = true;
+const CONVERGE = false;
 
 const CAM_LOOK_VELOCITY = 0.005;
 const CAM_MOVE_VELOCITY = 0.1;
@@ -20,7 +20,7 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, SRAY: 7, RSTATE: 8, ACC: 9, STATE: 10 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, SRAY: 7, PATH: 8, ACC: 9, STATE: 10 };
 const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3, FULL: 4 };
 
 let canvas, context, device;
@@ -139,7 +139,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[bufType.RSTATE] = device.createBuffer({
+  res.buf[bufType.PATH] = device.createBuffer({
     size: WIDTH * HEIGHT * 12 * 4 * 2, // In and out buffer
     usage: GPUBufferUsage.STORAGE
   });
@@ -180,7 +180,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.SRAY,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
-      { binding: bufType.RSTATE,
+      { binding: bufType.PATH,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
       { binding: bufType.ACC,
@@ -203,7 +203,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: bufType.NODE, resource: { buffer: res.buf[bufType.NODE] } },
       { binding: bufType.RAY, resource: { buffer: res.buf[bufType.RAY] } },
       { binding: bufType.SRAY, resource: { buffer: res.buf[bufType.SRAY] } },
-      { binding: bufType.RSTATE, resource: { buffer: res.buf[bufType.RSTATE] } },
+      { binding: bufType.PATH, resource: { buffer: res.buf[bufType.PATH] } },
       { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
       { binding: bufType.STATE, resource: { buffer: res.buf[bufType.STATE] } },
     ]
@@ -256,7 +256,7 @@ function createPipelines(shaderCode)
   res.renderPipeline = device.createRenderPipeline({
       layout: res.pipelineLayout,
       vertex: { module: shaderModule, entryPoint: "quad" },
-      fragment: { module: shaderModule, entryPoint: "blitConverge", targets: [{ format: "bgra8unorm" }] },
+      fragment: { module: shaderModule, entryPoint: "blit", targets: [{ format: "bgra8unorm" }] },
       primitive: { topology: "triangle-strip" }
     });
 }

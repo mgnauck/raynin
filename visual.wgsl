@@ -1353,7 +1353,6 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
   // Initialize new path data
   let data = &pathData[bidx];
   (*data).throughput = vec3f(1.0);
-  (*data).contribution = vec3f(1.0);
   (*data).pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
   (*data).seed = seed;
 }
