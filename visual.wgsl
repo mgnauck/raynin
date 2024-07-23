@@ -88,7 +88,7 @@ struct LTri
 struct Ray
 {
   ori:          vec3f,
-  pad0:         f32,
+  pidx:         u32,            // Pixel idx in bits 8-31, bit 4-7 TBD, bounce num in bits 0-3
   dir:          vec3f,
   pad1:         f32
 }
@@ -108,8 +108,6 @@ struct PathData
   seed:         vec4u,          // Last rng seed used
   throughput:   vec3f,
   pdf:          f32,
-  pad0:         vec3u,
-  pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-3
 }
 
 struct Hit
@@ -1340,20 +1338,21 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
 
   seed = vec4u(globalId.xy, globals.frame, state.sampleNum >> 1);
 
+  let r0 = rand4();
+
   let gidx = globals.width * globalId.y + globalId.x;
   let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
 
   // Create primary ray
-  let r0 = rand4();
   let ray = &rays[bidx];
   let eye = sampleEye(r0.xy);
   (*ray).ori = eye;
   (*ray).dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye);
+  (*ray).pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
 
   // Initialize new path data
   let data = &pathData[bidx];
   (*data).throughput = vec3f(1.0);
-  (*data).pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
   (*data).seed = seed;
 }
 
@@ -1366,7 +1365,7 @@ fn intersect(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
-  state.hits[gidx] = intersectTlas(rays[bidx].ori.xyz, rays[bidx].dir.xyz, INF);
+  state.hits[gidx] = intersectTlas(rays[bidx].ori, rays[bidx].dir, INF);
 }
 
 @compute @workgroup_size(8, 8)
@@ -1383,9 +1382,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   let ray = rays[bidx];
   let data = pathData[bidx];
 
-  seed = data.seed;
-
-  let pidx = data.pidx;
+  let pidx = ray.pidx;
 
   var throughput = data.throughput;
 
@@ -1419,6 +1416,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
+  seed = data.seed;
   let r0 = rand4();
 
   // Russian roulette
@@ -1479,14 +1477,12 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   // Init next ray
   rays[bidxNext].ori = ia.pos;
   rays[bidxNext].dir = wi;
+  // Keep pixel index, increase bounce num
+  rays[bidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xf) + 1);
 
   // Store throughput and material pdf for next path segment
   pathData[bidxNext].throughput = throughput;
   pathData[bidxNext].pdf = pdf;
-
-  // Keep pixel index, increase bounce num
-  pathData[bidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xf) + 1);
-
   // Store latest seed of the path
   pathData[bidxNext].seed = seed;
 }
@@ -1516,7 +1512,7 @@ fn full(@builtin(global_invocation_id) globalId: vec3u)
   let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
   seed = pathData[bidx].seed;
 
-  accum[pathData[bidx].pidx >> 8] += vec4f(renderMIS(rays[bidx].ori.xyz, rays[bidx].dir.xyz), 1.0);
+  accum[rays[bidx].pidx >> 8] += vec4f(renderMIS(rays[bidx].ori.xyz, rays[bidx].dir.xyz), 1.0);
 }
 
 @vertex
