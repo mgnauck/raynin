@@ -295,10 +295,6 @@ function render()
     device.queue.submit([commandEncoder.finish()]);
     //*/
 
-
-    // TODO
-    // - Try read back of shadow ray count and trigger only if count exhausted
-
     for(let j=0; j<MAX_BOUNCES; j++) {
 
       commandEncoder = device.createCommandEncoder();
