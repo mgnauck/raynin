@@ -109,7 +109,7 @@ struct PathData
   throughput:   vec3f,
   pdf:          f32,
   pad0:         vec3u,
-  pidx:         u32             // Pixel idx in bits 8-31, flags in bits 4-7, bounce num in bits 0-3
+  pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-3
 }
 
 struct Hit
@@ -155,7 +155,6 @@ const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
 const TWO_PI              = 6.283185;
 const INV_PI              = 1 / PI;
-const PURE_SPECULAR       = 0.05;
 
 // posOfs
 const ORIGIN              = vec3f(1 / 32.0);
@@ -1405,16 +1404,14 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     // Lights emit from front side only
     if(dot(ia.wo, ia.nrm) > 0) {
       // Bounces > 0
-      if((pidx & 0xf) > 0 &&
-        // Last hit was NOT pure specular
-        ((pidx >> 4) & 0x1) == 0) {
+      if((pidx & 0xf) > 0) {
         // Secondary ray hit light, apply MIS
         let pdf = data.pdf * geomSolidAngle(ray.ori, ia.pos, ia.nrm);
         let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
         let weight = pdf / (pdf + ltriPdf);
         accum[pidx >> 8] += vec4f(throughput * weight * mtl.col, 1.0);
       } else {
-        // Primary ray hit light or pure specular bounce
+        // Primary ray hit light
         accum[pidx >> 8] += vec4f(throughput * mtl.col, 1.0);
       }
     }
@@ -1435,16 +1432,13 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   // Boost surviving paths by their probability to be terminated
   throughput *= 1.0 / p;
 
-  // Material will reflect or refract purely specular (no roughness)
-  let pureSpecular = mtl.roughness < PURE_SPECULAR;
-
   // Sample lights directly (NEE)
   var ltriPos: vec3f;
   var ltriNrm: vec3f;
   var emission: vec3f;
   var ltriPdf: f32;
   //if(sampleLTrisUniform(ia.pos, ia.nrm, rand4().xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-  if(!pureSpecular && sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
+  if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
     // Apply MIS
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     var ltriWi = normalize(ltriPos - ia.pos);
@@ -1490,8 +1484,8 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   pathData[bidxNext].throughput = throughput;
   pathData[bidxNext].pdf = pdf;
 
-  // Keep pixel index, store pure specular flag, increase bounce num
-  pathData[bidxNext].pidx = (pidx & 0xffffff00) | select(0u, 1u << 4, pureSpecular) | ((pidx & 0xf) + 1);
+  // Keep pixel index, increase bounce num
+  pathData[bidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xf) + 1);
 
   // Store latest seed of the path
   pathData[bidxNext].seed = seed;
