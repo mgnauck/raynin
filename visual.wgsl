@@ -1433,7 +1433,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ldir, fres);
     let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
-    let sidx = atomicAdd(&state.shadowRayCnt, 1);
+    let sidx = atomicAdd(&state.shadowRayCnt, 1u);
     shadowRays[sidx].ori = ia.pos;
     shadowRays[sidx].dir = ldir;
     shadowRays[sidx].dist = 1.0 / ldistInv - 2.0 * EPS;
@@ -1459,8 +1459,8 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, isSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
   // Get compacted index into the other rays and path data buffer
-  let gidxNext = atomicAdd(&state.rayCnt[1 - (state.sampleNum & 0x1)], 1);
-  let bidxNext = (globals.width * globals.height * (1 - (state.sampleNum & 0x1))) + gidxNext;
+  let gidxNext = atomicAdd(&state.rayCnt[1 - (state.sampleNum & 0x1)], 1u);
+  var bidxNext = (globals.width * globals.height * (1 - (state.sampleNum & 0x1))) + gidxNext;
 
   // Init next ray
   rays[bidxNext].ori = ia.pos;
