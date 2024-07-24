@@ -1150,7 +1150,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       break;
     }
 
-    // Apply brdf
+    // Apply bsdf
     throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, wasSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
     finalizeHit(ori, dir, hit, &ia, &mtl);
