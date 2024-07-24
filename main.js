@@ -187,7 +187,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
       { binding: bufType.STATE,
-        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+        visibility: GPUShaderStage.COMPUTE,
         buffer: { type: "storage" } },
     ]
   });
