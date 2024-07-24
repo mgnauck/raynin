@@ -95,10 +95,10 @@ struct Ray
 
 struct ShadowRay
 {
-  pos:          vec3f,          // Shadow ray origin
+  ori:          vec3f,          // Shadow ray origin
   pad0:         f32,
-  tgt:          vec3f,          // Position on the light (shadow ray target)
-  pad1:         f32,
+  dir:          vec3f,          // Position on the light (shadow ray target)
+  dist:         f32,
   contribution: vec3f,
   pidx:         u32             // Pixel index where to deposit contribution
 }
@@ -152,12 +152,7 @@ const EPS                 = 0.001;
 const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
 const TWO_PI              = 6.283185;
-const INV_PI              = 1 / PI;
-
-// posOfs
-const ORIGIN              = vec3f(1 / 32.0);
-const FLOAT_SCALE         = 1 / 65536.0;
-const INT_SCALE           = 256.0;
+const INV_PI              = 1.0 / PI;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
@@ -232,15 +227,6 @@ fn createONB(n: vec3f) -> mat3x3f
   return r;
 }
 
-// Waechter/Binder: A Fast and Robust Method for Avoiding Self-Intersection
-// Hope the vectorization & conversion to wgsl is correct :)
-fn posOfs(p: vec3f, n: vec3f) -> vec3f
-{
-  let ofInt = vec3i(INT_SCALE * n);
-  let pInt = bitcast<vec3f>(bitcast<vec3i>(p) + select(ofInt, -ofInt, p < vec3f(0)));
-  return select(pInt, p + FLOAT_SCALE * n, abs(p) < ORIGIN);
-}
-
 // Parallelogram method, https://mathworld.wolfram.com/TrianglePointPicking.html
 fn sampleBarycentric(r: vec2f) -> vec3f
 {
@@ -270,7 +256,7 @@ fn sampleUnitSphere(r: vec2f) -> vec3f
 
 fn sampleHemisphere(nrm: vec3f, r: vec2f) -> vec3f
 {
-  // Sample uniform and reject directions in wrong hemisphere
+  // Sample uniform and invert directions in wrong hemisphere
   let v = sampleUnitSphere(r);
   return select(-v, v, dot(v, nrm) > 0);
 }
@@ -573,14 +559,14 @@ fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, Hit>)
       intersectPlane(oriObj, dirObj, inst.id, hit);
     }
     case (SHAPE_TYPE_BIT | ST_BOX): {
-      intersectUnitBox(oriObj, 1 / dirObj, inst.id, hit);
+      intersectUnitBox(oriObj, 1.0 / dirObj, inst.id, hit);
     }
     case (SHAPE_TYPE_BIT | ST_SPHERE): {
       intersectUnitSphere(oriObj, dirObj, inst.id, hit);
     }
     default: {
       // Mesh type
-      intersectBlas(oriObj, dirObj, 1 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
+      intersectBlas(oriObj, dirObj, 1.0 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
     }
   }
 }
@@ -598,26 +584,26 @@ fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, inst: Inst) -> bool
       return intersectPlaneAnyHit(oriObj, dirObj, tfar);
     }
     case (SHAPE_TYPE_BIT | ST_BOX): {
-      return intersectAabbAnyHit(oriObj, 1 / dirObj, tfar, vec3f(-1), vec3f(1)); 
+      return intersectAabbAnyHit(oriObj, 1.0 / dirObj, tfar, vec3f(-1), vec3f(1)); 
     }
     case (SHAPE_TYPE_BIT | ST_SPHERE): {
       return intersectUnitSphereAnyHit(oriObj, dirObj, tfar);
     }
     default: {
       // Mesh type
-      return intersectBlasAnyHit(oriObj, dirObj, 1 / dirObj, tfar, inst.data & MESH_SHAPE_MASK);
+      return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar, inst.data & MESH_SHAPE_MASK);
     }
   }
 }
 
 fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 {
-  var nodeIndex = 0u;
-  var nodeStackIndex = 0u;
-
-  let invDir = 1 / dir;
+  let invDir = 1.0 / dir;
 
   let tlasOfs = globals.tlasNodeOfs;
+
+  var nodeIndex = 0u;
+  var nodeStackIndex = 0u;
 
   var hit: Hit;
   hit.t = tfar;
@@ -677,12 +663,9 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
   return hit; // Required by firefox
 }
 
-fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
+fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
-  var dir = p1 - p0;
-  let tfar = length(dir);
-  dir /= tfar;
-  let invDir = 1 / dir;
+  let invDir = 1.0 / dir;
 
   let tlasOfs = globals.tlasNodeOfs;
 
@@ -692,11 +675,11 @@ fn intersectTlasAnyHit(p0: vec3f, p1: vec3f) -> bool
   // Early exit, unordered DF traversal
   loop {
     let node = &nodes[tlasOfs + nodeIndex];
-    if(intersectAabbAnyHit(p0, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
+    if(intersectAabbAnyHit(ori, invDir, tfar, (*node).aabbMin, (*node).aabbMax)) {
       let nodeChildren = (*node).children;
       if(nodeChildren == 0) {
         // Leaf node, intersect the single assigned instance
-        if(intersectInstAnyHit(p0, dir, tfar, instances[(*node).idx])) {
+        if(intersectInstAnyHit(ori, dir, tfar, instances[(*node).idx])) {
           return true;
         }
       } else {
@@ -958,7 +941,7 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
   return vec3f(0);
 }
 
-fn sampleLTrisUniform(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let bc = sampleBarycentric(r0.xy);
 
@@ -966,13 +949,17 @@ fn sampleLTrisUniform(pos: vec3f, n: vec3f, r0: vec3f, ltriPos: ptr<function, ve
   let ltriId = u32(floor(r0.z * f32(ltriCnt)));
 
   let ltri = &ltris[ltriId];
+  let lpos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
 
-  *ltriPos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
-  *ltriNrm = (*ltri).nrm;
+  var lightDir = lpos - pos;
+  *ldistInv = inverseSqrt(dot(lightDir, lightDir));
+  lightDir *= *ldistInv;
 
-  let ldir = pos - *ltriPos;
-  var visible = dot(ldir, *ltriNrm) > 0; // Front side of ltri only
-  visible &= dot(ldir, n) < 0; // Not facing (behind)
+  *ldir = lightDir;
+  *lnrm = (*ltri).nrm;
+
+  var visible = dot(lightDir, *lnrm) < 0; // Front side of ltri only
+  visible &= dot(lightDir, nrm) > 0; // Not facing (behind)
 
   *emission = (*ltri).emission;
 
@@ -986,15 +973,18 @@ fn sampleLTriUniformPdf(ltriId: u32) -> f32
   return 1.0 / (ltris[ltriId].area * f32(arrayLength(&ltris)));
 }
 
-fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriNrm: vec3f, lightPower: f32) -> f32
+fn calcLTriContribution(pos: vec3f, nrm: vec3f, lpos: vec3f, lnrm: vec3f, lightPower: f32, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>) -> f32
 {
-  var lightDir = ltriPos - pos;
+  var lightDir = lpos - pos;
   let invDist = inverseSqrt(dot(lightDir, lightDir));
   lightDir *= invDist;
 
+  *ldir = lightDir;
+  *ldistInv = invDist;
+
   // Inclination between light normal and light dir
   // (how much the light faces the light dir)
-  let lnDotL = max(0.0, -dot(ltriNrm, lightDir));
+  let lnDotL = max(0.0, -dot(lnrm, lightDir));
 
   // Inclination between surface normal and light dir
   // (how much the surface aligns with the light dir or if the light is behind)
@@ -1005,7 +995,7 @@ fn calcLTriContribution(pos: vec3f, nrm: vec3f, ltriPos: vec3f, ltriNrm: vec3f, 
 }
 
 // Talbot et al: Importance Resampling for Global Illumination
-fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm: ptr<function, vec3f>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let sampleCnt = 8u;
   
@@ -1024,20 +1014,24 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
     let bc = sampleBarycentric(r.xy);
 
     // Sample a candidate ltri from all ltris with 'cheap' source pdf
-    let ltriCandidate = &ltris[u32(floor(r.z * ltriCnt))];
-    let ltriCandidatePos = (*ltriCandidate).v0 * bc.x + (*ltriCandidate).v1 * bc.y + (*ltriCandidate).v2 * bc.z;
-    
+    let ltri = &ltris[u32(floor(r.z * ltriCnt))];
+    let lpos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
+
+    var ldirCand: vec3f;
+    var ldistInvCand: f32;
+
     // Re-sample the selected sample to approximate the more accurate target pdf
-    let targetPdf = calcLTriContribution(pos, nrm, ltriCandidatePos, (*ltriCandidate).nrm, (*ltriCandidate).power);
+    let targetPdf = calcLTriContribution(pos, nrm, lpos, (*ltri).nrm, (*ltri).power, &ldirCand, &ldistInvCand);
     let risWeight = targetPdf / sourcePdf;
     totalWeight += risWeight;
 
     if(r.w < risWeight / totalWeight) {
       // Store data of our latest accepted sample/candidate
-      *ltriPos = ltriCandidatePos;
-      *ltriNrm = (*ltriCandidate).nrm;
-      *emission = (*ltriCandidate).emission;
-      area = (*ltriCandidate).area;
+      *lnrm = (*ltri).nrm;
+      *ldir = ldirCand;
+      *ldistInv = ldistInvCand;
+      *emission = (*ltri).emission;
+      area = (*ltri).area;
       // Track pdf of the selected sample
       sampleTargetPdf = targetPdf;
     }
@@ -1049,14 +1043,9 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriPos: ptr<function, vec3f>, ltriNrm
 }
 
 // Lessig: The Area Formulation of Light Transport
-fn geomSolidAngle(pos: vec3f, surfPos: vec3f, surfNrm: vec3f) -> f32
+fn geomSolidAngle(ldir: vec3f, surfNrm: vec3f, ldistInv: f32) -> f32
 {
-  // Distance attenuation
-  // Converts from solid angle to surface area
-  var dir = pos - surfPos;
-  let invDist = inverseSqrt(dot(dir, dir));
-  dir *= invDist;
-  return abs(dot(surfNrm, dir)) * invDist * invDist;
+  return abs(dot(ldir, surfNrm)) * ldistInv * ldistInv;
 }
 
 fn samplePixel(pixelPos: vec2f, r: vec2f) -> vec3f
@@ -1128,22 +1117,21 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     let r0 = rand4();
 
     // Sample lights directly (NEE)
-    var ltriPos: vec3f;
-    var ltriNrm: vec3f;
+    var lnrm: vec3f;
+    var ldir: vec3f;
+    var ldistInv: f32;
     var emission: vec3f;
-    var ltriPdf: f32;
-    //if(sampleLTrisUniform(ia.pos, ia.nrm, rand4().xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
-    if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)
-      && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
-      // Apply MIS
+    var lpdf: f32;
+    //if(sampleLTrisUniform(rand4().xyz, ia.pos, ia.nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)
+    if(sampleLTrisRIS(ia.pos, ia.nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)
+      && !intersectTlasAnyHit(ia.pos, ldir, 1.0 / ldistInv - 2.0 * EPS)) {
       // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
-      var ltriWi = normalize(ltriPos - ia.pos);
-      let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
+      let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
       var fres: vec3f;
-      let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
-      let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ltriWi, fres);
-      let weight = ltriPdf / (ltriPdf + bsdfPdf * gsa);
-      col += throughput * bsdf * gsa * weight * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
+      let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ldir, &fres);
+      let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ldir, fres);
+      let weight = lpdf / (lpdf + bsdfPdf * gsa);
+      col += throughput * bsdf * gsa * weight * emission * saturate(dot(ia.nrm, ldir)) / lpdf;
     }
 
     // Sample material
@@ -1162,11 +1150,8 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       break;
     }
 
-    // Scale indirect light contribution by material
+    // Apply brdf
     throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, wasSpecular) * abs(dot(ia.nrm, wi)) / pdf;
-
-    // Save for light hit MIS calculation
-    let lastPos = ia.pos;
 
     finalizeHit(ori, dir, hit, &ia, &mtl);
 
@@ -1175,9 +1160,11 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
       // Lights emit from front side only
       if(dot(ia.wo, ia.nrm) > 0) {
         // Apply MIS
-        let gsa = geomSolidAngle(lastPos, ia.pos, ia.nrm); // = ltri pos and ltri nrm
-        let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
-        let weight = pdf * gsa / (pdf * gsa + ltriPdf);
+        let ldir = ia.pos - ori;
+        let ldistInv = inverseSqrt(dot(ldir, ldir));
+        let gsa = geomSolidAngle(ldir * ldistInv, ia.nrm, ldistInv);
+        let lpdf = sampleLTriUniformPdf(ia.ltriId);
+        let weight = pdf * gsa / (pdf * gsa + lpdf);
         col += throughput * weight * mtl.col;
       }
       break;
@@ -1232,18 +1219,18 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     let r0 = rand4();
 
     // Sample lights directly (NEE)
-    var ltriPos: vec3f;
-    var ltriNrm: vec3f;
+    var lnrm: vec3f;
+    var ldir: vec3f;
+    var ldistInv: f32;
     var emission: vec3f;
-    var ltriPdf: f32;
-    //if(sampleLTrisUniform(ia.pos, ia.nrm, rand4().xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)
-    if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)
-      && !intersectTlasAnyHit(ia.pos, posOfs(ltriPos, ltriNrm))) {
-      var ltriWi = normalize(ltriPos - ia.pos);
-      let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
+    var lpdf: f32;
+    //if(sampleLTrisUniform(rand4().xyz, ia.pos, ia.nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)
+    if(sampleLTrisRIS(ia.pos, ia.nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)
+      && !intersectTlasAnyHit(ia.pos, ldir, 1.0 / ldistInv - 2.0 * EPS)) {
+      let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
       var fres: vec3f;
-      let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
-      col += throughput * bsdf * gsa * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
+      let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ldir, &fres);
+      col += throughput * bsdf * gsa * emission * saturate(dot(ia.nrm, ldir)) / lpdf;
     }
 
     // Sample material
@@ -1309,6 +1296,7 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
     if(!sampleMaterial(mtl, ia.wo, ia.nrm, r0.xyz, &wi, &fres, &isSpecular, &pdf)) {
       break;
     }
+
     throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, isSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
     // Russian roulette
@@ -1344,16 +1332,14 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
   let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
 
   // Create primary ray
-  let ray = &rays[bidx];
   let eye = sampleEye(r0.xy);
-  (*ray).ori = eye;
-  (*ray).dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye);
-  (*ray).pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
+  rays[bidx].ori = eye;
+  rays[bidx].dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye);
+  rays[bidx].pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
 
   // Initialize new path data
-  let data = &pathData[bidx];
-  (*data).throughput = vec3f(1.0);
-  (*data).seed = seed;
+  pathData[bidx].throughput = vec3f(1.0);
+  pathData[bidx].seed = seed;
 }
 
 @compute @workgroup_size(8, 8)
@@ -1365,7 +1351,8 @@ fn intersect(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
-  state.hits[gidx] = intersectTlas(rays[bidx].ori, rays[bidx].dir, INF);
+  let ray = rays[bidx];
+  state.hits[gidx] = intersectTlas(ray.ori, ray.dir, INF);
 }
 
 @compute @workgroup_size(8, 8)
@@ -1380,9 +1367,8 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
 
   let hit = state.hits[gidx];
   let ray = rays[bidx];
-  let data = pathData[bidx];
-
   let pidx = ray.pidx;
+  let data = pathData[bidx];
 
   var throughput = data.throughput;
 
@@ -1403,9 +1389,11 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
       // Bounces > 0
       if((pidx & 0xf) > 0) {
         // Secondary ray hit light, apply MIS
-        let pdf = data.pdf * geomSolidAngle(ray.ori, ia.pos, ia.nrm);
-        let ltriPdf = sampleLTriUniformPdf(ia.ltriId);
-        let weight = pdf / (pdf + ltriPdf);
+        let ldir = ia.pos - ray.ori;
+        let ldistInv = inverseSqrt(dot(ldir, ldir));
+        let pdf = data.pdf * geomSolidAngle(ldir * ldistInv, ia.nrm, ldistInv);
+        let lpdf = sampleLTriUniformPdf(ia.ltriId);
+        let weight = pdf / (pdf + lpdf);
         accum[pidx >> 8] += vec4f(throughput * weight * mtl.col, 1.0);
       } else {
         // Primary ray hit light
@@ -1431,25 +1419,25 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   throughput *= 1.0 / p;
 
   // Sample lights directly (NEE)
-  var ltriPos: vec3f;
-  var ltriNrm: vec3f;
+  var lnrm: vec3f;
+  var ldir: vec3f;
+  var ldistInv: f32;
   var emission: vec3f;
-  var ltriPdf: f32;
-  //if(sampleLTrisUniform(ia.pos, ia.nrm, rand4().xyz, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-  if(sampleLTrisRIS(ia.pos, ia.nrm, &ltriPos, &ltriNrm, &emission, &ltriPdf)) {
-    // Apply MIS
+  var lpdf: f32;
+  //if(sampleLTrisUniform(rand4().xyz, ia.pos, ia.nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
+  if(sampleLTrisRIS(ia.pos, ia.nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
-    var ltriWi = normalize(ltriPos - ia.pos);
-    let gsa = geomSolidAngle(ia.pos, ltriPos, ltriNrm);
+    let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
     var fres: vec3f;
-    let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ltriWi, &fres);
-    let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ltriWi, fres);
-    let weight = ltriPdf / (ltriPdf + bsdfPdf * gsa);
+    let bsdf = evalMaterialCombined(mtl, ia.wo, ia.nrm, ldir, &fres);
+    let bsdfPdf = sampleMaterialCombinedPdf(mtl, ia.wo, ia.nrm, ldir, fres);
+    let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
     let sidx = atomicAdd(&state.shadowRayCnt, 1);
-    shadowRays[sidx].pos = ia.pos;
-    shadowRays[sidx].tgt = posOfs(ltriPos, ltriNrm);
-    shadowRays[sidx].contribution = throughput * bsdf * gsa * weight * emission * saturate(dot(ia.nrm, ltriWi)) / ltriPdf;
+    shadowRays[sidx].ori = ia.pos;
+    shadowRays[sidx].dir = ldir;
+    shadowRays[sidx].dist = 1.0 / ldistInv - 2.0 * EPS;
+    shadowRays[sidx].contribution = throughput * bsdf * gsa * weight * emission * saturate(dot(ia.nrm, ldir)) / lpdf;
     shadowRays[sidx].pidx = pidx >> 8;
   }
 
@@ -1467,7 +1455,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  // Apply brdf
+  // Apply bsdf
   throughput *= evalMaterial(mtl, ia.wo, ia.nrm, wi, fres, isSpecular) * abs(dot(ia.nrm, wi)) / pdf;
 
   // Get compacted index into the other rays and path data buffer
@@ -1496,7 +1484,7 @@ fn traceShadowRay(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let shadowRay = shadowRays[gidx];
-  if(!intersectTlasAnyHit(shadowRay.pos, shadowRay.tgt)) {
+  if(!intersectTlasAnyHit(shadowRay.ori, shadowRay.dir, shadowRay.dist)) {
     accum[shadowRay.pidx] += vec4f(shadowRay.contribution, 1.0);
   }
 }
@@ -1510,9 +1498,11 @@ fn full(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
+
   seed = pathData[bidx].seed;
 
-  accum[rays[bidx].pidx >> 8] += vec4f(renderMIS(rays[bidx].ori.xyz, rays[bidx].dir.xyz), 1.0);
+  let ray = rays[bidx];
+  accum[ray.pidx >> 8] += vec4f(renderMIS(ray.ori.xyz, ray.dir.xyz), 1.0);
 }
 
 @vertex
