@@ -90,17 +90,17 @@ struct Ray
   ori:          vec3f,
   pidx:         u32,            // Pixel idx in bits 8-31, bit 4-7 TBD, bounce num in bits 0-3
   dir:          vec3f,
-  pad1:         f32
+  pad0:         f32
 }
 
 struct ShadowRay
 {
   ori:          vec3f,          // Shadow ray origin
-  pad0:         f32,
+  pidx:         u32,            // Pixel index where to deposit contribution
   dir:          vec3f,          // Position on the light (shadow ray target)
   dist:         f32,
   contribution: vec3f,
-  pidx:         u32             // Pixel index where to deposit contribution
+  pad0:         f32
 }
 
 struct PathData
