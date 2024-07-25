@@ -332,7 +332,7 @@ function render()
       device.queue.writeBuffer(res.buf[bufType.STATE], 0, counter, 0, 2);
 
       // FULL ONLY: Sample num update
-     // device.queue.writeBuffer(res.buf[bufType.STATE], 3 * 4, new Uint32Array([((i + 1) << 1) | (counterIndex & 0x1)]));
+      //device.queue.writeBuffer(res.buf[bufType.STATE], 3 * 4, new Uint32Array([((i + 1) << 1) | (counterIndex & 0x1)]));
     }
   }
 
