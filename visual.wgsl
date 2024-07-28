@@ -5,13 +5,8 @@ struct Global
   height:       u32,
   maxBounces:   u32,
   tlasNodeOfs:  u32,
-  // Frame
-  frame:        u32,
-  gatheredSpp:  u32,
-  pad0:         u32,
-  pad1:         u32,
   bgColor:      vec3f,
-  pad2:         f32,
+  pad0:         f32,
   // Camera
   eye:          vec3f,
   vertFov:      f32,
@@ -21,11 +16,11 @@ struct Global
   focAngle:     f32,
   // View
   pixelDeltaX:  vec3f,
-  pad3:         f32,
+  pad1:         f32,
   pixelDeltaY:  vec3f,
-  pad4:         f32,
+  pad2:         f32,
   pixelTopLeft: vec3f,
-  pad5:         f32,
+  pad3:         f32
 }
 
 struct Mtl
@@ -120,9 +115,11 @@ struct Hit
 
 struct State
 {
+  frame:        u32,
+  gatheredSpp:  u32,
   rayCnt:       array<atomic<u32>, 2u>,
   shadowRayCnt: atomic<u32>,
-  sampleNum:    u32,            // Buffer/ray cnt switch in bit 0, Sample num in bits 1-31
+  cntIdx:       u32,            // Index into current buf/counter (currently bit 0 only).
   hits:         array<Hit>      // TODO This is here because we have a limit of 8 storage buffers :(
 }
 
@@ -1323,12 +1320,12 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  seed = vec4u(globalId.xy, globals.frame, state.sampleNum >> 1);
+  seed = vec4u(globalId.xy, state.frame, state.gatheredSpp);
 
   let r0 = rand4();
 
   let gidx = globals.width * globalId.y + globalId.x;
-  let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
+  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
 
   // Create primary ray
   let eye = sampleEye(r0.xy);
@@ -1345,11 +1342,11 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
 fn intersect(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = globals.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&state.rayCnt[state.sampleNum & 0x1])) {
+  if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
     return;
   }
 
-  let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
+  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
   let ray = rays[bidx];
   state.hits[gidx] = intersectTlas(ray.ori, ray.dir, INF);
 }
@@ -1358,11 +1355,11 @@ fn intersect(@builtin(global_invocation_id) globalId: vec3u)
 fn shade(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = globals.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&state.rayCnt[state.sampleNum & 0x1])) {
+  if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
     return;
   }
 
-  let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
+  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
 
   let hit = state.hits[gidx];
   let ray = rays[bidx];
@@ -1460,8 +1457,8 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   throughput *= evalMaterial(mtl, -ray.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the other rays and path data buffer
-  let gidxNext = atomicAdd(&state.rayCnt[1 - (state.sampleNum & 0x1)], 1u);
-  var bidxNext = (globals.width * globals.height * (1 - (state.sampleNum & 0x1))) + gidxNext;
+  let gidxNext = atomicAdd(&state.rayCnt[1 - (state.cntIdx & 0x1)], 1u);
+  var bidxNext = (globals.width * globals.height * (1 - (state.cntIdx & 0x1))) + gidxNext;
 
   // Init next ray
   rays[bidxNext].ori = pos;
@@ -1494,11 +1491,11 @@ fn traceShadowRay(@builtin(global_invocation_id) globalId: vec3u)
 fn full(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = globals.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&state.rayCnt[state.sampleNum & 0x1])) {
+  if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
     return;
   }
 
-  let bidx = (globals.width * globals.height * (state.sampleNum & 0x1)) + gidx;
+  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
 
   seed = pathData[bidx].seed;
 
@@ -1534,7 +1531,7 @@ fn quad(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 fn blit(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
   let gidx = globals.width * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accum[gidx].xyz / f32(globals.gatheredSpp), vec3f(0.4545)), 1.0);
+  let col = vec4f(pow(accum[gidx].xyz / f32(state.gatheredSpp), vec3f(0.4545)), 1.0);
   accum[gidx] = vec4f(0.0, 0.0, 0.0, 1.0);
   return col;
 }
@@ -1543,6 +1540,6 @@ fn blit(@builtin(position) pos: vec4f) -> @location(0) vec4f
 fn blitConverge(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
   let gidx = globals.width * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accum[gidx].xyz / f32(globals.gatheredSpp), vec3f(0.4545)), 1.0);
+  let col = vec4f(pow(accum[gidx].xyz / f32(state.gatheredSpp), vec3f(0.4545)), 1.0);
   return col;
 }

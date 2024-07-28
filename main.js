@@ -25,6 +25,8 @@ const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3, FULL: 4 }
 
 let canvas, context, device;
 let wa, res = {};
+let frame = 0;
+let sample = 0;
 let start, last;
 
 function handleMouseMoveEvent(e)
@@ -80,6 +82,7 @@ function Wasm(module)
     },
     gpu_create_res: (g, m, i, t, lt, bn) => createGpuResources(g, m, i, t, lt, bn),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
+    reset_samples: () => { sample = 0; }
   };
 
   this.instantiate = async function()
@@ -150,7 +153,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[bufType.STATE] = device.createBuffer({
-    size: /* Counter */ 4 * 4 + /* Hit buffer */ WIDTH * HEIGHT * 4 * 4,
+    size: /* Counter */ 6 * 4 + /* Hit buffer */ WIDTH * HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -187,7 +190,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: { type: "storage" } },
       { binding: bufType.STATE,
-        visibility: GPUShaderStage.COMPUTE,
+        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT, // TODO Refactor so fragment does not need access
         buffer: { type: "storage" } },
     ]
   });
@@ -268,11 +271,11 @@ function render()
   last = performance.now();
 
   // Initialize counter index and values
-  let counterIndex = 0;
-  let counter = new Uint32Array([WIDTH * HEIGHT, 0, 0 /* shadow ray cnt */, counterIndex & 0x1]);
+  let counter = new Uint32Array([frame, sample, WIDTH * HEIGHT, /* other ray cnt */ 0, /* shadow ray cnt */ 0, /* counter index */ 0]);
   device.queue.writeBuffer(res.buf[bufType.STATE], 0, counter);
 
   // Wavefront loop for render passes (compute)
+  let counterIndex = 0;
   for(let i=0; i<SPP; i++) {
 
     let commandEncoder = device.createCommandEncoder();
@@ -310,30 +313,25 @@ function render()
       device.queue.submit([commandEncoder.finish()]);
 
       // Reset current counter to zero, we will start using the other one now
-      let sampleNum;
-      if(j < MAX_BOUNCES - 1) {
-        device.queue.writeBuffer(res.buf[bufType.STATE], (counterIndex & 0x1) * 4, new Uint32Array([0]));
-        sampleNum = i;
-      } else
-        sampleNum = i + 1;
+      if(j < MAX_BOUNCES - 1)
+        device.queue.writeBuffer(res.buf[bufType.STATE], (2 + (counterIndex & 0x1)) * 4, new Uint32Array([0]));
 
       // Switch between two counters and associated buffers (rays + path data)
       counterIndex = 1 - counterIndex;
 
       // Reset shadow ray counter and update toggled counter index
-      device.queue.writeBuffer(res.buf[bufType.STATE], 2 * 4, new Uint32Array([0, (sampleNum << 1) | (counterIndex & 0x1)]));
+      device.queue.writeBuffer(res.buf[bufType.STATE], 4 * 4, new Uint32Array([0, (counterIndex & 0x1)]));
     }
     //*/
 
-    if(i < SPP - 1) {
-      // Reset counter values
-      counter[counterIndex & 0x1] = WIDTH * HEIGHT;
-      counter[1 - (counterIndex & 0x1)] = 0;
-      device.queue.writeBuffer(res.buf[bufType.STATE], 0, counter, 0, 2);
+    // Update sample num and reset counter values
+    counter[0] = ++sample;
+    counter[1 + (counterIndex & 0x1)] = WIDTH * HEIGHT;
+    counter[1 + 1 - (counterIndex & 0x1)] = 0;
+    device.queue.writeBuffer(res.buf[bufType.STATE], 1 * 4, counter, 0, 3);
 
-      // FULL ONLY: Sample num update
-      //device.queue.writeBuffer(res.buf[bufType.STATE], 3 * 4, new Uint32Array([((i + 1) << 1) | (counterIndex & 0x1)]));
-    }
+    // FULL ONLY: Sample num update
+    //device.queue.writeBuffer(res.buf[bufType.STATE], 5 * 4, new Uint32Array([((i + 1) << 1) | (counterIndex & 0x1)]));
   }
 
   // Blit pass (fragment)
@@ -350,6 +348,7 @@ function render()
 
   // Update scene and renderer for next frame
   wa.update((performance.now() - start) / 1000, SPP, CONVERGE);
+  frame++;
 
   requestAnimationFrame(render);
 }

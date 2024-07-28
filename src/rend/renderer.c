@@ -18,11 +18,9 @@
 #endif
 
 // Global uniform buffer offsets
-#define GLOB_BUF_OFS_CFG      0
-#define GLOB_BUF_OFS_FRAME    16
-#define GLOB_BUF_OFS_CAM      48
-#define GLOB_BUF_OFS_VIEW     96
-#define GLOB_BUF_SIZE         144
+#define GLOB_BUF_OFS_CAM      32
+#define GLOB_BUF_OFS_VIEW     80
+#define GLOB_BUF_SIZE         128
 
 #define MAX_UNIFORM_BUF_SIZE  65536
 
@@ -43,18 +41,7 @@ typedef struct render_data {
   uint16_t  width;
   uint16_t  height;
   uint8_t   bounces;
-  uint32_t  frame;
-  uint32_t  gathered_spp;
 } render_data;
-
-typedef struct frame_data {
-  uint32_t  frame;
-  uint32_t  gathered_spp;
-  uint32_t  pad0;
-  uint32_t  pad1;
-  vec3      bg_col;
-  float     pad2;
-} frame_data;
 
 #ifndef NATIVE_BUILD
 
@@ -65,10 +52,13 @@ extern void gpu_create_res(uint32_t glob_sz, uint32_t mtl_sz,
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
 
+extern void reset_samples();
+
 #else
 
 #define gpu_create_res(...) ((void)0)
 #define gpu_write_buf(...) ((void)0)
+#define reset_samples(...) ((void)0)
 
 #endif
 
@@ -117,29 +107,24 @@ void renderer_release(render_data *rd)
   free(rd);
 }
 
-void push_frame_data(render_data *rd)
+void push_cfg(render_data *rd)
 {
-#ifndef NATIVE_BUILD
   scene *s = rd->scene;
-  frame_data fd = (frame_data){
-    .frame = rd->frame,
-    .gathered_spp = rd->gathered_spp,
-    .bg_col = s->bg_col,
-  };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_FRAME, &fd, sizeof(frame_data));
+#ifndef NATIVE_BUILD
+  uint32_t cfg[8] = { rd->width, rd->height, rd->bounces, tlas_node_ofs,
+    s->bg_col.x, s->bg_col.y, s->bg_col.z, 0.0 };
+  gpu_write_buf(BT_GLOB, 0, cfg, sizeof(cfg));
 #endif
 }
 
-void push_mtls(render_data *rd)
+void push_mtls(scene *s)
 {
-  scene *s = rd->scene;
   gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
   scene_clr_dirty(s, RT_MTL);
 }
 
-void push_tris(render_data *rd)
+void push_tris(scene *s)
 {
-  scene *s = rd->scene;
 #ifndef NATIVE_BUILD
   for(uint32_t i=0; i<s->mesh_cnt; i++) {
     mesh *m = &s->meshes[i];
@@ -149,50 +134,36 @@ void push_tris(render_data *rd)
   scene_clr_dirty(s, RT_TRI);
 }
 
-void push_ltris(render_data *rd)
+void push_ltris(scene *s)
 {
-  scene *s = rd->scene;
   gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
   scene_clr_dirty(s, RT_LTRI);
 }
 
-void push_blas(render_data *rd)
+void push_blas(scene *s)
 {
-#ifndef NATIVE_BUILD
-  scene *s = rd->scene;
   gpu_write_buf(BT_NODE, 0, s->blas_nodes, 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
-#endif
 }
 
 void renderer_setup(render_data *rd, uint32_t spp)
 {
   scene *s = rd->scene;
 
-  // Update instances, build ltris and tlas
   scene_prepare_render(s);
 
-#ifndef NATIVE_BUILD
-  // Push part of globals
-  uint32_t cfg[4] = { rd->width, rd->height, rd->bounces, tlas_node_ofs };
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CFG, cfg, sizeof(cfg));
-#endif
+  push_cfg(rd);
+
+  if(s->dirty & RT_MTL)
+    push_mtls(s);
 
   if(s->dirty & RT_MESH) {
-    push_tris(rd);
-    push_blas(rd);
+    push_tris(s);
+    push_blas(s);
     scene_clr_dirty(s, RT_MESH);
   }
 
-  if(s->dirty & RT_MTL)
-    push_mtls(rd);
-
   if(rd->scene->dirty & RT_LTRI)
-    push_ltris(rd);
-
-  rd->gathered_spp = spp; // Frame 0 will gather given spp
-  rd->frame = 0;
-
-  push_frame_data(rd);
+    push_ltris(s);
 }
 
 void renderer_update(render_data *rd, uint32_t spp, bool converge)
@@ -202,7 +173,7 @@ void renderer_update(render_data *rd, uint32_t spp, bool converge)
   scene_prepare_render(s);
 
   if(!converge || rd->scene->dirty > 0)
-    rd->gathered_spp = 0;
+    reset_samples();
 
   if(rd->scene->dirty & RT_CAM_VIEW) {
     cam *cam = scene_get_active_cam(s);
@@ -213,12 +184,12 @@ void renderer_update(render_data *rd, uint32_t spp, bool converge)
   }
 
   if(rd->scene->dirty & RT_MTL)
-    push_mtls(rd);
+    push_mtls(s);
 
   if(rd->scene->dirty & RT_LTRI) {
-    push_ltris(rd);
+    push_ltris(s);
     if(rd->scene->dirty & RT_TRI) // Ltri id in tri is modified by ltri rebuild
-      push_tris(rd);
+      push_tris(s);
   }
 
   if(rd->scene->dirty & RT_INST) {
@@ -226,11 +197,6 @@ void renderer_update(render_data *rd, uint32_t spp, bool converge)
     gpu_write_buf(BT_NODE, tlas_node_ofs * sizeof(*s->tlas_nodes), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
     scene_clr_dirty(s, RT_INST);
   }
-
-  rd->gathered_spp += spp;
-  rd->frame++;
-
-  push_frame_data(rd);
 }
 
 #ifdef NATIVE_BUILD
