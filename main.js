@@ -133,7 +133,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[bufType.RAY] = device.createBuffer({
-    size: WIDTH * HEIGHT * 8 * 4 * 2, // In and out buffer
+    size: WIDTH * HEIGHT * 8 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
@@ -143,7 +143,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[bufType.PATH] = device.createBuffer({
-    size: WIDTH * HEIGHT * 8 * 4 * 2, // In and out buffer
+    size: WIDTH * HEIGHT * 16 * 4 * 2, // In and out buffer
     usage: GPUBufferUsage.STORAGE
   });
 

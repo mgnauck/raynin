@@ -83,9 +83,9 @@ struct LTri
 struct Ray
 {
   ori:          vec3f,
-  pidx:         u32,            // Pixel idx in bits 8-31, bit 4-7 TBD, bounce num in bits 0-3
+  pad0:         f32,
   dir:          vec3f,
-  pad0:         f32
+  pad1:         f32
 }
 
 struct ShadowRay
@@ -103,6 +103,10 @@ struct PathData
   seed:         vec4u,          // Last rng seed used
   throughput:   vec3f,
   pdf:          f32,
+  ori:          vec3f,
+  pad0:         f32,
+  dir:          vec3f,
+  pidx:         u32             // Pixel idx in bits 8-31, bit 4-7 TBD, bounce num in bits 0-3
 }
 
 struct Hit
@@ -1328,14 +1332,17 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
   let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
 
   // Create primary ray
-  let eye = sampleEye(r0.xy);
-  rays[bidx].ori = eye;
-  rays[bidx].dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - eye);
-  rays[bidx].pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
+  let ori = sampleEye(r0.xy);
+  let dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - ori);
+  rays[gidx].ori = ori;
+  rays[gidx].dir = dir;
 
   // Initialize new path data
-  pathData[bidx].throughput = vec3f(1.0);
   pathData[bidx].seed = seed;
+  pathData[bidx].throughput = vec3f(1.0);
+  pathData[bidx].ori = ori;
+  pathData[bidx].dir = dir;
+  pathData[bidx].pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
 }
 
 @compute @workgroup_size(8, 8)
@@ -1346,8 +1353,7 @@ fn intersect(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
-  let ray = rays[bidx];
+  let ray = rays[gidx];
   state.hits[gidx] = intersectTlas(ray.ori, ray.dir, INF);
 }
 
@@ -1362,9 +1368,8 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
 
   let hit = state.hits[gidx];
-  let ray = rays[bidx];
-  let pidx = ray.pidx;
   let data = pathData[bidx];
+  let pidx = data.pidx;
 
   var throughput = data.throughput;
 
@@ -1378,16 +1383,16 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   var nrm: vec3f;
   var ltriId: u32;
   var mtl: Mtl;
-  finalizeHit(ray.ori, ray.dir, hit, &pos, &nrm, &ltriId, &mtl);
+  finalizeHit(data.ori, data.dir, hit, &pos, &nrm, &ltriId, &mtl);
 
   // Hit light via material direction
   if(mtl.emissive > 0.0) {
     // Lights emit from front side only
-    if(dot(-ray.dir, nrm) > 0) {
+    if(dot(-data.dir, nrm) > 0) {
       // Bounces > 0
       if((pidx & 0xf) > 0) {
         // Secondary ray hit light, apply MIS
-        let ldir = pos - ray.ori;
+        let ldir = pos - data.ori;
         let ldistInv = inverseSqrt(dot(ldir, ldir));
         let pdf = data.pdf * geomSolidAngle(ldir * ldistInv, nrm, ldistInv);
         let lpdf = sampleLTriUniformPdf(ltriId);
@@ -1427,8 +1432,8 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
     var fres: vec3f;
-    let bsdf = evalMaterialCombined(mtl, -ray.dir, nrm, ldir, &fres);
-    let bsdfPdf = sampleMaterialCombinedPdf(mtl, -ray.dir, nrm, ldir, fres);
+    let bsdf = evalMaterialCombined(mtl, -data.dir, nrm, ldir, &fres);
+    let bsdfPdf = sampleMaterialCombinedPdf(mtl, -data.dir, nrm, ldir, fres);
     let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
     let sidx = atomicAdd(&state.shadowRayCnt, 1u);
@@ -1449,28 +1454,29 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   var fres: vec3f;
   var isSpecular: bool;
   var pdf: f32;
-  if(!sampleMaterial(mtl, -ray.dir, nrm, r0.xyz, &wi, &fres, &isSpecular, &pdf)) {
+  if(!sampleMaterial(mtl, -data.dir, nrm, r0.xyz, &wi, &fres, &isSpecular, &pdf)) {
     return;
   }
 
   // Apply bsdf
-  throughput *= evalMaterial(mtl, -ray.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
+  throughput *= evalMaterial(mtl, -data.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the other rays and path data buffer
   let gidxNext = atomicAdd(&state.rayCnt[1 - (state.cntIdx & 0x1)], 1u);
   var bidxNext = (globals.width * globals.height * (1 - (state.cntIdx & 0x1))) + gidxNext;
 
   // Init next ray
-  rays[bidxNext].ori = pos;
-  rays[bidxNext].dir = wi;
-  // Keep pixel index, increase bounce num
-  rays[bidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xf) + 1);
+  rays[gidxNext].ori = pos;
+  rays[gidxNext].dir = wi;
 
-  // Store throughput and material pdf for next path segment
+  // Init next path segment 
+  pathData[bidxNext].seed = seed;
   pathData[bidxNext].throughput = throughput;
   pathData[bidxNext].pdf = pdf;
-  // Store latest seed of the path
-  pathData[bidxNext].seed = seed;
+  pathData[bidxNext].ori = pos;
+  pathData[bidxNext].dir = wi;
+  // Keep pixel index, increase bounce num
+  pathData[bidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xf) + 1);
 }
 
 @compute @workgroup_size(8, 8)
@@ -1497,10 +1503,9 @@ fn full(@builtin(global_invocation_id) globalId: vec3u)
 
   let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
 
-  seed = pathData[bidx].seed;
-
-  let ray = rays[bidx];
-  accum[ray.pidx >> 8] += vec4f(renderMIS(ray.ori, ray.dir), 1.0);
+  let data = pathData[bidx];
+  seed = data.seed;
+  accum[data.pidx >> 8] += vec4f(renderMIS(data.ori, data.dir), 1.0);
 }
 
 @vertex
