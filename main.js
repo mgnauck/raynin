@@ -28,7 +28,6 @@ let canvas, context, device;
 let wa, res = {};
 let frame = 0;
 let sample = 0;
-let start, last;
 
 function handleMouseMoveEvent(e)
 {
@@ -247,11 +246,29 @@ function createRenderPipeline(pipelineType, pipelineLayout, shaderCode, entryPoi
     });
 }
 
-function render()
+let start = undefined;
+let last = undefined;
+let frameTimeAvg = undefined;
+let updateDisplay = true;
+
+function render(time)
 {
-  let frame = performance.now() - last;
-  document.title = `${(frame).toFixed(2)} / ${(1000.0 / frame).toFixed(2)}`;
-  last = performance.now();
+  if(start === undefined)
+    start = time;
+  let frameTime = 0;
+  if(last !== undefined)
+    frameTime = time - last;
+  last = time;
+
+  if(frameTimeAvg === undefined)
+    frameTimeAvg = frameTime;
+  frameTimeAvg = 0.8 * frameTimeAvg + 0.2 * frameTime;
+
+  if(updateDisplay) {
+    document.title = `${frameTimeAvg.toFixed(2)} / ${(1000.0 / frameTimeAvg).toFixed(2)}`;
+    updateDisplay = false;
+    setTimeout(() => { updateDisplay = true; }, 100);
+  }
 
   // Initialize counter index and values
   let counter = new Uint32Array([frame, sample, WIDTH * HEIGHT, /* other ray cnt */ 0, /* shadow ray cnt */ 0, /* counter index */ 0]);
@@ -314,7 +331,7 @@ function render()
   device.queue.submit([commandEncoder.finish()]);
 
   // Update scene and renderer for next frame
-  wa.update((performance.now() - start) / 1000, SPP, CONVERGE);
+  wa.update((time - start) / 1000, SPP, CONVERGE);
   frame++;
 
   requestAnimationFrame(render);
@@ -333,9 +350,7 @@ function startRender()
   }
 
   installEventHandler();
-
-  start = last = performance.now();
-  render();
+  requestAnimationFrame(render);
 }
 
 async function main()
