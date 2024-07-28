@@ -247,17 +247,6 @@ function createRenderPipeline(pipelineType, pipelineLayout, shaderCode, entryPoi
     });
 }
 
-function createPipelines(shaderCode)
-{
-  createComputePipeline(computePipelineType.GENERATE, res.pipelineLayout, shaderCode, "generate");
-  createComputePipeline(computePipelineType.INTERSECT, res.pipelineLayout, shaderCode, "intersect");
-  createComputePipeline(computePipelineType.SHADE, res.pipelineLayout, shaderCode, "shade");
-  createComputePipeline(computePipelineType.SHADOW, res.pipelineLayout, shaderCode, "traceShadowRay");
-
-  createRenderPipeline(renderPipelineType.BLIT, res.pipelineLayout, shaderCode, "quad", "blit");
-  createRenderPipeline(renderPipelineType.BLIT_CONV, res.pipelineLayout, shaderCode, "quad", "blitConverge");
-}
-
 function render()
 {
   let frame = performance.now() - last;
@@ -414,9 +403,18 @@ async function main()
   }
   
   // Pipelines
-  if(VISUAL_SHADER.includes("END_visual_wgsl"))
-    createPipelines(await (await fetch("visual.wgsl")).text());
-  else
+  if(VISUAL_SHADER.includes("END_visual_wgsl")) {
+
+    createComputePipeline(computePipelineType.GENERATE, res.pipelineLayout, await (await fetch("generate.wgsl")).text(), "generate");
+    createComputePipeline(computePipelineType.INTERSECT, res.pipelineLayout, await (await fetch("intersect.wgsl")).text(), "intersect");
+    createComputePipeline(computePipelineType.SHADE, res.pipelineLayout, await (await fetch("shade.wgsl")).text(), "shade");
+    createComputePipeline(computePipelineType.SHADOW, res.pipelineLayout, await (await fetch("traceShadowRay.wgsl")).text(), "traceShadowRay");
+
+    let shaderCode = await (await fetch("blit.wgsl")).text();
+    createRenderPipeline(renderPipelineType.BLIT, res.pipelineLayout, shaderCode, "quad", "blit");
+    createRenderPipeline(renderPipelineType.BLIT_CONV, res.pipelineLayout, shaderCode, "quad", "blitConverge");
+
+  } else
     createPipelines(VISUAL_SHADER);
 
   // Start
