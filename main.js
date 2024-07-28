@@ -21,7 +21,8 @@ const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
 const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, SRAY: 7, PATH: 8, ACC: 9, STATE: 10 };
-const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3, FULL: 4 };
+const computePipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3 };
+const renderPipelineType = { BLIT: 0, BLIT_CONV: 1 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -96,6 +97,8 @@ function Wasm(module)
 function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 {
   res.buf = [];
+  res.computePipelines = [];
+  res.renderPipelines = [];
 
   res.buf[bufType.GLOB] = device.createBuffer({
     size: globSz,
@@ -195,6 +198,8 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     ]
   });
 
+  res.pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] } );
+
   res.bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
@@ -212,8 +217,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     ]
   });
 
-  res.pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] } );
-
   res.renderPassDescriptor =
     { colorAttachments: [
       { undefined, // view
@@ -224,44 +227,35 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     };
 }
 
-function createPipelines(shaderCode)
+function createComputePipeline(pipelineType, pipelineLayout, shaderCode, entryPoint)
+{
+  res.computePipelines[pipelineType] = device.createComputePipeline({
+      layout: pipelineLayout,
+      compute: { module: device.createShaderModule({ code: shaderCode }), entryPoint: entryPoint }
+    });
+}
+
+function createRenderPipeline(pipelineType, pipelineLayout, shaderCode, entryPointVertex, entryPointFragment)
 {
   let shaderModule = device.createShaderModule({ code: shaderCode });
 
-  res.computePipelines = [];
-
-  res.computePipelines[pipelineType.GENERATE] = device.createComputePipeline({
-      layout: res.pipelineLayout,
-      compute: { module: shaderModule, entryPoint: "generate" }
-    });
-
-  res.computePipelines[pipelineType.INTERSECT] = device.createComputePipeline({
-      layout: res.pipelineLayout,
-      compute: { module: shaderModule, entryPoint: "intersect" }
-    });
-
-  res.computePipelines[pipelineType.SHADE] = device.createComputePipeline({
-      layout: res.pipelineLayout,
-      compute: { module: shaderModule, entryPoint: "shade" }
-    });
-
-  res.computePipelines[pipelineType.SHADOW] = device.createComputePipeline({
-      layout: res.pipelineLayout,
-      compute: { module: shaderModule, entryPoint: "traceShadowRay" }
-    });
-
-  // TODO Remove
-  res.computePipelines[pipelineType.FULL] = device.createComputePipeline({
-      layout: res.pipelineLayout,
-      compute: { module: shaderModule, entryPoint: "full" }
-    });
-
-  res.renderPipeline = device.createRenderPipeline({
-      layout: res.pipelineLayout,
-      vertex: { module: shaderModule, entryPoint: "quad" },
-      fragment: { module: shaderModule, entryPoint: "blit", targets: [{ format: "bgra8unorm" }] },
+  res.renderPipelines[pipelineType] = device.createRenderPipeline({
+      layout: pipelineLayout,
+      vertex: { module: shaderModule, entryPoint: entryPointVertex },
+      fragment: { module: shaderModule, entryPoint: entryPointFragment, targets: [{ format: "bgra8unorm" }] },
       primitive: { topology: "triangle-strip" }
     });
+}
+
+function createPipelines(shaderCode)
+{
+  createComputePipeline(computePipelineType.GENERATE, res.pipelineLayout, shaderCode, "generate");
+  createComputePipeline(computePipelineType.INTERSECT, res.pipelineLayout, shaderCode, "intersect");
+  createComputePipeline(computePipelineType.SHADE, res.pipelineLayout, shaderCode, "shade");
+  createComputePipeline(computePipelineType.SHADOW, res.pipelineLayout, shaderCode, "traceShadowRay");
+
+  createRenderPipeline(renderPipelineType.BLIT, res.pipelineLayout, shaderCode, "quad", "blit");
+  createRenderPipeline(renderPipelineType.BLIT_CONV, res.pipelineLayout, shaderCode, "quad", "blitConverge");
 }
 
 function render()
@@ -281,33 +275,21 @@ function render()
     let commandEncoder = device.createCommandEncoder();
     let passEncoder = commandEncoder.beginComputePass();
     passEncoder.setBindGroup(0, res.bindGroup);
-    passEncoder.setPipeline(res.computePipelines[pipelineType.GENERATE]);
+    passEncoder.setPipeline(res.computePipelines[computePipelineType.GENERATE]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
     passEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
-
-    /// FULL
-    /*commandEncoder = device.createCommandEncoder();
-    passEncoder = commandEncoder.beginComputePass();
-    passEncoder.setBindGroup(0, res.bindGroup);
-    passEncoder.setPipeline(res.computePipelines[pipelineType.INTERSECT]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
-    passEncoder.setPipeline(res.computePipelines[pipelineType.FULL]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
-    passEncoder.end();
-    device.queue.submit([commandEncoder.finish()]);
-    //*/
 
     for(let j=0; j<MAX_BOUNCES; j++) {
 
       commandEncoder = device.createCommandEncoder();
       passEncoder = commandEncoder.beginComputePass();
       passEncoder.setBindGroup(0, res.bindGroup);
-      passEncoder.setPipeline(res.computePipelines[pipelineType.INTERSECT]);
+      passEncoder.setPipeline(res.computePipelines[computePipelineType.INTERSECT]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
-      passEncoder.setPipeline(res.computePipelines[pipelineType.SHADE]);
+      passEncoder.setPipeline(res.computePipelines[computePipelineType.SHADE]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
-      passEncoder.setPipeline(res.computePipelines[pipelineType.SHADOW]);
+      passEncoder.setPipeline(res.computePipelines[computePipelineType.SHADOW]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
       passEncoder.end();
       device.queue.submit([commandEncoder.finish()]);
@@ -322,16 +304,12 @@ function render()
       // Reset shadow ray counter and update toggled counter index
       device.queue.writeBuffer(res.buf[bufType.STATE], 4 * 4, new Uint32Array([0, (counterIndex & 0x1)]));
     }
-    //*/
 
     // Update sample num and reset counter values
     counter[0] = ++sample;
     counter[1 + (counterIndex & 0x1)] = WIDTH * HEIGHT;
     counter[1 + 1 - (counterIndex & 0x1)] = 0;
     device.queue.writeBuffer(res.buf[bufType.STATE], 1 * 4, counter, 0, 3);
-
-    // FULL ONLY: Sample num update
-    //device.queue.writeBuffer(res.buf[bufType.STATE], 5 * 4, new Uint32Array([((i + 1) << 1) | (counterIndex & 0x1)]));
   }
 
   // Blit pass (fragment)
@@ -340,7 +318,7 @@ function render()
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
   const passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
   passEncoder.setBindGroup(0, res.bindGroup);
-  passEncoder.setPipeline(res.renderPipeline);
+  passEncoder.setPipeline(res.renderPipelines[renderPipelineType.BLIT]);
   passEncoder.draw(4);
   passEncoder.end();
 

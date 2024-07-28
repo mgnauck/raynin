@@ -1493,21 +1493,6 @@ fn traceShadowRay(@builtin(global_invocation_id) globalId: vec3u)
   }
 }
 
-@compute @workgroup_size(8, 8)
-fn full(@builtin(global_invocation_id) globalId: vec3u)
-{
-  let gidx = globals.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
-    return;
-  }
-
-  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
-
-  let data = pathData[bidx];
-  seed = data.seed;
-  accum[data.pidx >> 8] += vec4f(renderMIS(data.ori, data.dir), 1.0);
-}
-
 @vertex
 fn quad(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 {
