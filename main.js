@@ -17,8 +17,8 @@ const CAM_MOVE_VELOCITY = 0.1;
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
 
-const VISUAL_SHADER = `BEGIN_visual_wgsl
-END_visual_wgsl`;
+const BLIT_SHADER = `BEGIN_blit_wgsl
+END_blit_wgsl`;
 
 const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, SRAY: 7, PATH: 8, ACC: 9, STATE: 10, FRAME: 11 };
 const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3, BLIT: 4, BLIT_CONV: 5 };
@@ -523,14 +523,14 @@ async function main()
   }
   
   // Pipelines
-  if(VISUAL_SHADER.includes("END_visual_wgsl")) {
+  if(VISUAL_SHADER.includes("END_blit_wgsl")) {
     createPipeline(pipelineType.GENERATE, await (await fetch("generate.wgsl")).text(), "generate");
     createPipeline(pipelineType.INTERSECT, await (await fetch("intersect.wgsl")).text(), "intersect");
     createPipeline(pipelineType.SHADE, await (await fetch("shade.wgsl")).text(), "shade");
     createPipeline(pipelineType.SHADOW, await (await fetch("traceShadowRay.wgsl")).text(), "traceShadowRay");
     createPipeline(pipelineType.BLIT, await (await fetch("blit.wgsl")).text(), "quad", "blit");
   } else
-    createPipelines(VISUAL_SHADER);
+    createPipeline(BLIT_SHADER);
 
   // Start
   if(FULLSCREEN)
