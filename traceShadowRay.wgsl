@@ -1,12 +1,8 @@
 struct Global
 {
   // Config
-  width:        u32,
-  height:       u32,
-  maxBounces:   u32,
-  tlasNodeOfs:  u32,
   bgColor:      vec3f,
-  pad0:         f32,
+  tlasNodeOfs:  u32,
   // Camera
   eye:          vec3f,
   vertFov:      f32,
@@ -23,14 +19,12 @@ struct Global
   pad3:         f32
 }
 
-struct Mtl
+struct Frame
 {
-  col:          vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
-  metallic:     f32,            // Appearance range from dielectric to conductor (0 - 1)
-  roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
-  ior:          f32,            // Index of refraction
-  refractive:   f32,            // Flag if material refracts
-  emissive:     f32             // Flag if material is emissive
+  width:        u32,
+  height:       u32,
+  frame:        u32,
+  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
 }
 
 struct Inst
@@ -66,28 +60,6 @@ struct Tri
   pad3:         f32
 }
 
-struct LTri
-{
-  v0:           vec3f,
-  triId:        u32,            // Original tri id of the mesh (w/o inst data ofs)
-  v1:           vec3f,
-  pad0:         f32,
-  v2:           vec3f,
-  area:         f32,
-  nrm:          vec3f,
-  power:        f32,            // Precalculated product of area and emission
-  emission:     vec3f,
-  pad1:         f32
-}
-
-struct Ray
-{
-  ori:          vec3f,
-  pad0:         f32,
-  dir:          vec3f,
-  pad1:         f32
-}
-
 struct ShadowRay
 {
   ori:          vec3f,          // Shadow ray origin
@@ -96,17 +68,6 @@ struct ShadowRay
   dist:         f32,
   contribution: vec3f,
   pad0:         f32
-}
-
-struct PathData
-{
-  seed:         vec4u,          // Last rng seed used
-  throughput:   vec3f,
-  pdf:          f32,
-  ori:          vec3f,
-  pad0:         f32,
-  dir:          vec3f,
-  pidx:         u32             // Pixel idx in bits 8-31, bit 4-7 TBD, bounce num in bits 0-3
 }
 
 struct Hit
@@ -119,8 +80,6 @@ struct Hit
 
 struct State
 {
-  frame:        u32,
-  gatheredSpp:  u32,
   rayCnt:       array<atomic<u32>, 2u>,
   shadowRayCnt: atomic<u32>,
   cntIdx:       u32,            // Index into current buf/counter (currently bit 0 only).
@@ -143,16 +102,13 @@ const EPS                 = 0.001;
 const INF                 = 3.402823466e+38;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
+@group(0) @binding(1) var<uniform> frame: Frame;
 @group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(3) var<storage, read> tris: array<Tri>;
-@group(0) @binding(4) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(5) var<storage, read> nodes: array<Node>;
-@group(0) @binding(6) var<storage, read_write> rays: array<Ray>;
-@group(0) @binding(7) var<storage, read_write> shadowRays: array<ShadowRay>;
-@group(0) @binding(8) var<storage, read_write> pathData: array<PathData>;
-@group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> state: State;
+@group(0) @binding(4) var<storage, read> nodes: array<Node>;
+@group(0) @binding(5) var<storage, read> shadowRays: array<ShadowRay>;
+@group(0) @binding(6) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(7) var<storage, read_write> state: State;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -341,7 +297,8 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
   let invDir = 1.0 / dir;
 
-  let tlasOfs = globals.tlasNodeOfs;
+  //let tlasOfs = globals.tlasNodeOfs;
+  let tlasOfs = 2u * arrayLength(&tris);
 
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
@@ -380,7 +337,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 @compute @workgroup_size(8, 8)
 fn traceShadowRay(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = globals.width * globalId.y + globalId.x;
+  let gidx = frame.width * globalId.y + globalId.x;
   if(gidx >= atomicLoad(&state.shadowRayCnt)) {
     return;
   }

@@ -1,12 +1,8 @@
 struct Global
 {
   // Config
-  width:        u32,
-  height:       u32,
-  maxBounces:   u32,
-  tlasNodeOfs:  u32,
   bgColor:      vec3f,
-  pad0:         f32,
+  tlasNodeOfs:  u32,
   // Camera
   eye:          vec3f,
   vertFov:      f32,
@@ -21,6 +17,14 @@ struct Global
   pad2:         f32,
   pixelTopLeft: vec3f,
   pad3:         f32
+}
+
+struct Frame
+{
+  width:        u32,
+  height:       u32,
+  frame:        u32,
+  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
 }
 
 struct Mtl
@@ -40,14 +44,6 @@ struct Inst
   data:         u32,            // See comment on data in inst.h
   pad0:         u32,
   pad1:         u32
-}
-
-struct Node
-{
-  aabbMin:      vec3f,
-  children:     u32,            // 2x 16 bits for left and right child
-  aabbMax:      vec3f,
-  idx:          u32             // Assigned on leaf nodes only
 }
 
 struct Tri
@@ -119,8 +115,6 @@ struct Hit
 
 struct State
 {
-  frame:        u32,
-  gatheredSpp:  u32,
   rayCnt:       array<atomic<u32>, 2u>,
   shadowRayCnt: atomic<u32>,
   cntIdx:       u32,            // Index into current buf/counter (currently bit 0 only).
@@ -146,11 +140,11 @@ const TWO_PI              = 6.283185;
 const INV_PI              = 1.0 / PI;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
-@group(0) @binding(3) var<storage, read> tris: array<Tri>;
-@group(0) @binding(4) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(5) var<storage, read> nodes: array<Node>;
+@group(0) @binding(1) var<uniform> frame: Frame;
+@group(0) @binding(2) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
+@group(0) @binding(3) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
+@group(0) @binding(4) var<storage, read> tris: array<Tri>;
+@group(0) @binding(5) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(6) var<storage, read_write> rays: array<Ray>;
 @group(0) @binding(7) var<storage, read_write> shadowRays: array<ShadowRay>;
 @group(0) @binding(8) var<storage, read_write> pathData: array<PathData>;
@@ -597,12 +591,12 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, pos: ptr<function, vec3f>, nrm:
 @compute @workgroup_size(8, 8)
 fn shade(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = globals.width * globalId.y + globalId.x;
+  let gidx = frame.width * globalId.y + globalId.x;
   if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
     return;
   }
 
-  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
+  let bidx = (frame.width * frame.height * (state.cntIdx & 0x1)) + gidx;
 
   let hit = state.hits[gidx];
   let data = pathData[bidx];
@@ -682,7 +676,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Reached max bounces, terminate path
-  if((pidx & 0xf) >= globals.maxBounces) {
+  if((pidx & 0xf) >= (frame.bouncesSpp & 0xff)) {
     return;
   }
 
@@ -700,7 +694,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
 
   // Get compacted index into the other rays and path data buffer
   let gidxNext = atomicAdd(&state.rayCnt[1 - (state.cntIdx & 0x1)], 1u);
-  var bidxNext = (globals.width * globals.height * (1 - (state.cntIdx & 0x1))) + gidxNext;
+  var bidxNext = (frame.width * frame.height * (1 - (state.cntIdx & 0x1))) + gidxNext;
 
   // Init next ray
   rays[gidxNext].ori = pos;

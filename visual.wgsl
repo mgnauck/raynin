@@ -1,12 +1,8 @@
 struct Global
 {
   // Config
-  width:        u32,
-  height:       u32,
-  maxBounces:   u32,
-  tlasNodeOfs:  u32,
   bgColor:      vec3f,
-  pad0:         f32,
+  tlasNodeOfs:  u32,
   // Camera
   eye:          vec3f,
   vertFov:      f32,
@@ -21,6 +17,14 @@ struct Global
   pad2:         f32,
   pixelTopLeft: vec3f,
   pad3:         f32
+}
+
+struct Frame
+{
+  width:        u32,
+  height:       u32,
+  frame:        u32,
+  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
 }
 
 struct Mtl
@@ -119,8 +123,6 @@ struct Hit
 
 struct State
 {
-  frame:        u32,
-  gatheredSpp:  u32,
   rayCnt:       array<atomic<u32>, 2u>,
   shadowRayCnt: atomic<u32>,
   cntIdx:       u32,            // Index into current buf/counter (currently bit 0 only).
@@ -157,6 +159,7 @@ const INV_PI              = 1.0 / PI;
 @group(0) @binding(8) var<storage, read_write> pathData: array<PathData>;
 @group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
 @group(0) @binding(10) var<storage, read_write> state: State;
+@group(0) @binding(11) var<uniform> frame: Frame;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -1107,7 +1110,7 @@ fn renderMIS(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   var throughput = vec3f(1);
   var wasSpecular = false;
 
-  for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
+  for(var bounces=0u; bounces<(frame.bouncesSpp & 0xff); bounces++) {
 
     let r0 = rand4();
 
@@ -1188,7 +1191,7 @@ fn renderNEE(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   var dir = dirPrim;
   var wasSpecular = false;
 
-  for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
+  for(var bounces=0u; bounces<(frame.bouncesSpp & 0xff); bounces++) {
 
     var hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
@@ -1266,7 +1269,7 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
   var ori = oriPrim;
   var dir = dirPrim;
 
-  for(var bounces=0u; bounces<globals.maxBounces; bounces++) {
+  for(var bounces=0u; bounces<(frame.bouncesSpp & 0xff); bounces++) {
 
     var hit = intersectTlas(ori, dir, INF);
     if(hit.t == INF) {
@@ -1320,16 +1323,16 @@ fn renderNaive(oriPrim: vec3f, dirPrim: vec3f) -> vec3f
 @compute @workgroup_size(8, 8)
 fn generate(@builtin(global_invocation_id) globalId: vec3u)
 {
-  if(any(globalId.xy >= vec2u(globals.width, globals.height))) {
+  if(any(globalId.xy >= vec2u(frame.width, frame.height))) {
     return;
   }
 
-  seed = vec4u(globalId.xy, state.frame, state.gatheredSpp);
+  seed = vec4u(globalId.xy, frame.frame, frame.bouncesSpp >> 8);
 
   let r0 = rand4();
 
-  let gidx = globals.width * globalId.y + globalId.x;
-  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
+  let gidx = frame.width * globalId.y + globalId.x;
+  let bidx = (frame.width * frame.height * (state.cntIdx & 0x1)) + gidx;
 
   // Create primary ray
   let ori = sampleEye(r0.xy);
@@ -1348,7 +1351,7 @@ fn generate(@builtin(global_invocation_id) globalId: vec3u)
 @compute @workgroup_size(8, 8)
 fn intersect(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = globals.width * globalId.y + globalId.x;
+  let gidx = frame.width * globalId.y + globalId.x;
   if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
     return;
   }
@@ -1360,12 +1363,12 @@ fn intersect(@builtin(global_invocation_id) globalId: vec3u)
 @compute @workgroup_size(8, 8)
 fn shade(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = globals.width * globalId.y + globalId.x;
+  let gidx = frame.width * globalId.y + globalId.x;
   if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
     return;
   }
 
-  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
+  let bidx = (frame.width * frame.height * (state.cntIdx & 0x1)) + gidx;
 
   let hit = state.hits[gidx];
   let data = pathData[bidx];
@@ -1445,7 +1448,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Reached max bounces, terminate path
-  if((pidx & 0xf) >= globals.maxBounces) {
+  if((pidx & 0xf) >= (frame.bouncesSpp & 0xff)) {
     return;
   }
 
@@ -1463,7 +1466,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
 
   // Get compacted index into the other rays and path data buffer
   let gidxNext = atomicAdd(&state.rayCnt[1 - (state.cntIdx & 0x1)], 1u);
-  var bidxNext = (globals.width * globals.height * (1 - (state.cntIdx & 0x1))) + gidxNext;
+  var bidxNext = (frame.width * frame.height * (1 - (state.cntIdx & 0x1))) + gidxNext;
 
   // Init next ray
   rays[gidxNext].ori = pos;
@@ -1482,7 +1485,7 @@ fn shade(@builtin(global_invocation_id) globalId: vec3u)
 @compute @workgroup_size(8, 8)
 fn traceShadowRay(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = globals.width * globalId.y + globalId.x;
+  let gidx = frame.width * globalId.y + globalId.x;
   if(gidx >= atomicLoad(&state.shadowRayCnt)) {
     return;
   }
@@ -1520,8 +1523,8 @@ fn quad(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 @fragment
 fn blit(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  let gidx = globals.width * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accum[gidx].xyz / f32(state.gatheredSpp), vec3f(0.4545)), 1.0);
+  let gidx = frame.width * u32(pos.y) + u32(pos.x);
+  let col = vec4f(pow(accum[gidx].xyz / f32(frame.bouncesSpp >> 8), vec3f(0.4545)), 1.0);
   accum[gidx] = vec4f(0.0, 0.0, 0.0, 1.0);
   return col;
 }
@@ -1529,7 +1532,7 @@ fn blit(@builtin(position) pos: vec4f) -> @location(0) vec4f
 @fragment
 fn blitConverge(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  let gidx = globals.width * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accum[gidx].xyz / f32(state.gatheredSpp), vec3f(0.4545)), 1.0);
+  let gidx = frame.width * u32(pos.y) + u32(pos.x);
+  let col = vec4f(pow(accum[gidx].xyz / f32(frame.bouncesSpp >> 8), vec3f(0.4545)), 1.0);
   return col;
 }

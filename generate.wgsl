@@ -1,12 +1,8 @@
 struct Global
 {
   // Config
-  width:        u32,
-  height:       u32,
-  maxBounces:   u32,
-  tlasNodeOfs:  u32,
   bgColor:      vec3f,
-  pad0:         f32,
+  tlasNodeOfs:  u32,
   // Camera
   eye:          vec3f,
   vertFov:      f32,
@@ -23,61 +19,12 @@ struct Global
   pad3:         f32
 }
 
-struct Mtl
+struct Frame
 {
-  col:          vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
-  metallic:     f32,            // Appearance range from dielectric to conductor (0 - 1)
-  roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
-  ior:          f32,            // Index of refraction
-  refractive:   f32,            // Flag if material refracts
-  emissive:     f32             // Flag if material is emissive
-}
-
-struct Inst
-{
-  invTransform: mat3x4f,
-  id:           u32,            // (mtl override id << 16) | (inst id & 0xffff)
-  data:         u32,            // See comment on data in inst.h
-  pad0:         u32,
-  pad1:         u32
-}
-
-struct Node
-{
-  aabbMin:      vec3f,
-  children:     u32,            // 2x 16 bits for left and right child
-  aabbMax:      vec3f,
-  idx:          u32             // Assigned on leaf nodes only
-}
-
-struct Tri
-{
-  v0:           vec3f,
-  mtl:          u32,            // (mtl id & 0xffff)
-  v1:           vec3f,
-  ltriId:       u32,            // Set only if tri has light emitting material
-  v2:           vec3f,
-  pad0:         f32,
-  n0:           vec3f,
-  pad1:         f32,
-  n1:           vec3f,
-  pad2:         f32,
-  n2:           vec3f,
-  pad3:         f32
-}
-
-struct LTri
-{
-  v0:           vec3f,
-  triId:        u32,            // Original tri id of the mesh (w/o inst data ofs)
-  v1:           vec3f,
-  pad0:         f32,
-  v2:           vec3f,
-  area:         f32,
-  nrm:          vec3f,
-  power:        f32,            // Precalculated product of area and emission
-  emission:     vec3f,
-  pad1:         f32
+  width:        u32,
+  height:       u32,
+  frame:        u32,
+  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
 }
 
 struct Ray
@@ -86,16 +33,6 @@ struct Ray
   pad0:         f32,
   dir:          vec3f,
   pad1:         f32
-}
-
-struct ShadowRay
-{
-  ori:          vec3f,          // Shadow ray origin
-  pidx:         u32,            // Pixel index where to deposit contribution
-  dir:          vec3f,          // Position on the light (shadow ray target)
-  dist:         f32,
-  contribution: vec3f,
-  pad0:         f32
 }
 
 struct PathData
@@ -119,10 +56,8 @@ struct Hit
 
 struct State
 {
-  frame:        u32,
-  gatheredSpp:  u32,
-  rayCnt:       array<atomic<u32>, 2u>,
-  shadowRayCnt: atomic<u32>,
+  rayCnt:       array<u32, 2u>,
+  shadowRayCnt: u32,
   cntIdx:       u32,            // Index into current buf/counter (currently bit 0 only).
   hits:         array<Hit>      // TODO This is here because we have a limit of 8 storage buffers :(
 }
@@ -131,16 +66,10 @@ struct State
 const PI                  = 3.141592;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
-@group(0) @binding(3) var<storage, read> tris: array<Tri>;
-@group(0) @binding(4) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(5) var<storage, read> nodes: array<Node>;
-@group(0) @binding(6) var<storage, read_write> rays: array<Ray>;
-@group(0) @binding(7) var<storage, read_write> shadowRays: array<ShadowRay>;
-@group(0) @binding(8) var<storage, read_write> pathData: array<PathData>;
-@group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> state: State;
+@group(0) @binding(1) var<uniform> frame: Frame;
+@group(0) @binding(2) var<storage, read_write> rays: array<Ray>;
+@group(0) @binding(3) var<storage, read_write> pathData: array<PathData>;
+@group(0) @binding(4) var<storage, read> state: State;
 
 // State of rng seed
 var<private> seed: vec4u;
@@ -184,16 +113,16 @@ fn sampleEye(r: vec2f) -> vec3f
 @compute @workgroup_size(8, 8)
 fn generate(@builtin(global_invocation_id) globalId: vec3u)
 {
-  if(any(globalId.xy >= vec2u(globals.width, globals.height))) {
+  if(any(globalId.xy >= vec2u(frame.width, frame.height))) {
     return;
   }
 
-  seed = vec4u(globalId.xy, state.frame, state.gatheredSpp);
+  seed = vec4u(globalId.xy, frame.frame, frame.bouncesSpp >> 8);
 
   let r0 = rand4();
 
-  let gidx = globals.width * globalId.y + globalId.x;
-  let bidx = (globals.width * globals.height * (state.cntIdx & 0x1)) + gidx;
+  let gidx = frame.width * globalId.y + globalId.x;
+  let bidx = (frame.width * frame.height * (state.cntIdx & 0x1)) + gidx;
 
   // Create primary ray
   let ori = sampleEye(r0.xy);

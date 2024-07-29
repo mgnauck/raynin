@@ -18,9 +18,9 @@
 #endif
 
 // Global uniform buffer offsets
-#define GLOB_BUF_OFS_CAM      32
-#define GLOB_BUF_OFS_VIEW     80
-#define GLOB_BUF_SIZE         128
+#define GLOB_BUF_OFS_CAM      16
+#define GLOB_BUF_OFS_VIEW     64
+#define GLOB_BUF_SIZE         112
 
 #define MAX_UNIFORM_BUF_SIZE  65536
 
@@ -111,8 +111,7 @@ void push_cfg(render_data *rd)
 {
   scene *s = rd->scene;
 #ifndef NATIVE_BUILD
-  uint32_t cfg[8] = { rd->width, rd->height, rd->bounces, tlas_node_ofs,
-    s->bg_col.x, s->bg_col.y, s->bg_col.z, 0.0 };
+  uint32_t cfg[4] = { s->bg_col.x, s->bg_col.y, s->bg_col.z, tlas_node_ofs };
   gpu_write_buf(BT_GLOB, 0, cfg, sizeof(cfg));
 #endif
 }

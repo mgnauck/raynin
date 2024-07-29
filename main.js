@@ -20,9 +20,8 @@ END_intro_wasm`;
 const VISUAL_SHADER = `BEGIN_visual_wgsl
 END_visual_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, SRAY: 7, PATH: 8, ACC: 9, STATE: 10 };
-const computePipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3 };
-const renderPipelineType = { BLIT: 0, BLIT_CONV: 1 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, SRAY: 7, PATH: 8, ACC: 9, STATE: 10, FRAME: 11 };
+const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3, BLIT: 4, BLIT_CONV: 5 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -96,8 +95,9 @@ function Wasm(module)
 function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 {
   res.buf = [];
-  res.computePipelines = [];
-  res.renderPipelines = [];
+  res.bindGroups = [];
+  res.pipelineLayouts = [];
+  res.pipelines = [];
 
   res.buf[bufType.GLOB] = device.createBuffer({
     size: globSz,
@@ -151,7 +151,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 
   res.buf[bufType.ACC] = device.createBuffer({
     size: WIDTH * HEIGHT * 4 * 4,
-    usage: GPUBufferUsage.STORAGE
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   res.buf[bufType.STATE] = device.createBuffer({
@@ -159,62 +159,152 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
+  res.buf[bufType.FRAME] = device.createBuffer({
+    size: 4 * 4,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+
+  // Generate
+  // TODO state buffer access not required
   let bindGroupLayout = device.createBindGroupLayout({
     entries: [ 
-      { binding: bufType.GLOB,
-        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
-        buffer: { type: "uniform" } },
-      { binding: bufType.MTL,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "uniform" } },
-      { binding: bufType.INST,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "uniform" } },
-      { binding: bufType.TRI,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.LTRI,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.NODE,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" } },
-      { binding: bufType.RAY,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage" } },
-      { binding: bufType.SRAY,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage" } },
-      { binding: bufType.PATH,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage" } },
-      { binding: bufType.ACC,
-        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
-        buffer: { type: "storage" } },
-      { binding: bufType.STATE,
-        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT, // TODO Refactor so fragment does not need access
-        buffer: { type: "storage" } },
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
     ]
   });
 
-  res.pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] } );
-
-  res.bindGroup = device.createBindGroup({
+  res.bindGroups[pipelineType.GENERATE] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: bufType.GLOB, resource: { buffer: res.buf[bufType.GLOB] } },
-      { binding: bufType.MTL, resource: { buffer: res.buf[bufType.MTL] } },
-      { binding: bufType.INST, resource: { buffer: res.buf[bufType.INST] } },
-      { binding: bufType.TRI, resource: { buffer: res.buf[bufType.TRI] } },
-      { binding: bufType.LTRI, resource: { buffer: res.buf[bufType.LTRI] } },
-      { binding: bufType.NODE, resource: { buffer: res.buf[bufType.NODE] } },
-      { binding: bufType.RAY, resource: { buffer: res.buf[bufType.RAY] } },
-      { binding: bufType.SRAY, resource: { buffer: res.buf[bufType.SRAY] } },
-      { binding: bufType.PATH, resource: { buffer: res.buf[bufType.PATH] } },
-      { binding: bufType.ACC, resource: { buffer: res.buf[bufType.ACC] } },
-      { binding: bufType.STATE, resource: { buffer: res.buf[bufType.STATE] } },
+      { binding: 0, resource: { buffer: res.buf[bufType.GLOB] } },
+      { binding: 1, resource: { buffer: res.buf[bufType.FRAME] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.RAY] } },
+      { binding: 3, resource: { buffer: res.buf[bufType.PATH] } },
+      { binding: 4, resource: { buffer: res.buf[bufType.STATE] } },
     ]
   });
+
+  res.pipelineLayouts[pipelineType.GENERATE] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+  // Intersect
+  // TODO Access to globals only because of tlasNodeOfs
+  // TODO State buffer access. Only need to write to hits buffer.
+  bindGroupLayout = device.createBindGroupLayout({
+    entries: [ 
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+    ]
+  });
+
+  res.bindGroups[pipelineType.INTERSECT] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[bufType.GLOB] } },
+      { binding: 1, resource: { buffer: res.buf[bufType.FRAME] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.INST] } },
+      { binding: 3, resource: { buffer: res.buf[bufType.TRI] } },
+      { binding: 4, resource: { buffer: res.buf[bufType.NODE] } },
+      { binding: 5, resource: { buffer: res.buf[bufType.RAY] } },
+      { binding: 6, resource: { buffer: res.buf[bufType.STATE] } },
+    ]
+  });
+
+  res.pipelineLayouts[pipelineType.INTERSECT] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+  // Shade
+  bindGroupLayout = device.createBindGroupLayout({
+    entries: [ 
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+    ]
+  });
+
+  res.bindGroups[pipelineType.SHADE] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[bufType.GLOB] } },
+      { binding: 1, resource: { buffer: res.buf[bufType.FRAME] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.MTL] } },
+      { binding: 3, resource: { buffer: res.buf[bufType.INST] } },
+      { binding: 4, resource: { buffer: res.buf[bufType.TRI] } },
+      { binding: 5, resource: { buffer: res.buf[bufType.LTRI] } },
+      { binding: 6, resource: { buffer: res.buf[bufType.RAY] } },
+      { binding: 7, resource: { buffer: res.buf[bufType.SRAY] } },
+      { binding: 8, resource: { buffer: res.buf[bufType.PATH] } },
+      { binding: 9, resource: { buffer: res.buf[bufType.ACC] } },
+      { binding: 10, resource: { buffer: res.buf[bufType.STATE] } },
+    ]
+  });
+
+  res.pipelineLayouts[pipelineType.SHADE] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+  // Shadow
+  // TODO Access to globals only because of tlasNodeOfs
+  // TODO Move shadow ray count from state to SRAY buffer
+  bindGroupLayout = device.createBindGroupLayout({
+    entries: [ 
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+    ]
+  });
+
+  res.bindGroups[pipelineType.SHADOW] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[bufType.GLOB] } },
+      { binding: 1, resource: { buffer: res.buf[bufType.FRAME] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.INST] } },
+      { binding: 3, resource: { buffer: res.buf[bufType.TRI] } },
+      { binding: 4, resource: { buffer: res.buf[bufType.NODE] } },
+      { binding: 5, resource: { buffer: res.buf[bufType.SRAY] } },
+      { binding: 6, resource: { buffer: res.buf[bufType.ACC] } },
+      { binding: 7, resource: { buffer: res.buf[bufType.STATE] } },
+    ]
+  });
+
+  res.pipelineLayouts[pipelineType.SHADOW] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+  // Blit
+  bindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
+      { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
+    ]
+  });
+
+  res.bindGroups[pipelineType.BLIT] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[bufType.FRAME] } },
+      { binding: 1, resource: { buffer: res.buf[bufType.ACC] } },
+    ]
+  });
+
+  res.pipelineLayouts[pipelineType.BLIT] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
 
   res.renderPassDescriptor =
     { colorAttachments: [
@@ -226,24 +316,22 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     };
 }
 
-function createComputePipeline(pipelineType, pipelineLayout, shaderCode, entryPoint)
-{
-  res.computePipelines[pipelineType] = device.createComputePipeline({
-      layout: pipelineLayout,
-      compute: { module: device.createShaderModule({ code: shaderCode }), entryPoint: entryPoint }
-    });
-}
-
-function createRenderPipeline(pipelineType, pipelineLayout, shaderCode, entryPointVertex, entryPointFragment)
+function createPipeline(pipelineType, shaderCode, entryPoint0, entryPoint1)
 {
   let shaderModule = device.createShaderModule({ code: shaderCode });
 
-  res.renderPipelines[pipelineType] = device.createRenderPipeline({
-      layout: pipelineLayout,
-      vertex: { module: shaderModule, entryPoint: entryPointVertex },
-      fragment: { module: shaderModule, entryPoint: entryPointFragment, targets: [{ format: "bgra8unorm" }] },
-      primitive: { topology: "triangle-strip" }
-    });
+  if(entryPoint1 === undefined)
+    res.pipelines[pipelineType] = device.createComputePipeline({
+        layout: res.pipelineLayouts[pipelineType],
+        compute: { module: shaderModule, entryPoint: entryPoint0 }
+      });
+    else
+    res.pipelines[pipelineType] = device.createRenderPipeline({
+        layout: res.pipelineLayouts[pipelineType],
+        vertex: { module: shaderModule, entryPoint: entryPoint0 },
+        fragment: { module: shaderModule, entryPoint: entryPoint1, targets: [{ format: "bgra8unorm" }] },
+        primitive: { topology: "triangle-strip" }
+      });
 }
 
 let start = undefined;
@@ -270,18 +358,25 @@ function render(time)
     setTimeout(() => { updateDisplay = true; }, 100);
   }
 
-  // Initialize counter index and values
-  let counter = new Uint32Array([frame, sample, WIDTH * HEIGHT, /* other ray cnt */ 0, /* shadow ray cnt */ 0, /* counter index */ 0]);
+  // Initialize ray cnt buf 0, ray cnt buf 1, shadow ray cnt, counter index
+  let counter = new Uint32Array([WIDTH * HEIGHT, 0, 0, 0]);
   device.queue.writeBuffer(res.buf[bufType.STATE], 0, counter);
+
+  // Initialize frame data
+  device.queue.writeBuffer(res.buf[bufType.FRAME], 0, new Uint32Array([WIDTH, HEIGHT, frame, (sample << 8) | (MAX_BOUNCES & 0xff)]));
 
   // Wavefront loop for render passes (compute)
   let counterIndex = 0;
   for(let i=0; i<SPP; i++) {
 
     let commandEncoder = device.createCommandEncoder();
+
+    if(sample == 0)
+      commandEncoder.clearBuffer(res.buf[bufType.ACC]);
+
     let passEncoder = commandEncoder.beginComputePass();
-    passEncoder.setBindGroup(0, res.bindGroup);
-    passEncoder.setPipeline(res.computePipelines[computePipelineType.GENERATE]);
+    passEncoder.setBindGroup(0, res.bindGroups[pipelineType.GENERATE]);
+    passEncoder.setPipeline(res.pipelines[pipelineType.GENERATE]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
     passEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
@@ -289,33 +384,43 @@ function render(time)
     for(let j=0; j<MAX_BOUNCES; j++) {
 
       commandEncoder = device.createCommandEncoder();
+      
       passEncoder = commandEncoder.beginComputePass();
-      passEncoder.setBindGroup(0, res.bindGroup);
-      passEncoder.setPipeline(res.computePipelines[computePipelineType.INTERSECT]);
+      
+      passEncoder.setBindGroup(0, res.bindGroups[pipelineType.INTERSECT]);
+      passEncoder.setPipeline(res.pipelines[pipelineType.INTERSECT]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
-      passEncoder.setPipeline(res.computePipelines[computePipelineType.SHADE]);
+      
+      passEncoder.setBindGroup(0, res.bindGroups[pipelineType.SHADE]);
+      passEncoder.setPipeline(res.pipelines[pipelineType.SHADE]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
-      passEncoder.setPipeline(res.computePipelines[computePipelineType.SHADOW]);
+
+      passEncoder.setBindGroup(0, res.bindGroups[pipelineType.SHADOW]);
+      passEncoder.setPipeline(res.pipelines[pipelineType.SHADOW]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+      
       passEncoder.end();
+      
       device.queue.submit([commandEncoder.finish()]);
 
       // Reset current counter to zero, we will start using the other one now
       if(j < MAX_BOUNCES - 1)
-        device.queue.writeBuffer(res.buf[bufType.STATE], (2 + (counterIndex & 0x1)) * 4, new Uint32Array([0]));
+        device.queue.writeBuffer(res.buf[bufType.STATE], (counterIndex & 0x1) * 4, new Uint32Array([0]));
 
       // Switch between two counters and associated buffers (rays + path data)
       counterIndex = 1 - counterIndex;
 
       // Reset shadow ray counter and update toggled counter index
-      device.queue.writeBuffer(res.buf[bufType.STATE], 4 * 4, new Uint32Array([0, (counterIndex & 0x1)]));
+      device.queue.writeBuffer(res.buf[bufType.STATE], 2 * 4, new Uint32Array([0, (counterIndex & 0x1)]));
     }
 
     // Update sample num and reset counter values
-    counter[0] = ++sample;
-    counter[1 + (counterIndex & 0x1)] = WIDTH * HEIGHT;
-    counter[1 + 1 - (counterIndex & 0x1)] = 0;
-    device.queue.writeBuffer(res.buf[bufType.STATE], 1 * 4, counter, 0, 3);
+    counter[(counterIndex & 0x1)] = WIDTH * HEIGHT;
+    counter[1 - (counterIndex & 0x1)] = 0;
+    device.queue.writeBuffer(res.buf[bufType.STATE], 0, counter, 0, 2);
+
+    // Update sample count
+    device.queue.writeBuffer(res.buf[bufType.FRAME], 3 * 4, new Uint32Array([(++sample << 8) | (MAX_BOUNCES & 0xff)]));
   }
 
   // Blit pass (fragment)
@@ -323,8 +428,8 @@ function render(time)
 
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
   const passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
-  passEncoder.setBindGroup(0, res.bindGroup);
-  passEncoder.setPipeline(res.renderPipelines[renderPipelineType.BLIT]);
+  passEncoder.setBindGroup(0, res.bindGroups[pipelineType.BLIT]);
+  passEncoder.setPipeline(res.pipelines[pipelineType.BLIT]);
   passEncoder.draw(4);
   passEncoder.end();
 
@@ -419,16 +524,11 @@ async function main()
   
   // Pipelines
   if(VISUAL_SHADER.includes("END_visual_wgsl")) {
-
-    createComputePipeline(computePipelineType.GENERATE, res.pipelineLayout, await (await fetch("generate.wgsl")).text(), "generate");
-    createComputePipeline(computePipelineType.INTERSECT, res.pipelineLayout, await (await fetch("intersect.wgsl")).text(), "intersect");
-    createComputePipeline(computePipelineType.SHADE, res.pipelineLayout, await (await fetch("shade.wgsl")).text(), "shade");
-    createComputePipeline(computePipelineType.SHADOW, res.pipelineLayout, await (await fetch("traceShadowRay.wgsl")).text(), "traceShadowRay");
-
-    let shaderCode = await (await fetch("blit.wgsl")).text();
-    createRenderPipeline(renderPipelineType.BLIT, res.pipelineLayout, shaderCode, "quad", "blit");
-    createRenderPipeline(renderPipelineType.BLIT_CONV, res.pipelineLayout, shaderCode, "quad", "blitConverge");
-
+    createPipeline(pipelineType.GENERATE, await (await fetch("generate.wgsl")).text(), "generate");
+    createPipeline(pipelineType.INTERSECT, await (await fetch("intersect.wgsl")).text(), "intersect");
+    createPipeline(pipelineType.SHADE, await (await fetch("shade.wgsl")).text(), "shade");
+    createPipeline(pipelineType.SHADOW, await (await fetch("traceShadowRay.wgsl")).text(), "traceShadowRay");
+    createPipeline(pipelineType.BLIT, await (await fetch("blit.wgsl")).text(), "quad", "blit");
   } else
     createPipelines(VISUAL_SHADER);
 
