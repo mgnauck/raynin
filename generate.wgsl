@@ -43,7 +43,7 @@ struct PathData
   ori:          vec3f,
   pad0:         f32,
   dir:          vec3f,
-  pidx:         u32             // Pixel idx in bits 8-31, bit 4-7 TBD, bounce num in bits 0-3
+  pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
 struct Hit
@@ -135,5 +135,5 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   pathData[bidx].throughput = vec3f(1.0);
   pathData[bidx].ori = ori;
   pathData[bidx].dir = dir;
-  pathData[bidx].pidx = gidx << 8; // Bounce num is implicitly 0 (bits 0-3)
+  pathData[bidx].pidx = gidx << 8; // Bounce num is implicitly 0
 }

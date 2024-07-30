@@ -102,7 +102,7 @@ struct PathData
   ori:          vec3f,
   pad0:         f32,
   dir:          vec3f,
-  pidx:         u32             // Pixel idx in bits 8-31, bit 4-7 TBD, bounce num in bits 0-3
+  pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
 struct Hit
@@ -621,7 +621,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     // Lights emit from front side only
     if(dot(-data.dir, nrm) > 0) {
       // Bounces > 0
-      if((pidx & 0xf) > 0) {
+      if((pidx & 0xff) > 0) {
         // Secondary ray hit light, apply MIS
         let ldir = pos - data.ori;
         let ldistInv = inverseSqrt(dot(ldir, ldir));
@@ -644,7 +644,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Russian roulette
   // Terminate with prob inverse to throughput
   let p = min(0.95, maxComp3(throughput));
-  if((pidx & 0xf) > 0 && r0.w > p) {
+  if((pidx & 0xff) > 0 && r0.w > p) {
     // Terminate path due to russian roulette
     return;
   }
@@ -676,7 +676,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Reached max bounces, terminate path
-  if((pidx & 0xf) >= (frame.bouncesSpp & 0xff)) {
+  if((pidx & 0xff) >= (frame.bouncesSpp & 0xff)) {
     return;
   }
 
@@ -707,5 +707,5 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   pathData[bidxNext].ori = pos;
   pathData[bidxNext].dir = wi;
   // Keep pixel index, increase bounce num
-  pathData[bidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xf) + 1);
+  pathData[bidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1);
 }

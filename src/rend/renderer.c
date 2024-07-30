@@ -34,7 +34,7 @@ typedef enum buf_type {
   BT_NODE, // blas + tlas
 } buf_type;
 
-static uint32_t tlas_node_ofs = 0;
+static uint32_t total_tris = 0;
 
 typedef struct render_data {
   scene     *scene;
@@ -85,7 +85,7 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
       total_ltri_cnt * sizeof(ltri), // LTris (storage buf)
       2 * (total_tri_cnt + total_inst_cnt) * sizeof(node)); // BLAS + TLAS nodes (storage buf)
 
-  tlas_node_ofs = 2 * total_tri_cnt;
+  total_tris = total_tri_cnt;
 
   return 0;
 }
@@ -107,18 +107,27 @@ void renderer_release(render_data *rd)
   free(rd);
 }
 
-void push_cfg(render_data *rd)
+void push_cfg(scene *s)
 {
-  scene *s = rd->scene;
-#ifndef NATIVE_BUILD
-  uint32_t cfg[4] = { s->bg_col.x, s->bg_col.y, s->bg_col.z, tlas_node_ofs };
+  uint32_t cfg[4] = { s->bg_col.x, s->bg_col.y, s->bg_col.z, 2 * total_tris };
   gpu_write_buf(BT_GLOB, 0, cfg, sizeof(cfg));
-#endif
+}
+
+void push_cam_view(scene *s, uint32_t width, uint32_t height)
+{
+  cam *cam = scene_get_active_cam(s);
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, cam, CAM_BUF_SIZE);
+
+  view_calc(&s->view, width, height, cam);
+  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_VIEW, &s->view, sizeof(s->view));
+
+  scene_clr_dirty(s, RT_CAM_VIEW);
 }
 
 void push_mtls(scene *s)
 {
   gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
+
   scene_clr_dirty(s, RT_MTL);
 }
 
@@ -130,18 +139,30 @@ void push_tris(scene *s)
     gpu_write_buf(BT_TRI, m->ofs * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
   }
 #endif
+
   scene_clr_dirty(s, RT_TRI);
 }
 
 void push_ltris(scene *s)
 {
   gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
+
   scene_clr_dirty(s, RT_LTRI);
 }
 
 void push_blas(scene *s)
 {
   gpu_write_buf(BT_NODE, 0, s->blas_nodes, 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
+
+  scene_clr_dirty(s, RT_MESH);
+}
+
+void push_tlas(scene *s)
+{
+  gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
+  gpu_write_buf(BT_NODE, 2 * total_tris * sizeof(*s->blas_nodes), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
+
+  scene_clr_dirty(s, RT_INST);
 }
 
 void renderer_setup(render_data *rd, uint32_t spp)
@@ -150,19 +171,13 @@ void renderer_setup(render_data *rd, uint32_t spp)
 
   scene_prepare_render(s);
 
-  push_cfg(rd);
-
-  if(s->dirty & RT_MTL)
-    push_mtls(s);
-
-  if(s->dirty & RT_MESH) {
-    push_tris(s);
-    push_blas(s);
-    scene_clr_dirty(s, RT_MESH);
-  }
-
-  if(rd->scene->dirty & RT_LTRI)
-    push_ltris(s);
+  push_cfg(s);
+  push_cam_view(s, rd->width, rd->height);
+  push_mtls(s);
+  push_tris(s);
+  push_ltris(s);
+  push_blas(s);
+  push_tlas(s);
 }
 
 void renderer_update(render_data *rd, uint32_t spp, bool converge)
@@ -174,13 +189,8 @@ void renderer_update(render_data *rd, uint32_t spp, bool converge)
   if(!converge || rd->scene->dirty > 0)
     reset_samples();
 
-  if(rd->scene->dirty & RT_CAM_VIEW) {
-    cam *cam = scene_get_active_cam(s);
-    gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, cam, CAM_BUF_SIZE);
-    view_calc(&s->view, rd->width, rd->height, cam);
-    gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_VIEW, &s->view, sizeof(s->view));
-    scene_clr_dirty(s, RT_CAM_VIEW);
-  }
+  if(rd->scene->dirty & RT_CAM_VIEW)
+    push_cam_view(s, rd->width, rd->height);
 
   if(rd->scene->dirty & RT_MTL)
     push_mtls(s);
@@ -191,11 +201,8 @@ void renderer_update(render_data *rd, uint32_t spp, bool converge)
       push_tris(s);
   }
 
-  if(rd->scene->dirty & RT_INST) {
-    gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
-    gpu_write_buf(BT_NODE, tlas_node_ofs * sizeof(*s->tlas_nodes), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
-    scene_clr_dirty(s, RT_INST);
-  }
+  if(rd->scene->dirty & RT_INST)
+    push_tlas(s);
 }
 
 #ifdef NATIVE_BUILD
