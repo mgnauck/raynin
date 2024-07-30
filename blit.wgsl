@@ -10,7 +10,7 @@ struct Frame
 @group(0) @binding(1) var<storage, read> accum: array<vec4f>;
 
 @vertex
-fn quad(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
+fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 {
   // Workaround for below code which does work with Firefox' naga
   switch(vertexIndex)
@@ -34,7 +34,7 @@ fn quad(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 }
 
 @fragment
-fn blit(@builtin(position) pos: vec4f) -> @location(0) vec4f
+fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
   let gidx = frame.width * u32(pos.y) + u32(pos.x);
   let col = vec4f(pow(accum[gidx].xyz / f32(frame.bouncesSpp >> 8), vec3f(0.4545)), 1.0);

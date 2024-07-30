@@ -1,10 +1,10 @@
-OUTDIR=output
+OUT_DIR=output
 SRC=$(shell find src/ -type f -name '*.c')
 OBJ=$(patsubst src/%.c,obj/%.o,$(SRC))
 WASM_OUT=intro
-#SHADER=$(shell find . -type f -name '*.wgsl')
-SHADER=blit.wgsl
-SHADER_EXCLUDES=computeMain,vertexMain,fragmentMain
+SHADER=$(shell find ./ -type f -name '*.wgsl')
+SHADER_MIN=$(patsubst ./%.wgsl,$(OUT_DIR)/%.min.wgsl,$(SHADER))
+SHADER_EXCLUDES=m,vm
 LOADER_JS=main
 OUT=index.html
 
@@ -18,26 +18,28 @@ WOPTFLAGS=-Oz --enable-bulk-memory
 
 .PHONY: clean
 
-$(OUTDIR)/$(OUT): $(OUTDIR)/$(LOADER_JS).3.js Makefile
+$(OUT_DIR)/$(OUT): $(OUT_DIR)/$(LOADER_JS).3.js Makefile
 	js-payload-compress --zopfli-iterations=100 $< $@ 
 
-$(OUTDIR)/$(LOADER_JS).3.js: $(OUTDIR)/$(LOADER_JS).2.js
+$(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(LOADER_JS).2.js
 	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=true --toplevel > $@
 
-$(OUTDIR)/$(LOADER_JS).2.js: $(OUTDIR)/$(subst .,.min.,$(SHADER)) $(OUTDIR)/$(LOADER_JS).1.js
-	./embed.sh $(OUTDIR)/$(LOADER_JS).1.js BEGIN_$(subst $(OUTDIR)/,,$(subst .min.,_,$<)) END_$(subst $(OUTDIR)/,,$(subst .min.,_,$<)) $< $(OUTDIR)/$(LOADER_JS).2.js
+$(OUT_DIR)/$(LOADER_JS).2.js: $(OUT_DIR)/$(WASM_OUT).base64.wasm $(OUT_DIR)/$(LOADER_JS).1.js $(SHADER_MIN)
+	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).base64.wasm $@
 
-$(OUTDIR)/%.min.wgsl: ./%.wgsl
+$(OUT_DIR)/%.min.wgsl: ./%.wgsl
 	@mkdir -p `dirname $@`
-	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUTDIR)/$(subst .,.min.,$<)
-	@echo "$(OUTDIR)/$(subst .,.min.,$<):" `wc -c < $(OUTDIR)/$(subst .,.min.,$<)` "bytes"
+	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUT_DIR)/$(subst .,.min.,$<)
+	@echo "$(OUT_DIR)/$(subst .,.min.,$<):" `wc -c < $(OUT_DIR)/$(subst .,.min.,$<)` "bytes"
+	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $(OUT_DIR)/$(subst .,.min.,$<) $(OUT_DIR)/$(LOADER_JS).1.js
 
-$(OUTDIR)/$(LOADER_JS).1.js: $(OUTDIR)/$(WASM_OUT).base64.wasm $(LOADER_JS).js
-	./embed.sh $(LOADER_JS).js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUTDIR)/$(WASM_OUT).base64.wasm $@
-
-$(OUTDIR)/$(WASM_OUT).base64.wasm: $(WASM_OUT).wasm
+$(OUT_DIR)/$(LOADER_JS).1.js: $(LOADER_JS).js
 	@mkdir -p `dirname $@`
-	openssl base64 -A -in $< -out $(OUTDIR)/$(WASM_OUT).base64.wasm
+	cp $< $(OUT_DIR)/$(LOADER_JS).1.js
+
+$(OUT_DIR)/$(WASM_OUT).base64.wasm: $(WASM_OUT).wasm
+	@mkdir -p `dirname $@`
+	openssl base64 -A -in $< -out $(OUT_DIR)/$(WASM_OUT).base64.wasm
 
 $(WASM_OUT).wasm: $(OBJ)
 	$(LD) $^ $(LDFLAGS) -o $@
@@ -50,4 +52,4 @@ obj/%.o: src/%.c
 	$(CC) $(DBGFLAGS) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf obj $(OUTDIR) $(WASM_OUT).wasm
+	rm -rf obj $(OUT_DIR) $(WASM_OUT).wasm

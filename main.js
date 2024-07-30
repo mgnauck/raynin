@@ -17,6 +17,18 @@ const CAM_MOVE_VELOCITY = 0.1;
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
 
+const GENERATE_SHADER = `BEGIN_generate_wgsl
+END_generate_wgsl`;
+
+const INTERSECT_SHADER = `BEGIN_intersect_wgsl
+END_intersect_wgsl`;
+
+const SHADE_SHADER = `BEGIN_shade_wgsl
+END_shade_wgsl`;
+
+const TRACE_SHADOW_SHADER = `BEGIN_traceShadowRay_wgsl
+END_traceShadowRay_wgsl`;
+
 const BLIT_SHADER = `BEGIN_blit_wgsl
 END_blit_wgsl`;
 
@@ -522,15 +534,20 @@ async function main()
     return;
   }
   
-  // Pipelines
-  if(VISUAL_SHADER.includes("END_blit_wgsl")) {
-    createPipeline(pipelineType.GENERATE, await (await fetch("generate.wgsl")).text(), "generate");
-    createPipeline(pipelineType.INTERSECT, await (await fetch("intersect.wgsl")).text(), "intersect");
-    createPipeline(pipelineType.SHADE, await (await fetch("shade.wgsl")).text(), "shade");
-    createPipeline(pipelineType.SHADOW, await (await fetch("traceShadowRay.wgsl")).text(), "traceShadowRay");
-    createPipeline(pipelineType.BLIT, await (await fetch("blit.wgsl")).text(), "quad", "blit");
-  } else
-    createPipeline(BLIT_SHADER);
+  // Shader modules and pipelines
+  if(BLIT_SHADER.includes("END_blit_wgsl")) {
+    createPipeline(pipelineType.GENERATE, await (await fetch("generate.wgsl")).text(), "m");
+    createPipeline(pipelineType.INTERSECT, await (await fetch("intersect.wgsl")).text(), "m");
+    createPipeline(pipelineType.SHADE, await (await fetch("shade.wgsl")).text(), "m");
+    createPipeline(pipelineType.SHADOW, await (await fetch("traceShadowRay.wgsl")).text(), "m");
+    createPipeline(pipelineType.BLIT, await (await fetch("blit.wgsl")).text(), "vm", "m");
+  } else {
+    createPipeline(pipelineType.GENERATE, GENERATE_SHADER, "m");
+    createPipeline(pipelineType.INTERSECT, INTERSECT_SHADER, "m");
+    createPipeline(pipelineType.SHADE, SHADE_SHADER, "m");
+    createPipeline(pipelineType.SHADOW, TRACE_SHADOW_SHADER, "m");
+    createPipeline(pipelineType.BLIT, BLIT_SHADER, "vm", "m");
+  }
 
   // Start
   if(FULLSCREEN)

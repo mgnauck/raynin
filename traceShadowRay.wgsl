@@ -335,7 +335,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 }
 
 @compute @workgroup_size(8, 8)
-fn traceShadowRay(@builtin(global_invocation_id) globalId: vec3u)
+fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
   if(gidx >= atomicLoad(&state.shadowRayCnt)) {

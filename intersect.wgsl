@@ -423,7 +423,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 }
 
 @compute @workgroup_size(8, 8)
-fn intersect(@builtin(global_invocation_id) globalId: vec3u)
+fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
   if(gidx >= state.rayCnt[state.cntIdx & 0x1]) {

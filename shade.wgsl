@@ -589,7 +589,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, pos: ptr<function, vec3f>, nrm:
 }
 
 @compute @workgroup_size(8, 8)
-fn shade(@builtin(global_invocation_id) globalId: vec3u)
+fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
   if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
