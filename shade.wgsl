@@ -84,6 +84,12 @@ struct Ray
   pad1:         f32
 }
 
+struct RayBuffer
+{
+  cnt:          vec4u,
+  buf:          array<Ray>
+}
+
 struct ShadowRay
 {
   ori:          vec3f,          // Shadow ray origin
@@ -92,6 +98,15 @@ struct ShadowRay
   dist:         f32,
   contribution: vec3f,
   pad0:         f32
+}
+
+struct ShadowRayBuffer
+{
+  cnt:          atomic<u32>,
+  pad0:         u32,
+  pad1:         u32,
+  pad2:         u32,
+  buf:          array<ShadowRay>
 }
 
 struct PathData
@@ -105,20 +120,27 @@ struct PathData
   pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
+struct PathDataInBuffer
+{
+  cnt:          vec4u,
+  buf:          array<PathData>
+}
+
+struct PathDataOutBuffer
+{
+  cnt:          atomic<u32>,
+  pad0:         u32,
+  pad1:         u32,
+  pad2:         u32,
+  buf:          array<PathData>
+}
+
 struct Hit
 {
   t:            f32,
   u:            f32,
   v:            f32,
   e:            u32             // (tri id << 16) | (inst id & 0xffff)
-}
-
-struct State
-{
-  rayCnt:       array<atomic<u32>, 2u>,
-  shadowRayCnt: atomic<u32>,
-  cntIdx:       u32,            // Index into current buf/counter (currently bit 0 only).
-  hits:         array<Hit>      // TODO This is here because we have a limit of 8 storage buffers :(
 }
 
 // Scene data handling
@@ -145,11 +167,12 @@ const INV_PI              = 1.0 / PI;
 @group(0) @binding(3) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
 @group(0) @binding(5) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(6) var<storage, read_write> rays: array<Ray>;
-@group(0) @binding(7) var<storage, read_write> shadowRays: array<ShadowRay>;
-@group(0) @binding(8) var<storage, read_write> pathData: array<PathData>;
-@group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> state: State;
+@group(0) @binding(6) var<storage, read_write> rays: RayBuffer;
+@group(0) @binding(7) var<storage, read_write> shadowRays: ShadowRayBuffer;
+@group(0) @binding(8) var<storage, read> hits: array<Hit>;
+@group(0) @binding(9) var<storage, read> pathDataIn: PathDataInBuffer;
+@group(0) @binding(10) var<storage, read_write> pathDataOut: PathDataOutBuffer;
+@group(0) @binding(11) var<storage, read_write> accum: array<vec4f>;
 
 // State of rng seed
 var<private> seed: vec4u;
@@ -592,14 +615,12 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, pos: ptr<function, vec3f>, nrm:
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&state.rayCnt[state.cntIdx & 0x1])) {
+  if(gidx >= pathDataIn.cnt.x) {
     return;
   }
 
-  let bidx = (frame.width * frame.height * (state.cntIdx & 0x1)) + gidx;
-
-  let hit = state.hits[gidx];
-  let data = pathData[bidx];
+  let hit = hits[gidx];
+  let data = pathDataIn.buf[gidx];
   let pidx = data.pidx;
 
   var throughput = data.throughput;
@@ -667,12 +688,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     let bsdfPdf = sampleMaterialCombinedPdf(mtl, -data.dir, nrm, ldir, fres);
     let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
-    let sidx = atomicAdd(&state.shadowRayCnt, 1u);
-    shadowRays[sidx].ori = pos;
-    shadowRays[sidx].dir = ldir;
-    shadowRays[sidx].dist = 1.0 / ldistInv - 2.0 * EPS;
-    shadowRays[sidx].contribution = throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf;
-    shadowRays[sidx].pidx = pidx >> 8;
+    let sidx = atomicAdd(&shadowRays.cnt, 1u);
+    shadowRays.buf[sidx].ori = pos;
+    shadowRays.buf[sidx].dir = ldir;
+    shadowRays.buf[sidx].dist = 1.0 / ldistInv - 2.0 * EPS;
+    shadowRays.buf[sidx].contribution = throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf;
+    shadowRays.buf[sidx].pidx = pidx >> 8;
   }
 
   // Reached max bounces, terminate path
@@ -693,19 +714,18 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   throughput *= evalMaterial(mtl, -data.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the other rays and path data buffer
-  let gidxNext = atomicAdd(&state.rayCnt[1 - (state.cntIdx & 0x1)], 1u);
-  var bidxNext = (frame.width * frame.height * (1 - (state.cntIdx & 0x1))) + gidxNext;
+  let gidxNext = atomicAdd(&pathDataOut.cnt, 1u);
 
   // Init next ray
-  rays[gidxNext].ori = pos;
-  rays[gidxNext].dir = wi;
+  rays.buf[gidxNext].ori = pos;
+  rays.buf[gidxNext].dir = wi;
 
   // Init next path segment 
-  pathData[bidxNext].seed = seed;
-  pathData[bidxNext].throughput = throughput;
-  pathData[bidxNext].pdf = pdf;
-  pathData[bidxNext].ori = pos;
-  pathData[bidxNext].dir = wi;
+  pathDataOut.buf[gidxNext].seed = seed;
+  pathDataOut.buf[gidxNext].throughput = throughput;
+  pathDataOut.buf[gidxNext].pdf = pdf;
+  pathDataOut.buf[gidxNext].ori = pos;
+  pathDataOut.buf[gidxNext].dir = wi;
   // Keep pixel index, increase bounce num
-  pathData[bidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1);
+  pathDataOut.buf[gidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1);
 }

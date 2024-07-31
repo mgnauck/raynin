@@ -70,20 +70,10 @@ struct ShadowRay
   pad0:         f32
 }
 
-struct Hit
+struct ShadowRayBuffer
 {
-  t:            f32,
-  u:            f32,
-  v:            f32,
-  e:            u32             // (tri id << 16) | (inst id & 0xffff)
-}
-
-struct State
-{
-  rayCnt:       array<atomic<u32>, 2u>,
-  shadowRayCnt: atomic<u32>,
-  cntIdx:       u32,            // Index into current buf/counter (currently bit 0 only).
-  hits:         array<Hit>      // TODO This is here because we have a limit of 8 storage buffers :(
+  cnt:          vec4u,
+  buf:          array<ShadowRay>
 }
 
 // Scene data handling
@@ -106,9 +96,8 @@ const INF                 = 3.402823466e+38;
 @group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(3) var<storage, read> tris: array<Tri>;
 @group(0) @binding(4) var<storage, read> nodes: array<Node>;
-@group(0) @binding(5) var<storage, read> shadowRays: array<ShadowRay>;
+@group(0) @binding(5) var<storage, read> shadowRays: ShadowRayBuffer;
 @group(0) @binding(6) var<storage, read_write> accum: array<vec4f>;
-@group(0) @binding(7) var<storage, read_write> state: State;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -338,11 +327,11 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
-  if(gidx >= atomicLoad(&state.shadowRayCnt)) {
+  if(gidx >= shadowRays.cnt.x) {
     return;
   }
 
-  let shadowRay = shadowRays[gidx];
+  let shadowRay = shadowRays.buf[gidx];
   if(!intersectTlasAnyHit(shadowRay.ori, shadowRay.dir, shadowRay.dist)) {
     accum[shadowRay.pidx] += vec4f(shadowRay.contribution, 1.0);
   }
