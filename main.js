@@ -32,9 +32,9 @@ END_traceShadowRay_wgsl`;
 const BLIT_SHADER = `BEGIN_blit_wgsl
 END_blit_wgsl`;
 
-const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, RAY: 6, SRAY: 7, HIT: 8, PATH0: 9, PATH1: 10, ACC: 11, FRAME: 12 };
+const bufType = { GLOB: 0, MTL: 1, INST: 2, TRI: 3, LTRI: 4, NODE: 5, SRAY: 6, HIT: 7, PATH0: 8, PATH1: 9, ACC: 10, FRAME: 11 };
 const pipelineType = { GENERATE: 0, INTERSECT: 1, SHADE: 2, SHADOW: 3, BLIT: 4 };
-const bindGroupType = { GENERATE0: 0, GENERATE1: 1, INTERSECT: 2, SHADE0: 3, SHADE1: 4, SHADOW: 5, BLIT: 6 };
+const bindGroupType = { GENERATE0: 0, GENERATE1: 1, INTERSECT0: 2, INTERSECT1: 3, SHADE0: 4, SHADE1: 5, SHADOW: 6, BLIT: 7 };
 
 let canvas, context, device;
 let wa, res = {};
@@ -147,11 +147,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[bufType.RAY] = device.createBuffer({
-    size: 4 * 4 + WIDTH * HEIGHT * 8 * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
   res.buf[bufType.SRAY] = device.createBuffer({
     size: 4 * 4 + WIDTH * HEIGHT * 12 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
@@ -188,7 +183,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
-      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
@@ -197,8 +191,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, resource: { buffer: res.buf[bufType.GLOB] } },
       { binding: 1, resource: { buffer: res.buf[bufType.FRAME] } },
-      { binding: 2, resource: { buffer: res.buf[bufType.RAY] } },
-      { binding: 3, resource: { buffer: res.buf[bufType.PATH0] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.PATH0] } },
     ]
   });
 
@@ -207,8 +200,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, resource: { buffer: res.buf[bufType.GLOB] } },
       { binding: 1, resource: { buffer: res.buf[bufType.FRAME] } },
-      { binding: 2, resource: { buffer: res.buf[bufType.RAY] } },
-      { binding: 3, resource: { buffer: res.buf[bufType.PATH1] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.PATH1] } },
     ]
   });
 
@@ -226,14 +218,26 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     ]
   });
 
-  res.bindGroups[bindGroupType.INTERSECT] = device.createBindGroup({
+  res.bindGroups[bindGroupType.INTERSECT0] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[bufType.FRAME] } },
       { binding: 1, resource: { buffer: res.buf[bufType.INST] } },
       { binding: 2, resource: { buffer: res.buf[bufType.TRI] } },
       { binding: 3, resource: { buffer: res.buf[bufType.NODE] } },
-      { binding: 4, resource: { buffer: res.buf[bufType.RAY] } },
+      { binding: 4, resource: { buffer: res.buf[bufType.PATH0] } },
+      { binding: 5, resource: { buffer: res.buf[bufType.HIT] } },
+    ]
+  });
+
+  res.bindGroups[bindGroupType.INTERSECT1] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[bufType.FRAME] } },
+      { binding: 1, resource: { buffer: res.buf[bufType.INST] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.TRI] } },
+      { binding: 3, resource: { buffer: res.buf[bufType.NODE] } },
+      { binding: 4, resource: { buffer: res.buf[bufType.PATH1] } },
       { binding: 5, resource: { buffer: res.buf[bufType.HIT] } },
     ]
   });
@@ -249,12 +253,11 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
-      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
-      { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
-      { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
@@ -267,12 +270,11 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: 3, resource: { buffer: res.buf[bufType.INST] } },
       { binding: 4, resource: { buffer: res.buf[bufType.TRI] } },
       { binding: 5, resource: { buffer: res.buf[bufType.LTRI] } },
-      { binding: 6, resource: { buffer: res.buf[bufType.RAY] } },
-      { binding: 7, resource: { buffer: res.buf[bufType.SRAY] } },
-      { binding: 8, resource: { buffer: res.buf[bufType.HIT] } },
-      { binding: 9, resource: { buffer: res.buf[bufType.PATH0] } },
-      { binding: 10, resource: { buffer: res.buf[bufType.PATH1] } },
-      { binding: 11, resource: { buffer: res.buf[bufType.ACC] } },
+      { binding: 6, resource: { buffer: res.buf[bufType.PATH0] } },
+      { binding: 7, resource: { buffer: res.buf[bufType.HIT] } },
+      { binding: 8, resource: { buffer: res.buf[bufType.SRAY] } },
+      { binding: 9, resource: { buffer: res.buf[bufType.PATH1] } },
+      { binding: 10, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });
 
@@ -285,12 +287,11 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: 3, resource: { buffer: res.buf[bufType.INST] } },
       { binding: 4, resource: { buffer: res.buf[bufType.TRI] } },
       { binding: 5, resource: { buffer: res.buf[bufType.LTRI] } },
-      { binding: 6, resource: { buffer: res.buf[bufType.RAY] } },
-      { binding: 7, resource: { buffer: res.buf[bufType.SRAY] } },
-      { binding: 8, resource: { buffer: res.buf[bufType.HIT] } },
-      { binding: 9, resource: { buffer: res.buf[bufType.PATH1] } },
-      { binding: 10, resource: { buffer: res.buf[bufType.PATH0] } },
-      { binding: 11, resource: { buffer: res.buf[bufType.ACC] } },
+      { binding: 6, resource: { buffer: res.buf[bufType.PATH1] } },
+      { binding: 7, resource: { buffer: res.buf[bufType.HIT] } },
+      { binding: 8, resource: { buffer: res.buf[bufType.SRAY] } },
+      { binding: 9, resource: { buffer: res.buf[bufType.PATH0] } },
+      { binding: 10, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });
 
@@ -400,7 +401,6 @@ function render(time)
   for(let i=0; i<SPP; i++) {
 
     // Initialize buffer count
-    device.queue.writeBuffer(res.buf[bufType.RAY], 0, new Uint32Array([WIDTH * HEIGHT, 0, 0, 0]));
     device.queue.writeBuffer(res.buf[bufType.PATH0 + gidx], 0, new Uint32Array([WIDTH * HEIGHT, 0, 0, 0]));
 
     let commandEncoder = device.createCommandEncoder();
@@ -419,7 +419,7 @@ function render(time)
       if(j > 0)
         passEncoder = commandEncoder.beginComputePass();
       
-      passEncoder.setBindGroup(0, res.bindGroups[bindGroupType.INTERSECT]);
+      passEncoder.setBindGroup(0, res.bindGroups[bindGroupType.INTERSECT0 + gidx]);
       passEncoder.setPipeline(res.pipelines[pipelineType.INTERSECT]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
       
@@ -433,10 +433,9 @@ function render(time)
       
       passEncoder.end();
 
-      // Reset ray/sray/path data counts
-      commandEncoder.copyBufferToBuffer(res.buf[bufType.PATH0 + (1 - gidx)], 0, res.buf[bufType.RAY], 0, 16);
-      commandEncoder.clearBuffer(res.buf[bufType.SRAY], 0, 16);
-      commandEncoder.clearBuffer(res.buf[bufType.PATH0 + gidx], 0, 16);
+      // Reset sray/path data counts
+      commandEncoder.clearBuffer(res.buf[bufType.SRAY], 0, 4);
+      commandEncoder.clearBuffer(res.buf[bufType.PATH0 + gidx], 0, 4);
       
       // Switch bind groups to select the other path data buffer
       gidx = 1 - gidx;

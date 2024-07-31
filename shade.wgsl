@@ -76,20 +76,6 @@ struct LTri
   pad1:         f32
 }
 
-struct Ray
-{
-  ori:          vec3f,
-  pad0:         f32,
-  dir:          vec3f,
-  pad1:         f32
-}
-
-struct RayBuffer
-{
-  cnt:          vec4u,
-  buf:          array<Ray>
-}
-
 struct ShadowRay
 {
   ori:          vec3f,          // Shadow ray origin
@@ -167,12 +153,11 @@ const INV_PI              = 1.0 / PI;
 @group(0) @binding(3) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
 @group(0) @binding(5) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(6) var<storage, read_write> rays: RayBuffer;
-@group(0) @binding(7) var<storage, read_write> shadowRays: ShadowRayBuffer;
-@group(0) @binding(8) var<storage, read> hits: array<Hit>;
-@group(0) @binding(9) var<storage, read> pathDataIn: PathDataInBuffer;
-@group(0) @binding(10) var<storage, read_write> pathDataOut: PathDataOutBuffer;
-@group(0) @binding(11) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(6) var<storage, read> pathDataIn: PathDataInBuffer;
+@group(0) @binding(7) var<storage, read> hits: array<Hit>;
+@group(0) @binding(8) var<storage, read_write> shadowRays: ShadowRayBuffer;
+@group(0) @binding(9) var<storage, read_write> pathDataOut: PathDataOutBuffer;
+@group(0) @binding(10) var<storage, read_write> accum: array<vec4f>;
 
 // State of rng seed
 var<private> seed: vec4u;
@@ -622,7 +607,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let hit = hits[gidx];
   let data = pathDataIn.buf[gidx];
   let pidx = data.pidx;
-
   var throughput = data.throughput;
 
   // No hit, terminate path
@@ -713,12 +697,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Apply bsdf
   throughput *= evalMaterial(mtl, -data.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
-  // Get compacted index into the other rays and path data buffer
+  // Get compacted index into the path data buffer we are writing to
   let gidxNext = atomicAdd(&pathDataOut.cnt, 1u);
-
-  // Init next ray
-  rays.buf[gidxNext].ori = pos;
-  rays.buf[gidxNext].dir = wi;
 
   // Init next path segment 
   pathDataOut.buf[gidxNext].seed = seed;

@@ -39,18 +39,21 @@ struct Tri
   pad3:         f32
 }
 
-struct Ray
+struct PathData
 {
+  seed:         vec4u,          // Last rng seed used
+  throughput:   vec3f,
+  pdf:          f32,
   ori:          vec3f,
   pad0:         f32,
   dir:          vec3f,
-  pad1:         f32
+  pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
-struct RayBuffer
+struct PathDataBuffer
 {
   cnt:          vec4u,
-  buf:          array<Ray>
+  buf:          array<PathData>
 }
 
 struct Hit
@@ -80,7 +83,7 @@ const INF                 = 3.402823466e+38;
 @group(0) @binding(1) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(2) var<storage, read> tris: array<Tri>;
 @group(0) @binding(3) var<storage, read> nodes: array<Node>;
-@group(0) @binding(4) var<storage, read> rays: RayBuffer;
+@group(0) @binding(4) var<storage, read> pathData: PathDataBuffer;
 @group(0) @binding(5) var<storage, read_write> hits: array<Hit>;
 
 // Traversal stacks
@@ -401,10 +404,10 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
-  if(gidx >= rays.cnt.x) {
+  if(gidx >= pathData.cnt.x) {
     return;
   }
 
-  let ray = rays.buf[gidx];
-  hits[gidx] = intersectTlas(ray.ori, ray.dir, INF);
+  let pathData = pathData.buf[gidx];
+  hits[gidx] = intersectTlas(pathData.ori, pathData.dir, INF);
 }
