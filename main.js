@@ -17,19 +17,19 @@ const CAM_MOVE_VELOCITY = 0.1;
 const WASM = `BEGIN_intro_wasm
 END_intro_wasm`;
 
-const GENERATE_SHADER = `BEGIN_generate_wgsl
+const SM_GENERATE = `BEGIN_generate_wgsl
 END_generate_wgsl`;
 
-const INTERSECT_SHADER = `BEGIN_intersect_wgsl
+const SM_INTERSECT = `BEGIN_intersect_wgsl
 END_intersect_wgsl`;
 
-const SHADE_SHADER = `BEGIN_shade_wgsl
+const SM_SHADE = `BEGIN_shade_wgsl
 END_shade_wgsl`;
 
-const TRACE_SHADOW_SHADER = `BEGIN_traceShadowRay_wgsl
+const SM_SHADOW = `BEGIN_traceShadowRay_wgsl
 END_traceShadowRay_wgsl`;
 
-const BLIT_SHADER = `BEGIN_blit_wgsl
+const SM_BLIT = `BEGIN_blit_wgsl
 END_blit_wgsl`;
 
 const BUF_GLOB        = 0;
@@ -571,18 +571,18 @@ async function main()
   }
   
   // Shader modules and pipelines
-  if(BLIT_SHADER.includes("END_blit_wgsl")) {
+  if(SM_BLIT.includes("END_blit_wgsl")) {
     createPipeline(PL_GENERATE, await (await fetch("generate.wgsl")).text(), "m");
     createPipeline(PL_INTERSECT, await (await fetch("intersect.wgsl")).text(), "m");
     createPipeline(PL_SHADE, await (await fetch("shade.wgsl")).text(), "m");
     createPipeline(PL_SHADOW, await (await fetch("traceShadowRay.wgsl")).text(), "m");
     createPipeline(PL_BLIT, await (await fetch("blit.wgsl")).text(), "vm", "m");
   } else {
-    createPipeline(PL_GENERATE, GENERATE_SHADER, "m");
-    createPipeline(PL_INTERSECT, INTERSECT_SHADER, "m");
-    createPipeline(PL_SHADE, SHADE_SHADER, "m");
-    createPipeline(PL_SHADOW, TRACE_SHADOW_SHADER, "m");
-    createPipeline(PL_BLIT, BLIT_SHADER, "vm", "m");
+    createPipeline(PL_GENERATE, SM_GENERATE, "m");
+    createPipeline(PL_INTERSECT, SM_INTERSECT, "m");
+    createPipeline(PL_SHADE, SM_SHADE, "m");
+    createPipeline(PL_SHADOW, SM_SHADOW, "m");
+    createPipeline(PL_BLIT, SM_BLIT, "vm", "m");
   }
 
   // Start
