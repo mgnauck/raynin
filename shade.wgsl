@@ -665,7 +665,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Russian roulette
   // Terminate with prob inverse to throughput
   let p = min(0.95, maxComp3(throughput));
-  if((pidx & 0xff) > 0 && r0.w > p) {
+  if(/*(pidx & 0xff) > 0 &&*/ r0.w > p) {
     // Terminate path due to russian roulette
     return;
   }

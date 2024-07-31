@@ -406,7 +406,6 @@ function render(time)
     // Initialize buffer count
     device.queue.writeBuffer(res.buf[bufType.RAY], 0, new Uint32Array([WIDTH * HEIGHT, 0, 0, 0]));
     device.queue.writeBuffer(res.buf[gidx == 0 ? bufType.PATH0 : bufType.PATH1], 0, new Uint32Array([WIDTH * HEIGHT, 0, 0, 0]));
-    device.queue.writeBuffer(res.buf[gidx == 0 ? bufType.PATH1 : bufType.PATH0], 0, new Uint32Array([0, 0, 0, 0])); // Not really neccessary
 
     let commandEncoder = device.createCommandEncoder();
 
@@ -414,18 +413,15 @@ function render(time)
       commandEncoder.clearBuffer(res.buf[bufType.ACC]);
 
     let passEncoder = commandEncoder.beginComputePass();
+
     passEncoder.setBindGroup(0, res.bindGroups[gidx == 0 ? bindGroupType.GENERATE0 : bindGroupType.GENERATE1]);
     passEncoder.setPipeline(res.pipelines[pipelineType.GENERATE]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
-    passEncoder.end();
-
-    device.queue.submit([commandEncoder.finish()]);
 
     for(let j=0; j<MAX_BOUNCES; j++) {
 
-      commandEncoder = device.createCommandEncoder();
-      
-      passEncoder = commandEncoder.beginComputePass();
+      if(j > 0)
+        passEncoder = commandEncoder.beginComputePass();
       
       passEncoder.setBindGroup(0, res.bindGroups[bindGroupType.INTERSECT]);
       passEncoder.setPipeline(res.pipelines[pipelineType.INTERSECT]);
@@ -441,21 +437,16 @@ function render(time)
       
       passEncoder.end();
 
-      device.queue.submit([commandEncoder.finish()]);
-
-
-      commandEncoder = device.createCommandEncoder();
-
       // Reset ray/sray/path data counts
-      commandEncoder.copyBufferToBuffer(res.buf[gidx == 0 ? bufType.PATH1 : bufType.PATH0], 0, res.buf[bufType.RAY], 0, 4);
-      commandEncoder.clearBuffer(res.buf[bufType.SRAY], 0, 4);
-      commandEncoder.clearBuffer(res.buf[gidx == 0 ? bufType.PATH0 : bufType.PATH1], 0, 4);
+      commandEncoder.copyBufferToBuffer(res.buf[gidx == 0 ? bufType.PATH1 : bufType.PATH0], 0, res.buf[bufType.RAY], 0, 16);
+      commandEncoder.clearBuffer(res.buf[bufType.SRAY], 0, 16);
+      commandEncoder.clearBuffer(res.buf[gidx == 0 ? bufType.PATH0 : bufType.PATH1], 0, 16);
       
-      device.queue.submit([commandEncoder.finish()]);
-
       // Switch bind groups to select the other path data buffer
       gidx = 1 - gidx;
     }
+
+    device.queue.submit([commandEncoder.finish()]);
 
     // Update sample count
     device.queue.writeBuffer(res.buf[bufType.FRAME], 3 * 4, new Uint32Array([(++sample << 8) | (MAX_BOUNCES & 0xff)]));
