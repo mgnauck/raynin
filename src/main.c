@@ -218,8 +218,8 @@ void init_scene_riow(scene *s)
 __attribute__((visibility("default")))
 uint8_t init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
 {
-  return 0;
-  //return import_gltf(cs, gltf, gltf_sz, bin, bin_sz);
+  //return 0;
+  return import_gltf(cs, gltf, gltf_sz, bin, bin_sz);
 }
 
 __attribute__((visibility("default")))
@@ -227,7 +227,7 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t max_bounces)
 {
   pcg_srand(42u, 303u);
 
-  init_scene_riow(cs);
+  //init_scene_riow(cs);
 
   logc("max tris: %i, max ltris: %i, max mtls: %i, max insts: %i",
       cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
