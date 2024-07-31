@@ -219,24 +219,22 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     entries: [ 
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
-      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
   res.bindGroups[bindGroupType.INTERSECT] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[bufType.GLOB] } }, // TODO Access to globals only because of tlasNodeOfs
-      { binding: 1, resource: { buffer: res.buf[bufType.FRAME] } },
-      { binding: 2, resource: { buffer: res.buf[bufType.INST] } },
-      { binding: 3, resource: { buffer: res.buf[bufType.TRI] } },
-      { binding: 4, resource: { buffer: res.buf[bufType.NODE] } },
-      { binding: 5, resource: { buffer: res.buf[bufType.RAY] } },
-      { binding: 6, resource: { buffer: res.buf[bufType.HIT] } },
+      { binding: 0, resource: { buffer: res.buf[bufType.FRAME] } },
+      { binding: 1, resource: { buffer: res.buf[bufType.INST] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.TRI] } },
+      { binding: 3, resource: { buffer: res.buf[bufType.NODE] } },
+      { binding: 4, resource: { buffer: res.buf[bufType.RAY] } },
+      { binding: 5, resource: { buffer: res.buf[bufType.HIT] } },
     ]
   });
 
@@ -303,24 +301,22 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     entries: [ 
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
-      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
   res.bindGroups[bindGroupType.SHADOW] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[bufType.GLOB] } }, // TODO Access to globals only because of tlasNodeOfs
-      { binding: 1, resource: { buffer: res.buf[bufType.FRAME] } },
-      { binding: 2, resource: { buffer: res.buf[bufType.INST] } },
-      { binding: 3, resource: { buffer: res.buf[bufType.TRI] } },
-      { binding: 4, resource: { buffer: res.buf[bufType.NODE] } },
-      { binding: 5, resource: { buffer: res.buf[bufType.SRAY] } },
-      { binding: 6, resource: { buffer: res.buf[bufType.ACC] } },
+      { binding: 0, resource: { buffer: res.buf[bufType.FRAME] } },
+      { binding: 1, resource: { buffer: res.buf[bufType.INST] } },
+      { binding: 2, resource: { buffer: res.buf[bufType.TRI] } },
+      { binding: 3, resource: { buffer: res.buf[bufType.NODE] } },
+      { binding: 4, resource: { buffer: res.buf[bufType.SRAY] } },
+      { binding: 5, resource: { buffer: res.buf[bufType.ACC] } },
     ]
   });
 
@@ -405,7 +401,7 @@ function render(time)
 
     // Initialize buffer count
     device.queue.writeBuffer(res.buf[bufType.RAY], 0, new Uint32Array([WIDTH * HEIGHT, 0, 0, 0]));
-    device.queue.writeBuffer(res.buf[gidx == 0 ? bufType.PATH0 : bufType.PATH1], 0, new Uint32Array([WIDTH * HEIGHT, 0, 0, 0]));
+    device.queue.writeBuffer(res.buf[bufType.PATH0 + gidx], 0, new Uint32Array([WIDTH * HEIGHT, 0, 0, 0]));
 
     let commandEncoder = device.createCommandEncoder();
 
@@ -414,9 +410,9 @@ function render(time)
 
     let passEncoder = commandEncoder.beginComputePass();
 
-    passEncoder.setBindGroup(0, res.bindGroups[gidx == 0 ? bindGroupType.GENERATE0 : bindGroupType.GENERATE1]);
+    passEncoder.setBindGroup(0, res.bindGroups[bindGroupType.GENERATE0 + gidx]);
     passEncoder.setPipeline(res.pipelines[pipelineType.GENERATE]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
     for(let j=0; j<MAX_BOUNCES; j++) {
 
@@ -425,22 +421,22 @@ function render(time)
       
       passEncoder.setBindGroup(0, res.bindGroups[bindGroupType.INTERSECT]);
       passEncoder.setPipeline(res.pipelines[pipelineType.INTERSECT]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
       
-      passEncoder.setBindGroup(0, res.bindGroups[gidx == 0 ? bindGroupType.SHADE0 : bindGroupType.SHADE1]);
+      passEncoder.setBindGroup(0, res.bindGroups[bindGroupType.SHADE0 + gidx]);
       passEncoder.setPipeline(res.pipelines[pipelineType.SHADE]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
       passEncoder.setBindGroup(0, res.bindGroups[bindGroupType.SHADOW]);
       passEncoder.setPipeline(res.pipelines[pipelineType.SHADOW]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
       
       passEncoder.end();
 
       // Reset ray/sray/path data counts
-      commandEncoder.copyBufferToBuffer(res.buf[gidx == 0 ? bufType.PATH1 : bufType.PATH0], 0, res.buf[bufType.RAY], 0, 16);
+      commandEncoder.copyBufferToBuffer(res.buf[bufType.PATH0 + (1 - gidx)], 0, res.buf[bufType.RAY], 0, 16);
       commandEncoder.clearBuffer(res.buf[bufType.SRAY], 0, 16);
-      commandEncoder.clearBuffer(res.buf[gidx == 0 ? bufType.PATH0 : bufType.PATH1], 0, 16);
+      commandEncoder.clearBuffer(res.buf[bufType.PATH0 + gidx], 0, 16);
       
       // Switch bind groups to select the other path data buffer
       gidx = 1 - gidx;

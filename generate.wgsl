@@ -105,7 +105,7 @@ fn sampleEye(r: vec2f) -> vec3f
   return eyeSample;
 }
 
-@compute @workgroup_size(8, 8)
+@compute @workgroup_size(16, 16)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   if(any(globalId.xy >= vec2u(frame.width, frame.height))) {

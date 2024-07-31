@@ -1,24 +1,3 @@
-struct Global
-{
-  // Config
-  bgColor:      vec3f,
-  tlasNodeOfs:  u32,
-  // Camera
-  eye:          vec3f,
-  vertFov:      f32,
-  right:        vec3f,
-  focDist:      f32,
-  up:           vec3f,
-  focAngle:     f32,
-  // View
-  pixelDeltaX:  vec3f,
-  pad1:         f32,
-  pixelDeltaY:  vec3f,
-  pad2:         f32,
-  pixelTopLeft: vec3f,
-  pad3:         f32
-}
-
 struct Frame
 {
   width:        u32,
@@ -91,13 +70,12 @@ const ST_SPHERE           = 2u;
 const EPS                 = 0.001;
 const INF                 = 3.402823466e+38;
 
-@group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<uniform> frame: Frame;
-@group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
-@group(0) @binding(3) var<storage, read> tris: array<Tri>;
-@group(0) @binding(4) var<storage, read> nodes: array<Node>;
-@group(0) @binding(5) var<storage, read> shadowRays: ShadowRayBuffer;
-@group(0) @binding(6) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(0) var<uniform> frame: Frame;
+@group(0) @binding(1) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
+@group(0) @binding(2) var<storage, read> tris: array<Tri>;
+@group(0) @binding(3) var<storage, read> nodes: array<Node>;
+@group(0) @binding(4) var<storage, read> shadowRays: ShadowRayBuffer;
+@group(0) @binding(5) var<storage, read_write> accum: array<vec4f>;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -286,7 +264,6 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
   let invDir = 1.0 / dir;
 
-  //let tlasOfs = globals.tlasNodeOfs;
   let tlasOfs = 2u * arrayLength(&tris);
 
   var nodeIndex = 0u;
@@ -323,7 +300,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
   return false; // Required by firefox
 }
 
-@compute @workgroup_size(8, 8)
+@compute @workgroup_size(16, 16)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;

@@ -232,7 +232,7 @@ void scene_prepare_render(scene *s)
 
   if(rebuild_tlas) {
     //logc("Rebuild tlas with max inst: %i, inst: %i", s->max_inst_cnt, s->inst_cnt);
-    memset(s->tlas_nodes, 0, 2 * s->max_inst_cnt * sizeof(*s->tlas_nodes));
+    //memset(s->tlas_nodes, 0, 2 * s->max_inst_cnt * sizeof(*s->tlas_nodes));
     tlas_build(s->tlas_nodes, s->inst_info, s->inst_cnt);
     scene_set_dirty(s, RT_INST);
   }
