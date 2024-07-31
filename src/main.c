@@ -95,9 +95,7 @@ void mouse_move(int32_t dx, int32_t dy, float look_vel)
 void init_scene_riow(scene *s)
 {
 #define RIOW_SIZE   22
-#define TRI_CNT     1280 + 600
 #define LIGHT_CNT   3
-#define LTRI_CNT    LIGHT_CNT * 2
 #define MESH_CNT    2 + LIGHT_CNT
 #define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 3)
 #define MTL_CNT     INST_CNT
@@ -208,8 +206,8 @@ void init_scene_riow(scene *s)
         mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
-        //scene_add_mesh_inst(s, sid, mtl_id, transform);
+        //scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
+        scene_add_mesh_inst(s, sid, mtl_id, transform);
       }
     }
   }
@@ -220,8 +218,8 @@ void init_scene_riow(scene *s)
 __attribute__((visibility("default")))
 uint8_t init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
 {
-  //return 0;
-  return import_gltf(cs, gltf, gltf_sz, bin, bin_sz);
+  return 0;
+  //return import_gltf(cs, gltf, gltf_sz, bin, bin_sz);
 }
 
 __attribute__((visibility("default")))
@@ -229,7 +227,7 @@ void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t max_bounces)
 {
   pcg_srand(42u, 303u);
 
-  //init_scene_riow(cs);
+  init_scene_riow(cs);
 
   logc("max tris: %i, max ltris: %i, max mtls: %i, max insts: %i",
       cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
