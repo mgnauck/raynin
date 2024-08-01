@@ -95,7 +95,7 @@ struct ShadowRayBuffer
   buf:          array<ShadowRay>
 }
 
-struct PathData
+struct PathState
 {
   seed:         vec4u,          // Last rng seed used
   throughput:   vec3f,
@@ -106,19 +106,19 @@ struct PathData
   pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
-struct PathDataInBuffer
+struct PathStateInBuffer
 {
   cnt:          vec4u,
-  buf:          array<PathData>
+  buf:          array<PathState>
 }
 
-struct PathDataOutBuffer
+struct PathStateOutBuffer
 {
   cnt:          atomic<u32>,
   pad0:         u32,
   pad1:         u32,
   pad2:         u32,
-  buf:          array<PathData>
+  buf:          array<PathState>
 }
 
 struct Hit
@@ -153,10 +153,10 @@ const INV_PI              = 1.0 / PI;
 @group(0) @binding(3) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
 @group(0) @binding(5) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(6) var<storage, read> pathDataIn: PathDataInBuffer;
+@group(0) @binding(6) var<storage, read> pathStateIn: PathStateInBuffer;
 @group(0) @binding(7) var<storage, read> hits: array<Hit>;
 @group(0) @binding(8) var<storage, read_write> shadowRays: ShadowRayBuffer;
-@group(0) @binding(9) var<storage, read_write> pathDataOut: PathDataOutBuffer;
+@group(0) @binding(9) var<storage, read_write> pathStateOut: PathStateOutBuffer;
 @group(0) @binding(10) var<storage, read_write> accum: array<vec4f>;
 
 // State of rng seed
@@ -600,14 +600,14 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, pos: ptr<function, vec3f>, nrm:
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
-  if(gidx >= pathDataIn.cnt.x) {
+  if(gidx >= pathStateIn.cnt.x) {
     return;
   }
 
   let hit = hits[gidx];
-  let data = pathDataIn.buf[gidx];
-  let pidx = data.pidx;
-  var throughput = data.throughput;
+  let pstate = pathStateIn.buf[gidx];
+  let pidx = pstate.pidx;
+  var throughput = pstate.throughput;
 
   // No hit, terminate path
   if(hit.t == INF) {
@@ -619,18 +619,18 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var nrm: vec3f;
   var ltriId: u32;
   var mtl: Mtl;
-  finalizeHit(data.ori, data.dir, hit, &pos, &nrm, &ltriId, &mtl);
+  finalizeHit(pstate.ori, pstate.dir, hit, &pos, &nrm, &ltriId, &mtl);
 
   // Hit light via material direction
   if(mtl.emissive > 0.0) {
     // Lights emit from front side only
-    if(dot(-data.dir, nrm) > 0) {
+    if(dot(-pstate.dir, nrm) > 0) {
       // Bounces > 0
       if((pidx & 0xff) > 0) {
         // Secondary ray hit light, apply MIS
-        let ldir = pos - data.ori;
+        let ldir = pos - pstate.ori;
         let ldistInv = inverseSqrt(dot(ldir, ldir));
-        let pdf = data.pdf * geomSolidAngle(ldir * ldistInv, nrm, ldistInv);
+        let pdf = pstate.pdf * geomSolidAngle(ldir * ldistInv, nrm, ldistInv);
         let lpdf = sampleLTriUniformPdf(ltriId);
         let weight = pdf / (pdf + lpdf);
         accum[pidx >> 8] += vec4f(throughput * weight * mtl.col, 1.0);
@@ -643,7 +643,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  seed = data.seed;
+  seed = pstate.seed;
   let r0 = rand4();
 
   // Russian roulette
@@ -668,8 +668,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
     var fres: vec3f;
-    let bsdf = evalMaterialCombined(mtl, -data.dir, nrm, ldir, &fres);
-    let bsdfPdf = sampleMaterialCombinedPdf(mtl, -data.dir, nrm, ldir, fres);
+    let bsdf = evalMaterialCombined(mtl, -pstate.dir, nrm, ldir, &fres);
+    let bsdfPdf = sampleMaterialCombinedPdf(mtl, -pstate.dir, nrm, ldir, fres);
     let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
     let sidx = atomicAdd(&shadowRays.cnt, 1u);
@@ -690,22 +690,22 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var fres: vec3f;
   var isSpecular: bool;
   var pdf: f32;
-  if(!sampleMaterial(mtl, -data.dir, nrm, r0.xyz, &wi, &fres, &isSpecular, &pdf)) {
+  if(!sampleMaterial(mtl, -pstate.dir, nrm, r0.xyz, &wi, &fres, &isSpecular, &pdf)) {
     return;
   }
 
   // Apply bsdf
-  throughput *= evalMaterial(mtl, -data.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
+  throughput *= evalMaterial(mtl, -pstate.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
-  // Get compacted index into the path data buffer we are writing to
-  let gidxNext = atomicAdd(&pathDataOut.cnt, 1u);
+  // Get compacted index into the path state buffer we are writing to
+  let gidxNext = atomicAdd(&pathStateOut.cnt, 1u);
 
   // Init next path segment 
-  pathDataOut.buf[gidxNext].seed = seed;
-  pathDataOut.buf[gidxNext].throughput = throughput;
-  pathDataOut.buf[gidxNext].pdf = pdf;
-  pathDataOut.buf[gidxNext].ori = pos;
-  pathDataOut.buf[gidxNext].dir = wi;
+  pathStateOut.buf[gidxNext].seed = seed;
+  pathStateOut.buf[gidxNext].throughput = throughput;
+  pathStateOut.buf[gidxNext].pdf = pdf;
+  pathStateOut.buf[gidxNext].ori = pos;
+  pathStateOut.buf[gidxNext].dir = wi;
   // Keep pixel index, increase bounce num
-  pathDataOut.buf[gidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1);
+  pathStateOut.buf[gidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1);
 }

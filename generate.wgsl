@@ -27,7 +27,7 @@ struct Frame
   bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
 }
 
-struct PathData
+struct PathState
 {
   seed:         vec4u,          // Last rng seed used
   throughput:   vec3f,
@@ -38,10 +38,10 @@ struct PathData
   pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
-struct PathDataBuffer
+struct PathStateBuffer
 {
   cnt:          vec4u,
-  buf:          array<PathData>
+  buf:          array<PathState>
 }
 
 // General constants
@@ -49,7 +49,7 @@ const PI = 3.141592;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<uniform> frame: Frame;
-@group(0) @binding(2) var<storage, read_write> pathData: PathDataBuffer;
+@group(0) @binding(2) var<storage, read_write> pathState: PathStateBuffer;
 
 // State of rng seed
 var<private> seed: vec4u;
@@ -103,14 +103,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   let gidx = frame.width * globalId.y + globalId.x;
 
-  // Create primary ray
+  // Create new primary ray
   let ori = sampleEye(r0.xy);
   let dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - ori);
 
-  // Initialize new path data
-  pathData.buf[gidx].seed = seed;
-  pathData.buf[gidx].throughput = vec3f(1.0);
-  pathData.buf[gidx].ori = ori;
-  pathData.buf[gidx].dir = dir;
-  pathData.buf[gidx].pidx = gidx << 8; // Bounce num is implicitly 0
+  // Initialize new path
+  pathState.buf[gidx].seed = seed;
+  pathState.buf[gidx].throughput = vec3f(1.0);
+  pathState.buf[gidx].ori = ori;
+  pathState.buf[gidx].dir = dir;
+  pathState.buf[gidx].pidx = gidx << 8; // Bounce num is implicitly 0
 }
