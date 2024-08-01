@@ -124,7 +124,7 @@ fn intersectAabb(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxExt: ve
   let t1 = (maxExt - ori) * invDir;
 
   let tmin = maxComp4(vec4f(min(t0, t1), EPS));
-  let tmax = minComp4(vec4f(max(t1, t0), tfar));
+  let tmax = minComp4(vec4f(max(t0, t1), tfar));
   
   return select(INF, tmin, tmin <= tmax);
 }
