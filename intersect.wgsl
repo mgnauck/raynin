@@ -76,7 +76,7 @@ const ST_BOX              = 1u;
 const ST_SPHERE           = 2u;
 
 // General constants
-const EPS                 = 0.001;
+const EPS                 = 0.0001;
 const INF                 = 3.402823466e+38;
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -193,7 +193,7 @@ fn intersectUnitSphere(ori: vec3f, dir: vec3f, instId: u32, h: ptr<function, Hit
 
 // Moeller/Trumbore: Ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<function, f32>, v: ptr<function, f32>) -> f32
+fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTriId: u32, h: ptr<function, Hit>)
 {
   // Vectors of two edges sharing vertex 0
   let edge1 = v1 - v0;
@@ -203,9 +203,9 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<
   let pvec = cross(dir, edge2);
   let det = dot(edge1, pvec);
 
-  if(abs(det) < 0.0) {
+  if(abs(det) < EPS) {
     // Ray in plane of triangle
-    return INF;
+    return;
   }
 
   let invDet = 1 / det;
@@ -214,45 +214,36 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, u: ptr<
   let tvec = ori - v0;
 
   // Calculate parameter u and test bounds
-  *u = dot(tvec, pvec) * invDet;
-  if(*u < 0 || *u > 1) {
-    return INF;
+  let u = dot(tvec, pvec) * invDet;
+  if(u < 0 || u > 1) {
+    return;
   }
 
   // Prepare to test for v
   let qvec = cross(tvec, edge1);
 
   // Calculate parameter u and test bounds
-  *v = dot(dir, qvec) * invDet;
-  if(*v < 0 || *u + *v > 1) {
-    return INF;
+  let v = dot(dir, qvec) * invDet;
+  if(v < 0 || u + v > 1) {
+    return;
   }
 
-  // Calc distance
-  return dot(edge2, qvec) * invDet;
-}
-
-fn intersectTriClosest(ori: vec3f, dir: vec3f, tri: Tri, instTriId: u32, h: ptr<function, Hit>) -> bool
-{
-  var u: f32;
-  var v: f32;
-  let dist = intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, &u, &v);
+  // Ray intersects, calc distance
+  let dist = dot(edge2, qvec) * invDet;
   if(dist > EPS && dist < (*h).t) {
     (*h).t = dist;
     (*h).u = u;
     (*h).v = v;
     (*h).e = instTriId;
-    return true;
   }
-
-  return false;
 }
 
 fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
 {
+  let blasOfs = dataOfs << 1;
+
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-  let blasOfs = dataOfs << 1;
 
   // Sorted DF traversal (near child first + skip far child if not within current dist)
   loop {
@@ -262,7 +253,8 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     if(nodeChildren == 0) {
       // Leaf node, intersect contained triangle
       let nodeIdx = (*node).idx;
-      intersectTriClosest(ori, dir, tris[dataOfs + nodeIdx], (nodeIdx << 16) | (instId & SHORT_MASK), hit);
+      let tri = tris[dataOfs + nodeIdx];
+      intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, (nodeIdx << 16) | (instId & SHORT_MASK), hit);
     } else {
       // Interior node
       var leftChildIndex = nodeChildren & SHORT_MASK;
@@ -337,7 +329,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 {
   let invDir = 1.0 / dir;
 
-  let tlasOfs = 2u * arrayLength(&tris);
+  let tlasOfs = arrayLength(&tris) << 1;
 
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;

@@ -206,8 +206,8 @@ void init_scene_riow(scene *s)
         mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        //scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
-        scene_add_mesh_inst(s, sid, mtl_id, transform);
+        scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
+        //scene_add_mesh_inst(s, sid, mtl_id, transform);
       }
     }
   }
