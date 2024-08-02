@@ -155,14 +155,14 @@ fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec
     return false;
   }
 
-  let invDet = 1 / det;
+  let invDet = 1.0 / det;
 
   // Distance vertex 0 to origin
   let tvec = ori - v0;
 
   // Calculate parameter u and test bounds
   let u = dot(tvec, pvec) * invDet;
-  if(u < 0 || u > 1) {
+  if(u < 0.0 || u > 1.0) {
     return false;
   }
 
@@ -171,7 +171,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec
 
   // Calculate parameter u and test bounds
   let v = dot(dir, qvec) * invDet;
-  if(v < 0 || u + v > 1) {
+  if(v < 0.0 || u + v > 1.0) {
     return false;
   }
 
