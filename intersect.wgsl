@@ -244,57 +244,59 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
   var nodeStackIndex = 0u;
   var nodeStack: array<u32, MAX_NODE_CNT>;
 
-  // Sorted DF traversal (near child first + skip far child if not within current dist)
+  // Sorted DF traversal, visit near child first
   loop {
     let node = &nodes[blasOfs + nodeIndex];
     let nodeChildren = (*node).children;
-   
+
+    // Leaf node
     if(nodeChildren == 0) {
-      // Leaf node, intersect contained triangle
+      // Intersect contained triangle
       let nodeIdx = (*node).idx;
       let tri = tris[dataOfs + nodeIdx];
       intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, (nodeIdx << 16) | (instId & SHORT_MASK), hit);
-    } else {
-      // Interior node
-      var leftChildIndex = nodeChildren & SHORT_MASK;
-      var rightChildIndex = nodeChildren >> 16;
-
-      let leftChildNode = &nodes[blasOfs + leftChildIndex];
-      let rightChildNode = &nodes[blasOfs + rightChildIndex];
-
-      // Intersect both child node aabbs
-      var leftDist = intersectAabb(ori, invDir, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      var rightDist = intersectAabb(ori, invDir, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
- 
-      // Swap for nearer child
-      if(leftDist > rightDist) {
-        let td = rightDist;
-        rightDist = leftDist;
-        leftDist = td;
-
-        let ti = rightChildIndex;
-        rightChildIndex = leftChildIndex;
-        leftChildIndex = ti;
+      // Check the stack and continue traversal if something left
+      if(nodeStackIndex == 0) {
+        return;
+      } else {
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
       }
-
-      if(leftDist < INF) {
-        // Continue with nearer child node
-        nodeIndex = leftChildIndex;
-        if(rightDist < INF) {
-          // Push farther child on stack if also a hit
-          nodeStack[nodeStackIndex] = rightChildIndex;
-          nodeStackIndex++;
-        }
-        continue;
-      }
-      // Missed both child nodes
+      continue;
     }
-    // Check the stack and continue traversal if something left
-    if(nodeStackIndex > 0) {
-      nodeStackIndex--;
-      nodeIndex = nodeStack[nodeStackIndex];
+
+    // Interior node
+    var childIndices = array<u32, 2>( nodeChildren & SHORT_MASK, nodeChildren >> 16 );
+
+    let leftChildNode = &nodes[blasOfs + childIndices[0]];
+    let rightChildNode = &nodes[blasOfs + childIndices[1]];
+
+    // Intersect both child node aabbs
+    var childDists = array<f32, 2>(
+      intersectAabb(ori, invDir, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
+      intersectAabb(ori, invDir, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
+
+    // Find indices of nearer and farther child
+    let near = select(1, 0, childDists[0] < childDists[1]);
+    let far = 1 - near;
+
+    if(childDists[near] == INF) {
+      // Missed both children
+      // Check the stack and continue traversal if something left
+      if(nodeStackIndex == 0) {
+        return;
+      } else {
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
+      }
     } else {
-      return;
+      // Continue with nearer child node
+      nodeIndex = childIndices[near];
+      // Push farther child on stack if also within distance
+      if(childDists[far] < INF) {
+        nodeStack[nodeStackIndex] = childIndices[far];
+        nodeStackIndex++;
+      }
     }
   }
 }
@@ -324,6 +326,145 @@ fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, Hit>)
   }
 }
 
+/*fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
+{
+  let invDir = 1.0 / dir;
+
+  let tlasOfs = arrayLength(&tris) << 1;
+
+  var node = nodes[tlasOfs]; // Start at root
+
+  var nodeStackIndex = 0u;
+  var nodeStack: array<Node, 32>;
+
+  var hit: Hit;
+  hit.t = tfar;
+
+  // Ordered DF traversal, visit near child first
+  loop {
+    var childNodes = array<Node, 2u>( // Naga won't allow 'let'
+      nodes[tlasOfs + (node.children & SHORT_MASK)],
+      nodes[tlasOfs + (node.children >> 16)] );
+
+    // Intersect both child node aabbs
+    var childDists = array<f32, 2>( // Naga won't allow 'let'
+      intersectAabb(ori, invDir, hit.t, childNodes[0].aabbMin, childNodes[0].aabbMax),
+      intersectAabb(ori, invDir, hit.t, childNodes[1].aabbMin, childNodes[1].aabbMax) );
+
+    // Find indices of nearer and farther child
+    let near = select(1, 0, childDists[0] < childDists[1]);
+    let far = 1 - near;
+
+    // Intersect if leaf nodes
+    if(childDists[near] < INF) {
+
+      if(childNodes[near].children == 0) { 
+        intersectInst(ori, dir, instances[childNodes[near].idx], &hit);
+      }
+
+      // hit.t might have been updated by above intersection tests
+      if(childDists[far] < hit.t && childNodes[far].children == 0) {
+        intersectInst(ori, dir, instances[childNodes[far].idx], &hit);
+      }
+
+      let traverseNear = childDists[near] != INF && childNodes[near].children != 0;
+      let traverseFar = childDists[far] != INF && childNodes[far].children != 0;
+
+      if(traverseNear) {
+        // Continue with near child
+        node = childNodes[near];
+        // Push farther child on stack if also within distance
+        if(traverseFar) {
+          nodeStack[nodeStackIndex] = childNodes[far];
+          nodeStackIndex++;
+        }
+        continue;
+      } else if(traverseFar) {
+        node = childNodes[far];
+        continue;
+      }
+    }
+
+    // Missed both children
+    // Check the stack and continue traversal if something left
+    if(nodeStackIndex == 0) {
+      return hit;
+    }
+    nodeStackIndex--;
+    node = nodeStack[nodeStackIndex];
+  }
+
+  return hit; // Required for Naga, Tint will warn on this
+}*/
+
+/*fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
+{
+  let invDir = 1.0 / dir;
+
+  let tlasOfs = arrayLength(&tris) << 1;
+
+  var node = nodes[tlasOfs]; // Start at root
+
+  var nodeStackIndex = 0u;
+  var nodeStack: array<Node, 32>;
+
+  var hit: Hit;
+  hit.t = tfar;
+
+  // Ordered DF traversal, visit near child first, less branching/divergence
+  loop {
+    var childNodes = array<Node, 2u>( // Naga won't allow 'let'
+      nodes[tlasOfs + (node.children & SHORT_MASK)],
+      nodes[tlasOfs + (node.children >> 16)] );
+
+    // Intersect both child node aabbs
+    var childDists = array<f32, 2>( // Naga won't allow 'let'
+      intersectAabb(ori, invDir, hit.t, childNodes[0].aabbMin, childNodes[0].aabbMax),
+      intersectAabb(ori, invDir, hit.t, childNodes[1].aabbMin, childNodes[1].aabbMax) );
+
+    // Find indices of nearer and farther child
+    let near = select(1, 0, childDists[0] < childDists[1]);
+    let far = 1 - near;
+
+    // Intersect if leaf nodes
+    if(childDists[near] < INF && childNodes[near].children == 0) { 
+      intersectInst(ori, dir, instances[childNodes[near].idx], &hit);
+    }
+
+    // hit.t might have been updated by above intersection tests
+    if(childDists[far] < hit.t && childNodes[far].children == 0) {
+      intersectInst(ori, dir, instances[childNodes[far].idx], &hit);
+    }
+
+    let traverseNear = childDists[near] != INF && childNodes[near].children != 0;
+    let traverseFar = childDists[far] != INF && childNodes[far].children != 0;
+
+    if(!traverseNear && !traverseFar) {
+      // Missed both children
+      // Check the stack and continue traversal if something left
+      if(nodeStackIndex == 0) {
+        return hit;
+      }
+      nodeStackIndex--;
+      node = nodeStack[nodeStackIndex];
+    } else {
+      if(traverseNear) {
+        // Continue with near child
+        node = childNodes[near];
+        // Push farther child on stack if also within distance
+        if(traverseFar) {
+          nodeStack[nodeStackIndex] = childNodes[far];
+          nodeStackIndex++;
+        }
+      } else {
+        node = childNodes[far];
+      }
+    }
+  }
+
+  return hit; // Required for Naga, Tint will warn on this
+}*/
+
 fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 {
   let invDir = 1.0 / dir;
@@ -337,59 +478,61 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
   var hit: Hit;
   hit.t = tfar;
 
-  // Ordered DF traversal (near child first + skip far child if not within current dist)
+  // Ordered DF traversal, visit near child first
   loop {
     let node = &nodes[tlasOfs + nodeIndex];
     let nodeChildren = (*node).children;
 
+    // Leaf node
     if(nodeChildren == 0) {
-      // Leaf node, intersect the single assigned instance 
+      // Intersect the single assigned instance 
       intersectInst(ori, dir, instances[(*node).idx], &hit);
-    } else {
-      // Interior node
-      var leftChildIndex = nodeChildren & SHORT_MASK;
-      var rightChildIndex = nodeChildren >> 16;
-
-      let leftChildNode = &nodes[tlasOfs + leftChildIndex];
-      let rightChildNode = &nodes[tlasOfs + rightChildIndex];
-
-      // Intersect both child node aabbs
-      var leftDist = intersectAabb(ori, invDir, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      var rightDist = intersectAabb(ori, invDir, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
-
-      // Swap for nearer child
-      if(leftDist > rightDist) {
-        let td = rightDist;
-        rightDist = leftDist;
-        leftDist = td;
-
-        let ti = rightChildIndex;
-        rightChildIndex = leftChildIndex;
-        leftChildIndex = ti;
+      // Check the stack and continue traversal if something left
+      if(nodeStackIndex == 0) {
+        return hit;
+      } else {
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
       }
-
-      if(leftDist < INF) {
-        // Continue with nearer child node
-        nodeIndex = leftChildIndex;
-        if(rightDist < INF) {
-          // Push farther child on stack if also a hit
-          nodeStack[nodeStackIndex] = rightChildIndex;
-          nodeStackIndex++;
-        }
-        continue;
-      }
-      // Missed both child nodes
+      continue;
     }
-    // Check the stack and continue traversal if something left
-    if(nodeStackIndex > 0) {
-      nodeStackIndex--;
-      nodeIndex = nodeStack[nodeStackIndex];
+
+    // Interior node
+    var childIndices = array<u32, 2>( nodeChildren & SHORT_MASK, nodeChildren >> 16 );
+
+    let leftChildNode = &nodes[tlasOfs + childIndices[0]];
+    let rightChildNode = &nodes[tlasOfs + childIndices[1]];
+
+    // Intersect both child node aabbs
+    var childDists = array<f32, 2>(
+      intersectAabb(ori, invDir, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
+      intersectAabb(ori, invDir, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
+
+    // Find indices of nearer and farther child
+    let near = select(1, 0, childDists[0] < childDists[1]);
+    let far = 1 - near;
+
+    if(childDists[near] == INF) {
+      // Missed both children
+      // Check the stack and continue traversal if something left
+      if(nodeStackIndex == 0) {
+        return hit;
+      } else {
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
+      }
     } else {
-      return hit;
+      // Continue with near child
+      nodeIndex = childIndices[near];
+      // Push farther child on stack if also within distance
+      if(childDists[far] < INF) {
+        nodeStack[nodeStackIndex] = childIndices[far];
+        nodeStackIndex++;
+      } 
     }
   }
 
-  return hit; // Required by firefox
+  return hit; // Required for Naga, Tint will warn on this
 }
 
 @compute @workgroup_size(16, 16)
