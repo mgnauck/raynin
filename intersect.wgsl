@@ -88,8 +88,6 @@ const INF                 = 3.402823466e+38;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
-var<private> blasNodeStack: array<u32, MAX_NODE_CNT>;
-var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
 fn minComp3(v: vec3f) -> f32
 {
@@ -244,6 +242,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
 
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
+  var nodeStack: array<u32, MAX_NODE_CNT>;
 
   // Sorted DF traversal (near child first + skip far child if not within current dist)
   loop {
@@ -283,7 +282,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
         nodeIndex = leftChildIndex;
         if(rightDist < INF) {
           // Push farther child on stack if also a hit
-          blasNodeStack[nodeStackIndex] = rightChildIndex;
+          nodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
         }
         continue;
@@ -293,7 +292,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     // Check the stack and continue traversal if something left
     if(nodeStackIndex > 0) {
       nodeStackIndex--;
-      nodeIndex = blasNodeStack[nodeStackIndex];
+      nodeIndex = nodeStack[nodeStackIndex];
     } else {
       return;
     }
@@ -333,6 +332,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
+  var nodeStack: array<u32, MAX_NODE_CNT>;
 
   var hit: Hit;
   hit.t = tfar;
@@ -373,7 +373,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
         nodeIndex = leftChildIndex;
         if(rightDist < INF) {
           // Push farther child on stack if also a hit
-          tlasNodeStack[nodeStackIndex] = rightChildIndex;
+          nodeStack[nodeStackIndex] = rightChildIndex;
           nodeStackIndex++;
         }
         continue;
@@ -383,7 +383,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
     // Check the stack and continue traversal if something left
     if(nodeStackIndex > 0) {
       nodeStackIndex--;
-      nodeIndex = tlasNodeStack[nodeStackIndex];
+      nodeIndex = nodeStack[nodeStackIndex];
     } else {
       return hit;
     }

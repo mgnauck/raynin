@@ -79,8 +79,6 @@ const INF                 = 3.402823466e+38;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
-var<private> blasNodeStack: array<u32, MAX_NODE_CNT>;
-var<private> tlasNodeStack: array<u32, MAX_NODE_CNT>;
 
 fn minComp4(v: vec4f) -> f32
 {
@@ -186,6 +184,7 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
 
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
+  var nodeStack: array<u32, MAX_NODE_CNT>;
 
   // Early exit, unordered DF traversal
   loop {
@@ -202,7 +201,7 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
         // Interior node, continue with left child
         nodeIndex = nodeChildren & SHORT_MASK;
         // Push right child node on stack
-        blasNodeStack[nodeStackIndex] = nodeChildren >> 16;
+        nodeStack[nodeStackIndex] = nodeChildren >> 16;
         nodeStackIndex++;
         continue;
       }
@@ -210,7 +209,7 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
     // Check the stack and continue traversal if something left
     if(nodeStackIndex > 0) {
       nodeStackIndex--;
-      nodeIndex = blasNodeStack[nodeStackIndex];
+      nodeIndex = nodeStack[nodeStackIndex];
     } else {
       return false;
     }
@@ -252,6 +251,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
+  var nodeStack: array<u32, MAX_NODE_CNT>;
 
   // Early exit, unordered DF traversal
   loop {
@@ -267,7 +267,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
         // Interior node, continue traversal with left child node
         nodeIndex = nodeChildren & SHORT_MASK;
         // Push right child node on stack
-        tlasNodeStack[nodeStackIndex] = nodeChildren >> 16;
+        nodeStack[nodeStackIndex] = nodeChildren >> 16;
         nodeStackIndex++;
         continue;
       }
@@ -275,7 +275,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
     // Check the stack and continue traversal if something left
     if(nodeStackIndex > 0) {
       nodeStackIndex--;
-      nodeIndex = tlasNodeStack[nodeStackIndex];
+      nodeIndex = nodeStack[nodeStackIndex];
     } else {
       return false;
     }
