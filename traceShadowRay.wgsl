@@ -57,14 +57,7 @@ struct ShadowRayBuffer
 
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
-const SHAPE_TYPE_BIT      = 0x40000000u; // Bit 31
-const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0 (includes shape type bit)
 const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
-
-// Shape types
-const ST_PLANE            = 0u;
-const ST_BOX              = 1u;
-const ST_SPHERE           = 2u;
 
 // General constants
 const EPS                 = 0.0001;
@@ -103,37 +96,6 @@ fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxE
   let t1 = (maxExt - ori) * invDir;
 
   return maxComp4(vec4f(min(t0, t1), EPS)) <= minComp4(vec4f(max(t0, t1), tfar));
-}
-
-fn intersectPlaneAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
-{
-  let d = dir.y;
-  if(abs(d) > EPS) {
-    let t = -ori.y / d;
-    return t < tfar && t > EPS;
-  }
-  return false;
-}
-
-fn intersectUnitSphereAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
-{
-  let a = dot(dir, dir);
-  let b = dot(ori, dir);
-  let c = dot(ori, ori) - 1.0;
-
-  var d = b * b - a * c;
-  if(d < 0.0) {
-    return false;
-  }
-
-  d = sqrt(d);
-  var t = (-b - d) / a;
-  if(t <= EPS || tfar <= t) {
-    t = (-b + d) / a;
-    return t > EPS && t < tfar;
-  }
-
-  return true;
 }
 
 // Moeller/Trumbore: Ray-triangle intersection
@@ -225,22 +187,7 @@ fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, inst: Inst) -> bool
   let oriObj = (vec4f(ori, 1.0) * m).xyz;
   let dirObj = dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz);
 
-  switch(inst.data & INST_DATA_MASK) {
-    // Shape type
-    case (SHAPE_TYPE_BIT | ST_PLANE): {
-      return intersectPlaneAnyHit(oriObj, dirObj, tfar);
-    }
-    case (SHAPE_TYPE_BIT | ST_BOX): {
-      return intersectAabbAnyHit(oriObj, 1.0 / dirObj, tfar, vec3f(-1), vec3f(1)); 
-    }
-    case (SHAPE_TYPE_BIT | ST_SPHERE): {
-      return intersectUnitSphereAnyHit(oriObj, dirObj, tfar);
-    }
-    default: {
-      // Mesh type
-      return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar, inst.data & MESH_SHAPE_MASK);
-    }
-  }
+  return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar, inst.data & MESH_SHAPE_MASK);
 }
 
 fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool

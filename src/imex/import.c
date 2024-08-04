@@ -298,20 +298,21 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     if(check_has_valid_mtl(gm, &data)) {
       mr->inst_cnt = 0; // Init for duplicate identification
       bool is_emissive = check_is_emissive_mesh(gm, &data);
-      obj_type type = get_type(gm->name); 
-      if(is_emissive || check_is_custom(gm) || gm->prim_cnt > 1 || type != OT_SPHERE) {
+      obj_type type = get_type(gm->name);
+      /// All primitives will end up as meshes
+      ///if(is_emissive || check_is_custom(gm) || gm->prim_cnt > 1 || type != OT_SPHERE) {
         // Meshes that are emissive or need to be loaded or generated will end up as an actual renderer mesh
         mr->mesh_idx = 1; // Assign something that is not -1 ot indicate it is a mesh, actual index will follow during mesh creation
         mr->is_emissive = is_emissive;
         mesh_cnt++;
         logc("Gltf mesh %i (%s) will be a render mesh in the scene. This mesh is %semissive.",
             j, gm->name, is_emissive ? "" : "not ");
-      } else {
+      /*} else {
         // Everything else will be represented as a shape
         mr->mesh_idx = -1;
         mr->is_emissive = false;
         logc("Gltf mesh %i (%s) will be a shape.", j, gm->name);
-      }
+      }*/
     } else {
       mr->mesh_idx = -2;
       mr->is_emissive = false;

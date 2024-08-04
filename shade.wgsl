@@ -121,24 +121,10 @@ struct PathStateOutBuffer
   buf:          array<PathState>
 }
 
-struct Hit
-{
-  t:            f32,
-  u:            f32,
-  v:            f32,
-  e:            u32             // (tri id << 16) | (inst id & 0xffff)
-}
-
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
 const MTL_OVERRIDE_BIT    = 0x80000000u; // Bit 32
-const SHAPE_TYPE_BIT      = 0x40000000u; // Bit 31
 const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
-
-// Shape types
-const ST_PLANE            = 0u;
-const ST_BOX              = 1u;
-const ST_SPHERE           = 2u;
 
 // General constants
 const EPS                 = 0.001;
@@ -154,7 +140,7 @@ const INV_PI              = 1.0 / PI;
 @group(0) @binding(4) var<storage, read> tris: array<Tri>;
 @group(0) @binding(5) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(6) var<storage, read> pathStateIn: PathStateInBuffer;
-@group(0) @binding(7) var<storage, read> hits: array<Hit>;
+@group(0) @binding(7) var<storage, read> hits: array<vec4f>;
 @group(0) @binding(8) var<storage, read_write> shadowRays: ShadowRayBuffer;
 @group(0) @binding(9) var<storage, read_write> pathStateOut: PathStateOutBuffer;
 @group(0) @binding(10) var<storage, read_write> accum: array<vec4f>;
@@ -233,30 +219,9 @@ fn normalToWorldSpace(nrm: vec3f, inst: Inst) -> vec3f
   return normalize(nrm * transpose(toMat3x3(inst.invTransform)));
 }
 
-fn calcShapeNormal(inst: Inst, hitPos: vec3f) -> vec3f
+fn calcTriNormal(bary: vec2f, inst: Inst, tri: Tri) -> vec3f
 {
-  switch(inst.data & MESH_SHAPE_MASK) {
-    case ST_BOX: {
-      let pos = (vec4f(hitPos, 1.0) * toMat4x4(inst.invTransform)).xyz;
-      return normalToWorldSpace(pos * step(vec3f(1.0) - abs(pos), vec3f(EPS)), inst);
-    }
-    case ST_PLANE: {
-      return normalToWorldSpace(vec3f(0.0, 1.0, 0.0), inst);
-    }
-    case ST_SPHERE: {
-      let pos = (vec4f(hitPos, 1.0) * toMat4x4(inst.invTransform)).xyz;
-      return normalToWorldSpace(pos, inst);
-    }
-    default: {
-      // Error
-      return vec3f(100);
-    }
-  }
-}
-
-fn calcTriNormal(h: Hit, inst: Inst, tri: Tri) -> vec3f
-{
-  let nrm = tri.n1 * h.u + tri.n2 * h.v + tri.n0 * (1.0 - h.u - h.v);
+  let nrm = tri.n1 * bary.x + tri.n2 * bary.y + tri.n0 * (1.0 - bary.x - bary.y);
   return normalToWorldSpace(nrm, inst);
 }
 
@@ -572,25 +537,19 @@ fn geomSolidAngle(ldir: vec3f, surfNrm: vec3f, ldistInv: f32) -> f32
   return abs(dot(ldir, surfNrm)) * ldistInv * ldistInv;
 }
 
-fn finalizeHit(ori: vec3f, dir: vec3f, hit: Hit, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
+fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
 {
-  let inst = instances[hit.e & SHORT_MASK];
-
-  *pos = ori + hit.t * dir;
+  // Note: hit.xyzw = vec4f(t, u, v, (inst.id << 16) | tri id & 0xffff)
+  let inst = instances[bitcast<u32>(hit.w) & SHORT_MASK];
  
-  if((inst.data & SHAPE_TYPE_BIT) > 0) {
-    // Shape
-    *mtl = materials[inst.id >> 16];
-    *nrm = calcShapeNormal(inst, *pos);
-  } else {
-    // Mesh
-    let ofs = inst.data & MESH_SHAPE_MASK;
-    let tri = tris[ofs + (hit.e >> 16)];
-    // Either use the material id from the triangle or the material override from the instance
-    *mtl = materials[select(tri.mtl & SHORT_MASK, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0)];
-    *nrm = calcTriNormal(hit, inst, tri);
-    *ltriId = tri.ltriId; // Is not set if not emissive
-  }
+  let ofs = inst.data & MESH_SHAPE_MASK;
+  let tri = tris[ofs + (bitcast<u32>(hit.w) >> 16)];
+
+  // Either use the material id from the triangle or the material override from the instance
+  *mtl = materials[select(tri.mtl & SHORT_MASK, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0)];
+  *pos = ori + hit.x * dir;
+  *nrm = calcTriNormal(hit.yz, inst, tri);
+  *ltriId = tri.ltriId; // Is not set if not emissive
 
   // Flip normal if backside, except if we hit a ltri or refractive mtl
   *nrm *= select(-1.0, 1.0, dot(-dir, *nrm) > 0 || (*mtl).emissive > 0.0 || (*mtl).refractive > 0.0);
@@ -610,7 +569,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var throughput = pstate.throughput;
 
   // No hit, terminate path
-  if(hit.t == INF) {
+  if(hit.x == INF) {
     accum[pidx >> 8] += vec4f(throughput * globals.bgColor, 1.0);
     return;
   }

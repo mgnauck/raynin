@@ -56,24 +56,9 @@ struct PathStateBuffer
   buf:          array<PathState>
 }
 
-struct Hit
-{
-  t:            f32,
-  u:            f32,
-  v:            f32,
-  e:            u32             // (tri id << 16) | (inst id & 0xffff)
-}
-
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
-const SHAPE_TYPE_BIT      = 0x40000000u; // Bit 31
-const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0 (includes shape type bit)
 const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
-
-// Shape types
-const ST_PLANE            = 0u;
-const ST_BOX              = 1u;
-const ST_SPHERE           = 2u;
 
 // General constants
 const EPS                 = 0.0001;
@@ -84,7 +69,7 @@ const INF                 = 3.402823466e+38;
 @group(0) @binding(2) var<storage, read> tris: array<Tri>;
 @group(0) @binding(3) var<storage, read> nodes: array<Node>;
 @group(0) @binding(4) var<storage, read> pathState: PathStateBuffer;
-@group(0) @binding(5) var<storage, read_write> hits: array<Hit>;
+@group(0) @binding(5) var<storage, read_write> hits: array<vec4f>;
 
 // Traversal stacks
 const MAX_NODE_CNT = 32u;
@@ -127,71 +112,9 @@ fn intersectAabb(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxExt: ve
   return select(INF, tmin, tmin <= tmax);
 }
 
-fn intersectPlane(ori: vec3f, dir: vec3f, instId: u32, h: ptr<function, Hit>) -> bool
-{
-  let d = dir.y;
-  if(abs(d) > EPS) {
-    let t = -ori.y / d;
-    if(t < (*h).t && t > EPS) {
-      (*h).t = t;
-      (*h).e = (ST_PLANE << 16) | (instId & SHORT_MASK);
-      return true;
-    }
-  }
-  return false;
-}
-
-fn intersectUnitBox(ori: vec3f, invDir: vec3f, instId: u32, h: ptr<function, Hit>) -> bool
-{
-  let t0 = (vec3f(-1.0) - ori) * invDir;
-  let t1 = (vec3f( 1.0) - ori) * invDir;
-
-  let tmin = maxComp3(min(t0, t1));
-  let tmax = minComp3(max(t0, t1));
- 
-  if(tmin <= tmax) {
-    if(tmin < (*h).t && tmin > EPS) {
-      (*h).t = tmin;
-      (*h).e = (ST_BOX << 16) | (instId & SHORT_MASK);
-      return true;
-    }
-    if(tmax < (*h).t && tmax > EPS) {
-      (*h).t = tmax;
-      (*h).e = (ST_BOX << 16) | (instId & SHORT_MASK);
-      return true;
-    }
-  }
-  return false;
-}
-
-fn intersectUnitSphere(ori: vec3f, dir: vec3f, instId: u32, h: ptr<function, Hit>) -> bool
-{
-  let a = dot(dir, dir);
-  let b = dot(ori, dir);
-  let c = dot(ori, ori) - 1.0;
-
-  var d = b * b - a * c;
-  if(d < 0.0) {
-    return false;
-  }
-
-  d = sqrt(d);
-  var t = (-b - d) / a;
-  if(t <= EPS || (*h).t <= t) {
-    t = (-b + d) / a;
-    if(t <= EPS || (*h).t <= t) {
-      return false;
-    }
-  }
-
-  (*h).t = t;
-  (*h).e = (ST_SPHERE << 16) | (instId & SHORT_MASK);
-  return true;
-}
-
 // Moeller/Trumbore: Ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTriId: u32, h: ptr<function, Hit>)
+fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f) -> vec3f
 {
   // Vectors of two edges sharing vertex 0
   let edge1 = v1 - v0;
@@ -203,7 +126,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
 
   if(abs(det) < EPS) {
     // Ray in plane of triangle
-    return;
+    return vec3f(INF, 0.0, 0.0);
   }
 
   let invDet = 1.0 / det;
@@ -214,7 +137,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
   // Calculate parameter u and test bounds
   let u = dot(tvec, pvec) * invDet;
   if(u < 0.0 || u > 1.0) {
-    return;
+    return vec3f(INF, 0.0, 0.0);
   }
 
   // Prepare to test for v
@@ -223,152 +146,14 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
   // Calculate parameter u and test bounds
   let v = dot(dir, qvec) * invDet;
   if(v < 0.0 || u + v > 1.0) {
-    return;
+    return vec3f(INF, 0.0, 0.0);
   }
 
   // Ray intersects, calc distance
-  let dist = dot(edge2, qvec) * invDet;
-  if(dist > EPS && dist < (*h).t) {
-    (*h).t = dist;
-    (*h).u = u;
-    (*h).v = v;
-    (*h).e = instTriId;
-  }
+  return vec3f(dot(edge2, qvec) * invDet, u, v);
 }
 
-/*fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
-{
-  let blasOfs = dataOfs << 1;
-
-  var node = nodes[blasOfs]; // Start at root
-
-  var nodeStackIndex = 0u;
-  var nodeStack: array<Node, MAX_NODE_CNT>;
-
-  // Sorted DF traversal, visit near child first
-  loop {
-    var childNodes = array<Node, 2u>( // Naga won't allow 'let'
-      nodes[blasOfs + (node.children & SHORT_MASK)],
-      nodes[blasOfs + (node.children >> 16)] );
-
-    // Intersect both child node aabbs
-    var childDists = array<f32, 2>( // Naga won't allow 'let'
-      intersectAabb(ori, invDir, (*hit).t, childNodes[0].aabbMin, childNodes[0].aabbMax),
-      intersectAabb(ori, invDir, (*hit).t, childNodes[1].aabbMin, childNodes[1].aabbMax) );
-
-    // Find indices of nearer and farther child
-    let near = select(1, 0, childDists[0] < childDists[1]);
-    let far = 1 - near;
-
-    // Intersect if leaf nodes
-    if(childDists[near] < INF) {
-
-      if(childNodes[near].children == 0) {
-        let nodeIdx = childNodes[near].idx;
-        let tri = tris[dataOfs + nodeIdx];
-        intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, (nodeIdx << 16) | (instId & SHORT_MASK), hit);
-      }
-
-      // hit.t might have been updated by above intersection tests
-      if(childDists[far] < (*hit).t && childNodes[far].children == 0) {
-        let nodeIdx = childNodes[far].idx;
-        let tri = tris[dataOfs + nodeIdx];
-        intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, (nodeIdx << 16) | (instId & SHORT_MASK), hit);
-      }
-
-      let traverseFar = childDists[far] != INF && childNodes[far].children != 0;
-
-      if(childNodes[near].children != 0) {
-        // Continue with near child
-        node = childNodes[near];
-        // Push farther child on stack if also within distance
-        if(traverseFar) {
-          nodeStack[nodeStackIndex] = childNodes[far];
-          nodeStackIndex++;
-        }
-        continue;
-      } else if(traverseFar) {
-        node = childNodes[far];
-        continue;
-      }
-    }
-
-    // Missed both children
-    // Check the stack and continue traversal if something left
-    if(nodeStackIndex == 0) {
-      return;
-    }
-    nodeStackIndex--;
-    node = nodeStack[nodeStackIndex];
-  }
-}*/
-
-/*fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
-{
-  let blasOfs = dataOfs << 1;
-
-  var node = nodes[blasOfs]; // Start at root
-
-  var nodeStackIndex = 0u;
-  var nodeStack: array<Node, MAX_NODE_CNT>;
-
-  // Sorted DF traversal, visit near child first, less branching/divergence
-  loop {
-    var childNodes = array<Node, 2u>( // Naga won't allow 'let'
-      nodes[blasOfs + (node.children & SHORT_MASK)],
-      nodes[blasOfs + (node.children >> 16)] );
-
-    // Intersect both child node aabbs
-    var childDists = array<f32, 2>( // Naga won't allow 'let'
-      intersectAabb(ori, invDir, (*hit).t, childNodes[0].aabbMin, childNodes[0].aabbMax),
-      intersectAabb(ori, invDir, (*hit).t, childNodes[1].aabbMin, childNodes[1].aabbMax) );
-
-    // Find indices of nearer and farther child
-    let near = select(1, 0, childDists[0] < childDists[1]);
-    let far = 1 - near;
-
-    // Intersect if leaf nodes
-    if(childDists[near] < INF && childNodes[near].children == 0) {
-      let nodeIdx = childNodes[near].idx;
-      let tri = tris[dataOfs + nodeIdx];
-      intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, (nodeIdx << 16) | (instId & SHORT_MASK), hit);
-    }
-
-    // hit.t might have been updated by above intersection tests
-    if(childDists[far] < (*hit).t && childNodes[far].children == 0) {
-      let nodeIdx = childNodes[far].idx;
-      let tri = tris[dataOfs + nodeIdx];
-      intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, (nodeIdx << 16) | (instId & SHORT_MASK), hit);
-    }
-
-    let traverseNear = childDists[near] != INF && childNodes[near].children != 0;
-    let traverseFar = childDists[far] != INF && childNodes[far].children != 0;
-
-    if(!traverseNear && !traverseFar) {
-      // Missed both children
-      // Check the stack and continue traversal if something left
-      if(nodeStackIndex == 0) {
-        return;
-      }
-      nodeStackIndex--;
-      node = nodeStack[nodeStackIndex];
-    } else {
-      if(traverseNear) {
-        // Continue with near child
-        node = childNodes[near];
-        // Push farther child on stack if also within distance
-        if(traverseFar) {
-          nodeStack[nodeStackIndex] = childNodes[far];
-          nodeStackIndex++;
-        }
-      } else {
-        node = childNodes[far];
-      }
-    }
-  }
-}*/
-
-fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, Hit>)
+fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
 {
   let blasOfs = dataOfs << 1;
 
@@ -386,7 +171,10 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       // Intersect contained triangle
       let nodeIdx = (*node).idx;
       let tri = tris[dataOfs + nodeIdx];
-      intersectTri(ori, dir, tri.v0, tri.v1, tri.v2, (nodeIdx << 16) | (instId & SHORT_MASK), hit);
+      let tempHit = intersectTri(ori, dir, tri.v0, tri.v1, tri.v2);
+      if(tempHit.x > EPS && tempHit.x < (*hit).x) {
+        *hit = vec4f(tempHit, bitcast<f32>((nodeIdx << 16) | (instId & SHORT_MASK)));
+      }
       // Check the stack and continue traversal if something left
       if(nodeStackIndex == 0) {
         return;
@@ -405,8 +193,8 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
 
     // Intersect both child node aabbs
     var childDists = array<f32, 2>(
-      intersectAabb(ori, invDir, (*hit).t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
-      intersectAabb(ori, invDir, (*hit).t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
+      intersectAabb(ori, invDir, (*hit).x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
+      intersectAabb(ori, invDir, (*hit).x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
     // Find indices of nearer and farther child
     let near = select(1, 0, childDists[0] < childDists[1]);
@@ -433,170 +221,17 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
   }
 }
 
-fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, Hit>)
+fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, vec4f>)
 {
   // Transform to object space of the instance
   let m = toMat4x4(inst.invTransform);
   let oriObj = (vec4f(ori, 1.0) * m).xyz;
   let dirObj = dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz);
 
-  switch(inst.data & INST_DATA_MASK) {
-    // Shape type
-    case (SHAPE_TYPE_BIT | ST_PLANE): {
-      intersectPlane(oriObj, dirObj, inst.id, hit);
-    }
-    case (SHAPE_TYPE_BIT | ST_BOX): {
-      intersectUnitBox(oriObj, 1.0 / dirObj, inst.id, hit);
-    }
-    case (SHAPE_TYPE_BIT | ST_SPHERE): {
-      intersectUnitSphere(oriObj, dirObj, inst.id, hit);
-    }
-    default: {
-      // Mesh type
-      intersectBlas(oriObj, dirObj, 1.0 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
-    }
-  }
+  intersectBlas(oriObj, dirObj, 1.0 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
 }
 
-/*fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
-{
-  let invDir = 1.0 / dir;
-
-  let tlasOfs = arrayLength(&tris) << 1;
-
-  var node = nodes[tlasOfs]; // Start at root
-
-  var nodeStackIndex = 0u;
-  var nodeStack: array<Node, MAX_NODE_CNT>;
-
-  var hit: Hit;
-  hit.t = tfar;
-
-  // Ordered DF traversal, visit near child first
-  loop {
-    var childNodes = array<Node, 2u>( // Naga won't allow 'let'
-      nodes[tlasOfs + (node.children & SHORT_MASK)],
-      nodes[tlasOfs + (node.children >> 16)] );
-
-    // Intersect both child node aabbs
-    var childDists = array<f32, 2>( // Naga won't allow 'let'
-      intersectAabb(ori, invDir, hit.t, childNodes[0].aabbMin, childNodes[0].aabbMax),
-      intersectAabb(ori, invDir, hit.t, childNodes[1].aabbMin, childNodes[1].aabbMax) );
-
-    // Find indices of nearer and farther child
-    let near = select(1, 0, childDists[0] < childDists[1]);
-    let far = 1 - near;
-
-    // Intersect if leaf nodes
-    if(childDists[near] < INF) {
-
-      if(childNodes[near].children == 0) { 
-        intersectInst(ori, dir, instances[childNodes[near].idx], &hit);
-      }
-
-      // hit.t might have been updated by above intersection tests
-      if(childDists[far] < hit.t && childNodes[far].children == 0) {
-        intersectInst(ori, dir, instances[childNodes[far].idx], &hit);
-      }
-
-      let traverseFar = childDists[far] != INF && childNodes[far].children != 0;
-
-      if(childNodes[near].children != 0) {
-        // Continue with near child
-        node = childNodes[near];
-        // Push farther child on stack if also within distance
-        if(traverseFar) {
-          nodeStack[nodeStackIndex] = childNodes[far];
-          nodeStackIndex++;
-        }
-        continue;
-      } else if(traverseFar) {
-        node = childNodes[far];
-        continue;
-      }
-    }
-
-    // Missed both children
-    // Check the stack and continue traversal if something left
-    if(nodeStackIndex == 0) {
-      return hit;
-    }
-    nodeStackIndex--;
-    node = nodeStack[nodeStackIndex];
-  }
-
-  return hit; // Required for Naga, Tint will warn on this
-}*/
-
-/*fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
-{
-  let invDir = 1.0 / dir;
-
-  let tlasOfs = arrayLength(&tris) << 1;
-
-  var node = nodes[tlasOfs]; // Start at root
-
-  var nodeStackIndex = 0u;
-  var nodeStack: array<Node, MAX_NODE_CNT>;
-
-  var hit: Hit;
-  hit.t = tfar;
-
-  // Ordered DF traversal, visit near child first, less branching/divergence
-  loop {
-    var childNodes = array<Node, 2u>( // Naga won't allow 'let'
-      nodes[tlasOfs + (node.children & SHORT_MASK)],
-      nodes[tlasOfs + (node.children >> 16)] );
-
-    // Intersect both child node aabbs
-    var childDists = array<f32, 2>( // Naga won't allow 'let'
-      intersectAabb(ori, invDir, hit.t, childNodes[0].aabbMin, childNodes[0].aabbMax),
-      intersectAabb(ori, invDir, hit.t, childNodes[1].aabbMin, childNodes[1].aabbMax) );
-
-    // Find indices of nearer and farther child
-    let near = select(1, 0, childDists[0] < childDists[1]);
-    let far = 1 - near;
-
-    // Intersect if leaf nodes
-    if(childDists[near] < INF && childNodes[near].children == 0) { 
-      intersectInst(ori, dir, instances[childNodes[near].idx], &hit);
-    }
-
-    // hit.t might have been updated by above intersection tests
-    if(childDists[far] < hit.t && childNodes[far].children == 0) {
-      intersectInst(ori, dir, instances[childNodes[far].idx], &hit);
-    }
-
-    let traverseNear = childDists[near] != INF && childNodes[near].children != 0;
-    let traverseFar = childDists[far] != INF && childNodes[far].children != 0;
-
-    if(!traverseNear && !traverseFar) {
-      // Missed both children
-      // Check the stack and continue traversal if something left
-      if(nodeStackIndex == 0) {
-        return hit;
-      }
-      nodeStackIndex--;
-      node = nodeStack[nodeStackIndex];
-    } else {
-      if(traverseNear) {
-        // Continue with near child
-        node = childNodes[near];
-        // Push farther child on stack if also within distance
-        if(traverseFar) {
-          nodeStack[nodeStackIndex] = childNodes[far];
-          nodeStackIndex++;
-        }
-      } else {
-        node = childNodes[far];
-      }
-    }
-  }
-
-  return hit; // Required for Naga, Tint will warn on this
-}*/
-
-fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
+fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
 
@@ -606,8 +241,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
   var nodeStackIndex = 0u;
   var nodeStack: array<u32, MAX_NODE_CNT>;
 
-  var hit: Hit;
-  hit.t = tfar;
+  var hit = vec4f(tfar, 0, 0, 0);
 
   // Ordered DF traversal, visit near child first
   loop {
@@ -636,8 +270,8 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> Hit
 
     // Intersect both child node aabbs
     var childDists = array<f32, 2>(
-      intersectAabb(ori, invDir, hit.t, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
-      intersectAabb(ori, invDir, hit.t, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
+      intersectAabb(ori, invDir, hit.x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
+      intersectAabb(ori, invDir, hit.x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
     // Find indices of nearer and farther child
     let near = select(1, 0, childDists[0] < childDists[1]);
