@@ -521,7 +521,10 @@ async function main()
     return;
   }
 
-  device = await adapter.requestDevice();
+  //device = await adapter.requestDevice();
+  device = await adapter.requestDevice({ requiredLimits: {
+      maxStorageBuffersPerShaderStage: 10,
+      maxStorageBufferBindingSize: 1073741824 } });
   if(!device) {
     alert("Failed to request logical device.");
     return;
