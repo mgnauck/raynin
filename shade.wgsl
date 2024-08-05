@@ -665,6 +665,5 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   pathStateOut.buf[gidxNext].pdf = pdf;
   pathStateOut.buf[gidxNext].ori = pos;
   pathStateOut.buf[gidxNext].dir = wi;
-  // Keep pixel index, increase bounce num
-  pathStateOut.buf[gidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1);
+  pathStateOut.buf[gidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1); // Keep pixel index, increase bounce num
 }

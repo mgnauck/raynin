@@ -514,13 +514,14 @@ async function main()
     return;
   }
 
-  const gpuAdapter = await navigator.gpu.requestAdapter();
-  if(!gpuAdapter) {
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference: "low-power" });
+  //const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+  if(!adapter) {
     alert("Can not use WebGPU. No GPU adapter available.");
     return;
   }
 
-  device = await gpuAdapter.requestDevice();
+  device = await adapter.requestDevice();
   if(!device) {
     alert("Failed to request logical device.");
     return;
