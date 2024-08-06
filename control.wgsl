@@ -45,6 +45,6 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  // Update samples taken
-  frame.bouncesSpp = (((frame.bouncesSpp >> 8) + 1) << 8) | (frame.bouncesSpp & 0xff);
+  // Update samples taken in bits 8-31
+  frame.bouncesSpp += 1 << 8;
 }

@@ -229,7 +229,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
   return false; // Required by firefox
 }
 
-@compute @workgroup_size(16, 16)
+@compute @workgroup_size(8, 8)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;

@@ -298,7 +298,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
   return hit; // Required for Naga, Tint will warn on this
 }
 
-@compute @workgroup_size(16, 16)
+@compute @workgroup_size(8, 8)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;

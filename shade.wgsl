@@ -115,15 +115,14 @@ const INV_PI              = 1.0 / PI;
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
+@group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes by default
 @group(0) @binding(3) var<storage, read> tris: array<Tri>;
 @group(0) @binding(4) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(5) var<storage, read> pathStatesIn: array<PathState>;
-@group(0) @binding(6) var<storage, read> hits: array<vec4f>;
-@group(0) @binding(7) var<storage, read_write> frame: Frame;
+@group(0) @binding(5) var<storage, read> hits: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> frame: Frame;
+@group(0) @binding(7) var<storage, read_write> pathStates: array<PathState>;
 @group(0) @binding(8) var<storage, read_write> shadowRays: array<ShadowRay>;
-@group(0) @binding(9) var<storage, read_write> pathStatesOut: array<PathState>;
-@group(0) @binding(10) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
 
 // State of rng seed
 var<private> seed: vec4u;
@@ -535,7 +534,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   *nrm *= select(-1.0, 1.0, dot(-dir, *nrm) > 0 || (*mtl).emissive > 0.0 || (*mtl).refractive > 0.0);
 }
 
-@compute @workgroup_size(16, 16)
+@compute @workgroup_size(8, 8)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
@@ -544,7 +543,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let hit = hits[gidx];
-  let pstate = pathStatesIn[gidx];
+  let pstate = pathStates[gidx];
   let pidx = pstate.pidx;
   var throughput = select(pstate.throughput, vec3f(1.0), (pidx & 0xff) == 0); // Avoid mem access
 
@@ -636,14 +635,15 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Apply bsdf
   throughput *= evalMaterial(mtl, -pstate.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
-  // Get compacted index into the path state buffer we are writing to
+  // Get compacted index into the path state buffer
+  // We deliberately write into the buffer we are reading from!
   let gidxNext = atomicAdd(&frame.extRayCnt, 1u);
 
   // Init next path segment 
-  pathStatesOut[gidxNext].seed = seed;
-  pathStatesOut[gidxNext].throughput = throughput;
-  pathStatesOut[gidxNext].pdf = pdf;
-  pathStatesOut[gidxNext].ori = pos;
-  pathStatesOut[gidxNext].dir = wi;
-  pathStatesOut[gidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1); // Keep pixel index, increase bounce num
+  pathStates[gidxNext].seed = seed;
+  pathStates[gidxNext].throughput = throughput;
+  pathStates[gidxNext].pdf = pdf;
+  pathStates[gidxNext].ori = pos;
+  pathStates[gidxNext].dir = wi;
+  pathStates[gidxNext].pidx = pidx + 1; // Keep pixel index but increase bounce num in lowest 8 bits
 }
