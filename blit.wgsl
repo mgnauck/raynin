@@ -2,11 +2,15 @@ struct Frame
 {
   width:        u32,
   height:       u32,
+  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
+  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  pathCnt:      u32,
+  extRayCnt:    u32,
+  shadowRayCnt: u32,
 }
 
-@group(0) @binding(0) var<uniform> frame: Frame;
+@group(0) @binding(0) var<storage, read> frame: Frame;
 @group(0) @binding(1) var<storage, read> accum: array<vec4f>;
 
 @vertex

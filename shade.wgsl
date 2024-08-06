@@ -23,8 +23,12 @@ struct Frame
 {
   width:        u32,
   height:       u32,
+  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
+  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  pathCnt:      u32,
+  extRayCnt:    atomic<u32>,
+  shadowRayCnt: atomic<u32>,
 }
 
 struct Mtl
@@ -86,15 +90,6 @@ struct ShadowRay
   pad0:         f32
 }
 
-struct ShadowRayBuffer
-{
-  cnt:          atomic<u32>,
-  pad0:         u32,
-  pad1:         u32,
-  pad2:         u32,
-  buf:          array<ShadowRay>
-}
-
 struct PathState
 {
   seed:         vec4u,          // Last rng seed used
@@ -104,21 +99,6 @@ struct PathState
   pad0:         f32,
   dir:          vec3f,
   pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
-}
-
-struct PathStateInBuffer
-{
-  cnt:          vec4u,
-  buf:          array<PathState>
-}
-
-struct PathStateOutBuffer
-{
-  cnt:          atomic<u32>,
-  pad0:         u32,
-  pad1:         u32,
-  pad2:         u32,
-  buf:          array<PathState>
 }
 
 // Scene data handling
@@ -134,15 +114,15 @@ const TWO_PI              = 6.283185;
 const INV_PI              = 1.0 / PI;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<uniform> frame: Frame;
-@group(0) @binding(2) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(3) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
-@group(0) @binding(4) var<storage, read> tris: array<Tri>;
-@group(0) @binding(5) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(6) var<storage, read> pathStateIn: PathStateInBuffer;
-@group(0) @binding(7) var<storage, read> hits: array<vec4f>;
-@group(0) @binding(8) var<storage, read_write> shadowRays: ShadowRayBuffer;
-@group(0) @binding(9) var<storage, read_write> pathStateOut: PathStateOutBuffer;
+@group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
+@group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
+@group(0) @binding(3) var<storage, read> tris: array<Tri>;
+@group(0) @binding(4) var<storage, read> ltris: array<LTri>;
+@group(0) @binding(5) var<storage, read> pathStatesIn: array<PathState>;
+@group(0) @binding(6) var<storage, read> hits: array<vec4f>;
+@group(0) @binding(7) var<storage, read_write> frame: Frame;
+@group(0) @binding(8) var<storage, read_write> shadowRays: array<ShadowRay>;
+@group(0) @binding(9) var<storage, read_write> pathStatesOut: array<PathState>;
 @group(0) @binding(10) var<storage, read_write> accum: array<vec4f>;
 
 // State of rng seed
@@ -559,14 +539,14 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
-  if(gidx >= pathStateIn.cnt.x) {
+  if(gidx >= frame.pathCnt) {
     return;
   }
 
   let hit = hits[gidx];
-  let pstate = pathStateIn.buf[gidx];
+  let pstate = pathStatesIn[gidx];
   let pidx = pstate.pidx;
-  var throughput = pstate.throughput;
+  var throughput = select(pstate.throughput, vec3f(1.0), (pidx & 0xff) == 0); // Avoid mem access
 
   // No hit, terminate path
   if(hit.x == INF) {
@@ -631,12 +611,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     let bsdfPdf = sampleMaterialCombinedPdf(mtl, -pstate.dir, nrm, ldir, fres);
     let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
-    let sidx = atomicAdd(&shadowRays.cnt, 1u);
-    shadowRays.buf[sidx].ori = pos;
-    shadowRays.buf[sidx].dir = ldir;
-    shadowRays.buf[sidx].dist = 1.0 / ldistInv - 2.0 * EPS;
-    shadowRays.buf[sidx].contribution = throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf;
-    shadowRays.buf[sidx].pidx = pidx >> 8;
+    let sidx = atomicAdd(&frame.shadowRayCnt, 1u);
+    shadowRays[sidx].ori = pos;
+    shadowRays[sidx].dir = ldir;
+    shadowRays[sidx].dist = 1.0 / ldistInv - 2.0 * EPS;
+    shadowRays[sidx].contribution = throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf;
+    shadowRays[sidx].pidx = pidx >> 8;
   }
 
   // Reached max bounces, terminate path
@@ -657,13 +637,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   throughput *= evalMaterial(mtl, -pstate.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the path state buffer we are writing to
-  let gidxNext = atomicAdd(&pathStateOut.cnt, 1u);
+  let gidxNext = atomicAdd(&frame.extRayCnt, 1u);
 
   // Init next path segment 
-  pathStateOut.buf[gidxNext].seed = seed;
-  pathStateOut.buf[gidxNext].throughput = throughput;
-  pathStateOut.buf[gidxNext].pdf = pdf;
-  pathStateOut.buf[gidxNext].ori = pos;
-  pathStateOut.buf[gidxNext].dir = wi;
-  pathStateOut.buf[gidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1); // Keep pixel index, increase bounce num
+  pathStatesOut[gidxNext].seed = seed;
+  pathStatesOut[gidxNext].throughput = throughput;
+  pathStatesOut[gidxNext].pdf = pdf;
+  pathStatesOut[gidxNext].ori = pos;
+  pathStatesOut[gidxNext].dir = wi;
+  pathStatesOut[gidxNext].pidx = (pidx & 0xffffff00) | ((pidx & 0xff) + 1); // Keep pixel index, increase bounce num
 }

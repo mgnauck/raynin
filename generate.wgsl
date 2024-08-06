@@ -23,8 +23,12 @@ struct Frame
 {
   width:        u32,
   height:       u32,
+  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
+  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  pathCnt:      u32,
+  extRayCnt:    u32,
+  shadowRayCnt: u32,
 }
 
 struct PathState
@@ -38,18 +42,12 @@ struct PathState
   pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
-struct PathStateBuffer
-{
-  cnt:          vec4u,
-  buf:          array<PathState>
-}
-
 // General constants
 const PI = 3.141592;
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<uniform> frame: Frame;
-@group(0) @binding(2) var<storage, read_write> pathState: PathStateBuffer;
+@group(0) @binding(1) var<storage, read> frame: Frame;
+@group(0) @binding(2) var<storage, read_write> pathStates: array<PathState>;
 
 // State of rng seed
 var<private> seed: vec4u;
@@ -93,7 +91,8 @@ fn sampleEye(r: vec2f) -> vec3f
 @compute @workgroup_size(16, 16)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  if(any(globalId.xy >= vec2u(frame.width, frame.height))) {
+  let gidx = frame.width * globalId.y + globalId.x;
+  if(gidx >= frame.pathCnt) {
     return;
   }
 
@@ -101,16 +100,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   let r0 = rand4();
 
-  let gidx = frame.width * globalId.y + globalId.x;
-
   // Create new primary ray
   let ori = sampleEye(r0.xy);
   let dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - ori);
 
   // Initialize new path
-  pathState.buf[gidx].seed = seed;
-  pathState.buf[gidx].throughput = vec3f(1.0);
-  pathState.buf[gidx].ori = ori;
-  pathState.buf[gidx].dir = dir;
-  pathState.buf[gidx].pidx = gidx << 8; // Bounce num is implicitly 0
+  pathStates[gidx].seed = seed;
+  pathStates[gidx].throughput = vec3f(1.0);
+  pathStates[gidx].ori = ori;
+  pathStates[gidx].dir = dir;
+  pathStates[gidx].pidx = gidx << 8; // Bounce num is implicitly 0
 }

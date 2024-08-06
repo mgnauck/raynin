@@ -2,8 +2,12 @@ struct Frame
 {
   width:        u32,
   height:       u32,
+  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
+  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  pathCnt:      u32,
+  extRayCnt:    u32,
+  shadowRayCnt: u32,
 }
 
 struct Inst
@@ -49,12 +53,6 @@ struct ShadowRay
   pad0:         f32
 }
 
-struct ShadowRayBuffer
-{
-  cnt:          vec4u,
-  buf:          array<ShadowRay>
-}
-
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
 const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
@@ -63,11 +61,11 @@ const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
 const EPS                 = 0.0001;
 const INF                 = 3.402823466e+38;
 
-@group(0) @binding(0) var<uniform> frame: Frame;
-@group(0) @binding(1) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
-@group(0) @binding(2) var<storage, read> tris: array<Tri>;
-@group(0) @binding(3) var<storage, read> nodes: array<Node>;
-@group(0) @binding(4) var<storage, read> shadowRays: ShadowRayBuffer;
+@group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
+@group(0) @binding(1) var<storage, read> tris: array<Tri>;
+@group(0) @binding(2) var<storage, read> nodes: array<Node>;
+@group(0) @binding(3) var<storage, read> frame: Frame;
+@group(0) @binding(4) var<storage, read> shadowRays: array<ShadowRay>;
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4f>;
 
 // Traversal stacks
@@ -235,11 +233,11 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
-  if(gidx >= shadowRays.cnt.x) {
+  if(gidx >= frame.shadowRayCnt) {
     return;
   }
 
-  let shadowRay = shadowRays.buf[gidx];
+  let shadowRay = shadowRays[gidx];
   if(!intersectTlasAnyHit(shadowRay.ori, shadowRay.dir, shadowRay.dist)) {
     accum[shadowRay.pidx] += vec4f(shadowRay.contribution, 1.0);
   }

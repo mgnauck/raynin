@@ -2,8 +2,12 @@ struct Frame
 {
   width:        u32,
   height:       u32,
+  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32             // Bits 8-31 for gathered spp, bits 0-7 max bounces 
+  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  pathCnt:      u32,
+  extRayCnt:    u32,
+  shadowRayCnt: u32,
 }
 
 struct Inst
@@ -50,12 +54,6 @@ struct PathState
   pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
-struct PathStateBuffer
-{
-  cnt:          vec4u,
-  buf:          array<PathState>
-}
-
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
 const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
@@ -64,11 +62,11 @@ const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
 const EPS                 = 0.0001;
 const INF                 = 3.402823466e+38;
 
-@group(0) @binding(0) var<uniform> frame: Frame;
-@group(0) @binding(1) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
-@group(0) @binding(2) var<storage, read> tris: array<Tri>;
-@group(0) @binding(3) var<storage, read> nodes: array<Node>;
-@group(0) @binding(4) var<storage, read> pathState: PathStateBuffer;
+@group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
+@group(0) @binding(1) var<storage, read> tris: array<Tri>;
+@group(0) @binding(2) var<storage, read> nodes: array<Node>;
+@group(0) @binding(3) var<storage, read> frame: Frame;
+@group(0) @binding(4) var<storage, read> pathStates: array<PathState>;
 @group(0) @binding(5) var<storage, read_write> hits: array<vec4f>;
 
 // Traversal stacks
@@ -304,10 +302,10 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let gidx = frame.width * globalId.y + globalId.x;
-  if(gidx >= pathState.cnt.x) {
+  if(gidx >= frame.pathCnt) {
     return;
   }
 
-  let pathState = pathState.buf[gidx];
+  let pathState = pathStates[gidx];
   hits[gidx] = intersectTlas(pathState.ori, pathState.dir, INF);
 }
