@@ -1,4 +1,4 @@
-struct Frame
+struct Config
 {
   width:        u32,
   height:       u32,
@@ -12,7 +12,7 @@ struct Frame
   gridDimSRay:  vec4u
 }
 
-@group(0) @binding(0) var<storage, read> frame: Frame;
+@group(0) @binding(0) var<storage, read> config: Config;
 @group(0) @binding(1) var<storage, read> accum: array<vec4f>;
 
 @vertex
@@ -42,7 +42,7 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 @fragment
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  let gidx = frame.width * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accum[gidx].xyz / f32(frame.samplesTaken >> 8), vec3f(0.4545)), 1.0);
+  let gidx = config.width * u32(pos.y) + u32(pos.x);
+  let col = vec4f(pow(accum[gidx].xyz / f32(config.samplesTaken >> 8), vec3f(0.4545)), 1.0);
   return col;
 }

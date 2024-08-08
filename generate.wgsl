@@ -19,7 +19,7 @@ struct Global
   pad3:         f32
 }
 
-struct Frame
+struct Config
 {
   width:        u32,
   height:       u32,
@@ -49,7 +49,7 @@ const PI        = 3.141592;
 const WG_SIZE   = vec3u(8, 8, 1);
 
 @group(0) @binding(0) var<uniform> globals: Global;
-@group(0) @binding(1) var<storage, read> frame: Frame;
+@group(0) @binding(1) var<storage, read> config: Config;
 @group(0) @binding(2) var<storage, read_write> pathStates: array<PathState>;
 
 // State of rng seed
@@ -94,16 +94,16 @@ fn sampleEye(r: vec2f) -> vec3f
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = frame.gridDimPath.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= frame.pathCnt) {
+  let gidx = config.gridDimPath.x * WG_SIZE.x * globalId.y + globalId.x;
+  if(gidx >= config.pathCnt) {
     return;
   }
 
   // Pixel coordinates
-  let w = frame.width;
+  let w = config.width;
   let pix = vec2u(gidx % w, gidx / w);
 
-  seed = vec4u(pix, frame.frame, frame.samplesTaken >> 8);
+  seed = vec4u(pix, config.frame, config.samplesTaken >> 8);
 
   let r0 = rand4();
 

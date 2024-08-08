@@ -19,7 +19,7 @@ struct Global
   pad3:         f32
 }
 
-struct Frame
+struct Config
 {
   width:        u32,
   height:       u32,
@@ -123,7 +123,7 @@ const WG_SIZE             = vec3u(8, 8, 1);
 @group(0) @binding(3) var<storage, read> tris: array<Tri>;
 @group(0) @binding(4) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(5) var<storage, read> hits: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> frame: Frame;
+@group(0) @binding(6) var<storage, read_write> config: Config;
 @group(0) @binding(7) var<storage, read_write> pathStates: array<PathState>;
 @group(0) @binding(8) var<storage, read_write> shadowRays: array<ShadowRay>;
 @group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
@@ -541,8 +541,8 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = frame.gridDimPath.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= frame.pathCnt) {
+  let gidx = config.gridDimPath.x * WG_SIZE.x * globalId.y + globalId.x;
+  if(gidx >= config.pathCnt) {
     return;
   }
 
@@ -614,7 +614,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     let bsdfPdf = sampleMaterialCombinedPdf(mtl, -pstate.dir, nrm, ldir, fres);
     let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
-    let sidx = atomicAdd(&frame.shadowRayCnt, 1u);
+    let sidx = atomicAdd(&config.shadowRayCnt, 1u);
     shadowRays[sidx].ori = pos;
     shadowRays[sidx].dir = ldir;
     shadowRays[sidx].dist = 1.0 / ldistInv - 2.0 * EPS;
@@ -623,7 +623,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Reached max bounces (encoded in samples taken lower 8 bits), terminate path
-  if((pidx & 0xff) == (frame.samplesTaken & 0xff) - 1) {
+  if((pidx & 0xff) == (config.samplesTaken & 0xff) - 1) {
     return;
   }
 
@@ -641,7 +641,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Get compacted index into the path state buffer
   // We deliberately write into the buffer we are reading from!
-  let gidxNext = atomicAdd(&frame.extRayCnt, 1u);
+  let gidxNext = atomicAdd(&config.extRayCnt, 1u);
 
   // Init next path segment 
   pathStates[gidxNext].seed = seed;

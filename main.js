@@ -44,7 +44,7 @@ const BUF_NODE        = 5; // Accessed from WASM
 const BUF_PATH        = 6;
 const BUF_SRAY        = 7;
 const BUF_HIT         = 8;
-const BUF_FRAME       = 9;
+const BUF_CFG         = 9;
 const BUF_ACC         = 10;
 const BUF_GRID        = 11;
 
@@ -195,7 +195,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[BUF_FRAME] = device.createBuffer({
+  res.buf[BUF_CFG] = device.createBuffer({
     size: 16 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
   });
@@ -225,7 +225,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_GLOB] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_FRAME] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 2, resource: { buffer: res.buf[BUF_PATH] } },
     ]
   });
@@ -250,7 +250,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_INST] } },
       { binding: 1, resource: { buffer: res.buf[BUF_TRI] } },
       { binding: 2, resource: { buffer: res.buf[BUF_NODE] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_FRAME] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 4, resource: { buffer: res.buf[BUF_PATH] } },
       { binding: 5, resource: { buffer: res.buf[BUF_HIT] } },
     ]
@@ -283,7 +283,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: 3, resource: { buffer: res.buf[BUF_TRI] } },
       { binding: 4, resource: { buffer: res.buf[BUF_LTRI] } },
       { binding: 5, resource: { buffer: res.buf[BUF_HIT] } },
-      { binding: 6, resource: { buffer: res.buf[BUF_FRAME] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 7, resource: { buffer: res.buf[BUF_PATH] } },
       { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
       { binding: 9, resource: { buffer: res.buf[BUF_ACC] } },
@@ -310,7 +310,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_INST] } },
       { binding: 1, resource: { buffer: res.buf[BUF_TRI] } },
       { binding: 2, resource: { buffer: res.buf[BUF_NODE] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_FRAME] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 4, resource: { buffer: res.buf[BUF_SRAY] } },
       { binding: 5, resource: { buffer: res.buf[BUF_ACC] } },
     ]
@@ -328,7 +328,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   res.bindGroups[BG_CONTROL] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_FRAME] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
     ]
   });
 
@@ -347,7 +347,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   res.bindGroups[BG_BLIT] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_FRAME] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_ACC] } },
     ]
   });
@@ -408,8 +408,8 @@ async function render(time)
     setTimeout(() => { updateDisplay = true; }, 100);
   }
 
-  // Initialize frame data
-  device.queue.writeBuffer(res.buf[BUF_FRAME], 0,
+  // Initialize config data
+  device.queue.writeBuffer(res.buf[BUF_CFG], 0,
     new Uint32Array([
       WIDTH, HEIGHT, frames, (samples << 8) | (MAX_BOUNCES & 0xff),
       WIDTH * HEIGHT, 0, 0, 0, // Path cnt, ext ray cnt, shadow ray cnt, pad
@@ -426,7 +426,7 @@ async function render(time)
       commandEncoder.clearBuffer(res.buf[BUF_ACC]);
 
     // Copy counter to indirect workgroup grid dimension buffer
-    commandEncoder.copyBufferToBuffer(res.buf[BUF_FRAME], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
+    commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
 
     passEncoder = commandEncoder.beginComputePass();
 
@@ -458,7 +458,7 @@ async function render(time)
       passEncoder.end();
 
       // Copy counter to indirect workgroup grid dimension buffer
-      commandEncoder.copyBufferToBuffer(res.buf[BUF_FRAME], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
+      commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
 
       passEncoder = commandEncoder.beginComputePass();
 

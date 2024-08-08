@@ -1,4 +1,4 @@
-struct Frame
+struct Config
 {
   width:        u32,
   height:       u32,
@@ -14,7 +14,7 @@ struct Frame
 
 const WG_SIZE = vec3u(8, 8, 1);
 
-@group(0) @binding(0) var<storage, read_write> frame: Frame;
+@group(0) @binding(0) var<storage, read_write> config: Config;
 
 @compute @workgroup_size(1)
 fn m0(@builtin(global_invocation_id) globalId: vec3u)
@@ -23,19 +23,19 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  let pathCnt = frame.extRayCnt;
-  let srayCnt = frame.shadowRayCnt;
+  let pathCnt = config.extRayCnt;
+  let srayCnt = config.shadowRayCnt;
 
   // Reset counters
-  frame.pathCnt = pathCnt;
-  frame.extRayCnt = 0u;
+  config.pathCnt = pathCnt;
+  config.extRayCnt = 0u;
 
   // Calculate workgroup grid sizes for indirect dispatch
   var dim = u32(ceil(sqrt(f32(pathCnt)) / f32(WG_SIZE.x)));
-  frame.gridDimPath = vec4u(dim, dim, 1u, 0u);
+  config.gridDimPath = vec4u(dim, dim, 1u, 0u);
 
   dim = u32(ceil(sqrt(f32(srayCnt)) / f32(WG_SIZE.x)));
-  frame.gridDimSRay = vec4u(dim, dim, 1u, 0u);
+  config.gridDimSRay = vec4u(dim, dim, 1u, 0u);
 }
 
 @compute @workgroup_size(1)
@@ -45,7 +45,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  frame.shadowRayCnt = 0u;
+  config.shadowRayCnt = 0u;
 }
 
 @compute @workgroup_size(1)
@@ -56,16 +56,16 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Update samples taken in bits 8-31
-  frame.samplesTaken += 1u << 8;
+  config.samplesTaken += 1u << 8;
 
-  let w = frame.width;
-  let h = frame.height;
+  let w = config.width;
+  let h = config.height;
 
   // Init counters for primary ray generation
-  frame.pathCnt = w * h;
-  frame.extRayCnt = 0u;
-  frame.shadowRayCnt = 0u;
+  config.pathCnt = w * h;
+  config.extRayCnt = 0u;
+  config.shadowRayCnt = 0u;
 
   // Calculate workgroup grid size to dispatch indirectly
-  frame.gridDimPath = vec4u(u32(ceil(f32(w) / f32(WG_SIZE.x))), u32(ceil(f32(h) / f32(WG_SIZE.y))), 1u, 0u);
+  config.gridDimPath = vec4u(u32(ceil(f32(w) / f32(WG_SIZE.x))), u32(ceil(f32(h) / f32(WG_SIZE.y))), 1u, 0u);
 }

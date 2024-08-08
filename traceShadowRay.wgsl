@@ -1,4 +1,4 @@
-struct Frame
+struct Config
 {
   width:        u32,
   height:       u32,
@@ -68,7 +68,7 @@ const WG_SIZE             = vec3u(8, 8, 1);
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
 @group(0) @binding(2) var<storage, read> nodes: array<Node>;
-@group(0) @binding(3) var<storage, read> frame: Frame;
+@group(0) @binding(3) var<storage, read> config: Config;
 @group(0) @binding(4) var<storage, read> shadowRays: array<ShadowRay>;
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4f>;
 
@@ -236,8 +236,8 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = frame.gridDimSRay.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= frame.shadowRayCnt) {
+  let gidx = config.gridDimSRay.x * WG_SIZE.x * globalId.y + globalId.x;
+  if(gidx >= config.shadowRayCnt) {
     return;
   }
 
