@@ -123,10 +123,11 @@ const WG_SIZE             = vec3u(8, 8, 1);
 @group(0) @binding(3) var<storage, read> tris: array<Tri>;
 @group(0) @binding(4) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(5) var<storage, read> hits: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> config: Config;
-@group(0) @binding(7) var<storage, read_write> pathStates: array<PathState>;
-@group(0) @binding(8) var<storage, read_write> shadowRays: array<ShadowRay>;
-@group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(6) var<storage, read> pathStatesIn: array<PathState>;
+@group(0) @binding(7) var<storage, read_write> config: Config;
+@group(0) @binding(8) var<storage, read_write> pathStatesOut: array<PathState>;
+@group(0) @binding(9) var<storage, read_write> shadowRays: array<ShadowRay>;
+@group(0) @binding(10) var<storage, read_write> accum: array<vec4f>;
 
 // State of rng seed
 var<private> seed: vec4u;
@@ -547,7 +548,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let hit = hits[gidx];
-  let pstate = pathStates[gidx];
+  let pstate = pathStatesIn[gidx];
   let pidx = pstate.pidx;
   var throughput = select(pstate.throughput, vec3f(1.0), (pidx & 0xff) == 0); // Avoid mem access
 
@@ -640,14 +641,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   throughput *= evalMaterial(mtl, -pstate.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the path state buffer
-  // We deliberately write into the buffer we are reading from!
   let gidxNext = atomicAdd(&config.extRayCnt, 1u);
 
   // Init next path segment 
-  pathStates[gidxNext].seed = seed;
-  pathStates[gidxNext].throughput = throughput;
-  pathStates[gidxNext].pdf = pdf;
-  pathStates[gidxNext].ori = pos;
-  pathStates[gidxNext].dir = wi;
-  pathStates[gidxNext].pidx = pidx + 1; // Keep pixel index but increase bounce num in lowest 8 bits
+  pathStatesOut[gidxNext].seed = seed;
+  pathStatesOut[gidxNext].throughput = throughput;
+  pathStatesOut[gidxNext].pdf = pdf;
+  pathStatesOut[gidxNext].ori = pos;
+  pathStatesOut[gidxNext].dir = wi;
+  pathStatesOut[gidxNext].pidx = pidx + 1; // Keep pixel index but increase bounce num in lowest 8 bits
 }
