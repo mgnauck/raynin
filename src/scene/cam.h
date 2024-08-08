@@ -3,7 +3,7 @@
 
 #include "../util/vec3.h"
 
-#define CAM_BUF_SIZE 12 * 4
+#define CAM_SIZE 12 * 4
 
 typedef struct ray ray;
 typedef struct view view;

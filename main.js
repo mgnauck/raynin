@@ -4,7 +4,7 @@ const GLTF_BIN_PATH = "scenes/scene.bin";
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
 
-const WIDTH = 1280;
+const WIDTH = 1600;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 2;
@@ -35,7 +35,7 @@ END_control_wgsl`;
 const SM_BLIT = `BEGIN_blit_wgsl
 END_blit_wgsl`;
 
-const BUF_GLOB        = 0; // Accessed from WASM
+const BUF_CAM         = 0; // Accessed from WASM
 const BUF_MTL         = 1; // Accessed from WASM
 const BUF_INST        = 2; // Accessed from WASM
 const BUF_TRI         = 3; // Accessed from WASM
@@ -150,7 +150,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 
   /////// Buffers
 
-  res.buf[BUF_GLOB] = device.createBuffer({
+  res.buf[BUF_CAM] = device.createBuffer({
     size: globSz,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
@@ -224,7 +224,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   res.bindGroups[BG_GENERATE] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_GLOB] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_CAM] } },
       { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 2, resource: { buffer: res.buf[BUF_PATH] } },
     ]
@@ -277,7 +277,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   res.bindGroups[BG_SHADE] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_GLOB] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_CAM] } },
       { binding: 1, resource: { buffer: res.buf[BUF_MTL] } },
       { binding: 2, resource: { buffer: res.buf[BUF_INST] } },
       { binding: 3, resource: { buffer: res.buf[BUF_TRI] } },

@@ -1,4 +1,4 @@
-struct Global
+struct Camera
 {
   // Config
   bgColor:      vec3f,
@@ -48,7 +48,7 @@ struct PathState
 const PI        = 3.141592;
 const WG_SIZE   = vec3u(8, 8, 1);
 
-@group(0) @binding(0) var<uniform> globals: Global;
+@group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var<storage, read> config: Config;
 @group(0) @binding(2) var<storage, read_write> pathStates: array<PathState>;
 
@@ -75,18 +75,18 @@ fn sampleDisk(r: vec2f) -> vec2f
 
 fn samplePixel(pixelPos: vec2f, r: vec2f) -> vec3f
 {
-  var pixelSample = globals.pixelTopLeft + globals.pixelDeltaX * pixelPos.x + globals.pixelDeltaY * pixelPos.y;
-  pixelSample += (r.x - 0.5) * globals.pixelDeltaX + (r.y - 0.5) * globals.pixelDeltaY;
+  var pixelSample = camera.pixelTopLeft + camera.pixelDeltaX * pixelPos.x + camera.pixelDeltaY * pixelPos.y;
+  pixelSample += (r.x - 0.5) * camera.pixelDeltaX + (r.y - 0.5) * camera.pixelDeltaY;
   return pixelSample;
 }
 
 fn sampleEye(r: vec2f) -> vec3f
 {
-  var eyeSample = globals.eye;
-  if(globals.focAngle > 0) {
-    let focRadius = globals.focDist * tan(0.5 * radians(globals.focAngle));
+  var eyeSample = camera.eye;
+  if(camera.focAngle > 0) {
+    let focRadius = camera.focDist * tan(0.5 * radians(camera.focAngle));
     let diskSample = sampleDisk(r);
-    eyeSample += focRadius * (diskSample.x * globals.right + diskSample.y * globals.up);
+    eyeSample += focRadius * (diskSample.x * camera.right + diskSample.y * camera.up);
   }
   return eyeSample;
 }

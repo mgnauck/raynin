@@ -1,4 +1,4 @@
-struct Global
+struct Camera
 {
   // Config
   bgColor:      vec3f,
@@ -117,7 +117,7 @@ const INV_PI              = 1.0 / PI;
 
 const WG_SIZE             = vec3u(8, 8, 1);
 
-@group(0) @binding(0) var<uniform> globals: Global;
+@group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
 @group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes by default
 @group(0) @binding(3) var<storage, read> tris: array<Tri>;
@@ -553,7 +553,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // No hit, terminate path
   if(hit.x == INF) {
-    accum[pidx >> 8] += vec4f(throughput * globals.bgColor, 1.0);
+    accum[pidx >> 8] += vec4f(throughput * camera.bgColor, 1.0);
     return;
   }
 

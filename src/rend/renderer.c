@@ -17,16 +17,16 @@
 #include "intersect.h"
 #endif
 
-// Global uniform buffer offsets
-#define GLOB_BUF_OFS_CAM      16
-#define GLOB_BUF_OFS_VIEW     64
-#define GLOB_BUF_SIZE         112
+// Camera uniform buffer offsets
+#define CAM_BUF_OFS_CAM      16
+#define CAM_BUF_OFS_VIEW     64
+#define CAM_BUF_SIZE         112
 
 #define MAX_UNIFORM_BUF_SIZE  65536
 
 // GPU buffer types
 typedef enum buf_type {
-  BT_GLOB = 0,
+  BT_CAM = 0,
   BT_MTL,
   BT_INST,
   BT_TRI,
@@ -78,7 +78,7 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
   total_mtl_cnt = total_inst_cnt;
 
   gpu_create_res(
-      GLOB_BUF_SIZE, // Globals (uniform buf)
+      CAM_BUF_SIZE, // Camera (uniform buf)
       total_mtl_cnt * sizeof(mtl), // Materials (uniform buf)
       total_inst_cnt * sizeof(inst), // Instances (uniform buf)
       total_tri_cnt * sizeof(tri), // Tris (storage buf)
@@ -110,16 +110,16 @@ void renderer_release(render_data *rd)
 void push_cfg(scene *s)
 {
   uint32_t cfg[4] = { s->bg_col.x, s->bg_col.y, s->bg_col.z, 2 * total_tris };
-  gpu_write_buf(BT_GLOB, 0, cfg, sizeof(cfg));
+  gpu_write_buf(BT_CAM, 0, cfg, sizeof(cfg));
 }
 
 void push_cam_view(scene *s, uint32_t width, uint32_t height)
 {
   cam *cam = scene_get_active_cam(s);
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_CAM, cam, CAM_BUF_SIZE);
+  gpu_write_buf(BT_CAM, CAM_BUF_OFS_CAM, cam, CAM_SIZE);
 
   view_calc(&s->view, width, height, cam);
-  gpu_write_buf(BT_GLOB, GLOB_BUF_OFS_VIEW, &s->view, sizeof(s->view));
+  gpu_write_buf(BT_CAM, CAM_BUF_OFS_VIEW, &s->view, sizeof(s->view));
 
   scene_clr_dirty(s, RT_CAM_VIEW);
 }
