@@ -46,7 +46,7 @@ struct PathState
 
 // General constants
 const PI        = 3.141592;
-const WG_SIZE   = vec3u(8, 8, 1);
+const WG_SIZE   = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var<storage, read> config: Config;

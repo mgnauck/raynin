@@ -12,7 +12,7 @@ struct Config
   gridDimSRay:  vec4u
 }
 
-const WG_SIZE = vec3u(8, 8, 1);
+const WG_SIZE = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<storage, read_write> config: Config;
 

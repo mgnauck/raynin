@@ -63,7 +63,7 @@ const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
 const EPS                 = 0.0001;
 const INF                 = 3.402823466e+38;
 
-const WG_SIZE             = vec3u(8, 8, 1);
+const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;

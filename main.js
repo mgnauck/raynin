@@ -68,8 +68,8 @@ const BG_SHADOW       = 6;
 const BG_CONTROL      = 7;
 const BG_BLIT         = 8;
 
-const WG_SIZE_X       = 8;
-const WG_SIZE_Y       = 8;
+const WG_SIZE_X       = 16;
+const WG_SIZE_Y       = 16;
 
 let canvas, context, device;
 let wa, res = {};

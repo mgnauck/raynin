@@ -115,7 +115,7 @@ const PI                  = 3.141592;
 const TWO_PI              = 6.283185;
 const INV_PI              = 1.0 / PI;
 
-const WG_SIZE             = vec3u(8, 8, 1);
+const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
