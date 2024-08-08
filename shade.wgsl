@@ -29,6 +29,8 @@ struct Frame
   pathCnt:      u32,
   extRayCnt:    atomic<u32>,
   shadowRayCnt: atomic<u32>,
+  gridDimPath:  vec4u,
+  gridDimSRay:  vec4u
 }
 
 struct Mtl
@@ -537,7 +539,8 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 @compute @workgroup_size(8, 8)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = frame.width * globalId.y + globalId.x;
+  //let gidx = (frame.gridDimPath.x << 3u) * globalId.y + globalId.x;
+  let gidx = (128u << 3u) * globalId.y + globalId.x;
   if(gidx >= frame.pathCnt) {
     return;
   }
@@ -619,7 +622,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Reached max bounces, terminate path
-  if((pidx & 0xff) >= (frame.bouncesSpp & 0xff)) {
+  if((pidx & 0xff) == (frame.bouncesSpp & 0xff) - 1) {
     return;
   }
 

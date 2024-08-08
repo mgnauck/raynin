@@ -46,6 +46,7 @@ const BUF_SRAY        = 7;
 const BUF_HIT         = 8;
 const BUF_FRAME       = 9;
 const BUF_ACC         = 10;
+const BUF_GRID        = 11;
 
 const PL_GENERATE     = 0;
 const PL_INTERSECT    = 1;
@@ -134,10 +135,17 @@ function Wasm(module)
 
 function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 {
+  // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
+  triSz = triSz == 0 ? 96 : triSz;
+  ltriSz = ltriSz == 0 ? 80 : ltriSz;
+  nodeSz = nodeSz == 0 ? 32 : nodeSz;
+
   res.buf = [];
   res.bindGroups = [];
   res.pipelineLayouts = [];
   res.pipelines = [];
+
+  /////// Buffers
 
   res.buf[BUF_GLOB] = device.createBuffer({
     size: globSz,
@@ -153,11 +161,6 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     size: instSz,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
-
-  // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
-  triSz = triSz == 0 ? 96 : triSz;
-  ltriSz = ltriSz == 0 ? 80 : ltriSz;
-  nodeSz = nodeSz == 0 ? 32 : nodeSz;
 
   res.buf[BUF_TRI] = device.createBuffer({
     size: triSz,
@@ -176,12 +179,12 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 
   res.buf[BUF_PATH] = device.createBuffer({
     size: WIDTH * HEIGHT * 16 * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_SRAY] = device.createBuffer({
     size: WIDTH * HEIGHT * 12 * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_HIT] = device.createBuffer({
@@ -190,14 +193,21 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[BUF_FRAME] = device.createBuffer({
-    size: 8 * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    size: 16 * 4,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
   });
 
   res.buf[BUF_ACC] = device.createBuffer({
     size: WIDTH * HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
+
+  res.buf[BUF_GRID] = device.createBuffer({
+    size: 8 * 4,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.INDIRECT
+  });
+
+  /////// Bind groups and pipelines
 
   // Generate
   let bindGroupLayout = device.createBindGroupLayout({
@@ -341,6 +351,8 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 
   res.pipelineLayouts[PL_BLIT] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
+  /////// Render pass descriptor
+
   res.renderPassDescriptor =
     { colorAttachments: [
       { undefined, // view
@@ -374,7 +386,7 @@ let last = undefined;
 let frameTimeAvg = undefined;
 let updateDisplay = true;
 
-function render(time)
+async function render(time)
 {
   if(start === undefined)
     start = time;
@@ -394,9 +406,16 @@ function render(time)
   }
 
   // Initialize frame data
-  device.queue.writeBuffer(res.buf[BUF_FRAME], 0, new Uint32Array([WIDTH, HEIGHT, SPP, frame, (sample << 8) | (MAX_BOUNCES & 0xff), WIDTH * HEIGHT /* * SPP */, 0, 0]));
+  device.queue.writeBuffer(res.buf[BUF_FRAME], 0,
+    new Uint32Array([
+      WIDTH, HEIGHT, SPP, frame,
+      (sample << 8) | (MAX_BOUNCES & 0xff), WIDTH * HEIGHT /* * SPP */, 0, 0,
+      //Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1, 0,
+      128, Math.ceil(WIDTH * HEIGHT / (128 * 8)), 1, 0,
+      0, 0, 0, 0]));
 
   let commandEncoder = device.createCommandEncoder();
+  let passEncoder;
 
   // Compute passes
   for(let i=0; i<SPP; i++) {
@@ -404,54 +423,68 @@ function render(time)
     if(sample == 0)
       commandEncoder.clearBuffer(res.buf[BUF_ACC]);
 
-    let passEncoder = commandEncoder.beginComputePass();
+    // Copy counter to indirect workgroup grid dimension buffer
+    commandEncoder.copyBufferToBuffer(res.buf[BUF_FRAME], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
 
-    // Init counter
-    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
-    passEncoder.setPipeline(res.pipelines[PL_CONTROL0]);
-    passEncoder.dispatchWorkgroups(1);
+    passEncoder = commandEncoder.beginComputePass();
 
     // Generate primary rays
     passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE]);
     passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8));
+    passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
     for(let j=0; j<MAX_BOUNCES; j++) {
+
+      if(j > 0)
+        passEncoder = commandEncoder.beginComputePass();
 
       // Intersect
       passEncoder.setBindGroup(0, res.bindGroups[BG_INTERSECT]);
       passEncoder.setPipeline(res.pipelines[PL_INTERSECT]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8));
+      passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
       
       // Shade
       passEncoder.setBindGroup(0, res.bindGroups[BG_SHADE]);
       passEncoder.setPipeline(res.pipelines[PL_SHADE]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8));
+      passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
-      // TODO Read back counters, decide if to trace shadow rays now or later, use workgroup sizes as per path count/shadow ray cnt
+      // Update counters and workgroup grid dimensions
+      passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
+      passEncoder.setPipeline(res.pipelines[PL_CONTROL0]);
+      passEncoder.dispatchWorkgroups(1);
 
-      // Trace shadow rays
+      passEncoder.end();
+
+      // Copy counter to indirect workgroup grid dimension buffer
+      commandEncoder.copyBufferToBuffer(res.buf[BUF_FRAME], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
+
+      passEncoder = commandEncoder.beginComputePass();
+
+      // Trace shadow rays with offset pointing to workgroup dim of shadow rays
       passEncoder.setBindGroup(0, res.bindGroups[BG_SHADOW]);
       passEncoder.setPipeline(res.pipelines[PL_SHADOW]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8));
+      passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 4 * 4);
 
-      // Reset counters and increase sample count after last bounce
+      // Reset shadow ray counter. After last bounce, init to primary ray gen and increase sample count.
       passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
       passEncoder.setPipeline(res.pipelines[j < MAX_BOUNCES - 1 ? PL_CONTROL1 : PL_CONTROL2]);
       passEncoder.dispatchWorkgroups(1);
-    }
 
-    passEncoder.end();
+      passEncoder.end();
+    }
 
     sample++;
   }
  
   // Blit
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
-  const passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
+  
+  passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
+  
   passEncoder.setBindGroup(0, res.bindGroups[BG_BLIT]);
   passEncoder.setPipeline(res.pipelines[PL_BLIT]);
   passEncoder.draw(4);
+  
   passEncoder.end();
 
   device.queue.submit([commandEncoder.finish()]);

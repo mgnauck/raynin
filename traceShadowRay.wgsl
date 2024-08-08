@@ -8,6 +8,8 @@ struct Frame
   pathCnt:      u32,
   extRayCnt:    u32,
   shadowRayCnt: u32,
+  gridDimPath:  vec4u,
+  gridDimSRay:  vec4u
 }
 
 struct Inst
@@ -232,7 +234,8 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 @compute @workgroup_size(8, 8)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = frame.width * globalId.y + globalId.x;
+  //let gidx = (frame.gridDimSRay.x << 3) * globalId.y + globalId.x;
+  let gidx = (128u << 3u) * globalId.y + globalId.x;
   if(gidx >= frame.shadowRayCnt) {
     return;
   }

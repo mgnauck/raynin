@@ -29,6 +29,8 @@ struct Frame
   pathCnt:      u32,
   extRayCnt:    u32,
   shadowRayCnt: u32,
+  gridDimPath:  vec4u,
+  gridDimSRay:  vec4u
 }
 
 struct PathState
@@ -91,22 +93,28 @@ fn sampleEye(r: vec2f) -> vec3f
 @compute @workgroup_size(8, 8)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = frame.width * globalId.y + globalId.x;
+  //let gidx = (frame.gridDimPath.x << 3u) * globalId.y + globalId.x;
+  let gidx = (128u << 3u) * globalId.y + globalId.x;
   if(gidx >= frame.pathCnt) {
     return;
   }
 
-  seed = vec4u(globalId.xy, frame.frame, frame.bouncesSpp >> 8);
+  let w = f32(frame.width);
+  let pix = vec2f(f32(gidx) % w, f32(gidx) / w);
+
+  //seed = vec4u(globalId.xy, frame.frame, frame.bouncesSpp >> 8);
+  seed = vec4u(vec2u(pix), frame.frame, frame.bouncesSpp >> 8);
 
   let r0 = rand4();
 
   // Create new primary ray
   let ori = sampleEye(r0.xy);
-  let dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - ori);
+  //let dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - ori);
+  let dir = normalize(samplePixel(pix, r0.zw) - ori);
 
   // Initialize new path
   pathStates[gidx].seed = seed;
-  pathStates[gidx].throughput = vec3f(1.0);
+  //pathStates[gidx].throughput = vec3f(1.0);
   pathStates[gidx].ori = ori;
   pathStates[gidx].dir = dir;
   pathStates[gidx].pidx = gidx << 8; // Bounce num is implicitly 0
