@@ -2,7 +2,7 @@ const GLTF_SCENE_PATH = "scenes/scene.gltf";
 const GLTF_BIN_PATH = "scenes/scene.bin";
 
 const FULLSCREEN = false;
-const ASPECT = 16.0 / 10.0;
+const ASPECT = 16.0 / 9.0;
 
 const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
@@ -64,10 +64,13 @@ const BG_SHADOW       = 3;
 const BG_CONTROL      = 4;
 const BG_BLIT         = 5;
 
+const WG_SIZE_X       = 8;
+const WG_SIZE_Y       = 8;
+
 let canvas, context, device;
 let wa, res = {};
-let frame = 0;
-let sample = 0;
+let frames = 0;
+let samples = 0;
 
 function handleMouseMoveEvent(e)
 {
@@ -122,7 +125,7 @@ function Wasm(module)
     },
     gpu_create_res: (g, m, i, t, lt, bn) => createGpuResources(g, m, i, t, lt, bn),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
-    reset_samples: () => { sample = 0; }
+    reset_samples: () => { samples = 0; }
   };
 
   this.instantiate = async function()
@@ -408,11 +411,10 @@ async function render(time)
   // Initialize frame data
   device.queue.writeBuffer(res.buf[BUF_FRAME], 0,
     new Uint32Array([
-      WIDTH, HEIGHT, SPP, frame,
-      (sample << 8) | (MAX_BOUNCES & 0xff), WIDTH * HEIGHT /* * SPP */, 0, 0,
-      //Math.ceil(WIDTH / 8), Math.ceil(HEIGHT / 8), 1, 0,
-      128, Math.ceil(WIDTH * HEIGHT / (128 * 8)), 1, 0,
-      0, 0, 0, 0]));
+      WIDTH, HEIGHT, frames, (samples << 8) | (MAX_BOUNCES & 0xff),
+      WIDTH * HEIGHT, 0, 0, 0, // Path cnt, ext ray cnt, shadow ray cnt, pad
+      Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1, 0, // Grid dim path
+      0, 0, 0, 0])); // Grid dim shadow rays
 
   let commandEncoder = device.createCommandEncoder();
   let passEncoder;
@@ -420,7 +422,7 @@ async function render(time)
   // Compute passes
   for(let i=0; i<SPP; i++) {
 
-    if(sample == 0)
+    if(samples == 0)
       commandEncoder.clearBuffer(res.buf[BUF_ACC]);
 
     // Copy counter to indirect workgroup grid dimension buffer
@@ -473,7 +475,7 @@ async function render(time)
       passEncoder.end();
     }
 
-    sample++;
+    samples++;
   }
  
   // Blit
@@ -491,7 +493,7 @@ async function render(time)
 
   // Update scene and renderer for next frame
   wa.update((time - start) / 1000, SPP, CONVERGE);
-  frame++;
+  frames++;
 
   requestAnimationFrame(render);
 }
@@ -527,10 +529,8 @@ async function main()
     return;
   }
 
-  //device = await adapter.requestDevice();
   device = await adapter.requestDevice({ requiredLimits: {
-      maxStorageBuffersPerShaderStage: 10,
-      maxStorageBufferBindingSize: 1073741824 } });
+    maxStorageBuffersPerShaderStage: 10, maxStorageBufferBindingSize: 1073741824 } });
   if(!device) {
     alert("Failed to request logical device.");
     return;

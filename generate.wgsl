@@ -23,12 +23,12 @@ struct Frame
 {
   width:        u32,
   height:       u32,
-  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  samplesTaken: u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
   pathCnt:      u32,
   extRayCnt:    u32,
   shadowRayCnt: u32,
+  pad0:         u32,
   gridDimPath:  vec4u,
   gridDimSRay:  vec4u
 }
@@ -45,7 +45,8 @@ struct PathState
 }
 
 // General constants
-const PI = 3.141592;
+const PI        = 3.141592;
+const WG_SIZE   = vec3u(8, 8, 1);
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<storage, read> frame: Frame;
@@ -90,27 +91,25 @@ fn sampleEye(r: vec2f) -> vec3f
   return eyeSample;
 }
 
-@compute @workgroup_size(8, 8)
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  //let gidx = (frame.gridDimPath.x << 3u) * globalId.y + globalId.x;
-  let gidx = (128u << 3u) * globalId.y + globalId.x;
+  let gidx = frame.gridDimPath.x * WG_SIZE.x * globalId.y + globalId.x;
   if(gidx >= frame.pathCnt) {
     return;
   }
 
-  let w = f32(frame.width);
-  let pix = vec2f(f32(gidx) % w, f32(gidx) / w);
+  // Pixel coordinates
+  let w = frame.width;
+  let pix = vec2u(gidx % w, gidx / w);
 
-  //seed = vec4u(globalId.xy, frame.frame, frame.bouncesSpp >> 8);
-  seed = vec4u(vec2u(pix), frame.frame, frame.bouncesSpp >> 8);
+  seed = vec4u(pix, frame.frame, frame.samplesTaken >> 8);
 
   let r0 = rand4();
 
   // Create new primary ray
   let ori = sampleEye(r0.xy);
-  //let dir = normalize(samplePixel(vec2f(globalId.xy), r0.zw) - ori);
-  let dir = normalize(samplePixel(pix, r0.zw) - ori);
+  let dir = normalize(samplePixel(vec2f(pix), r0.zw) - ori);
 
   // Initialize new path
   pathStates[gidx].seed = seed;

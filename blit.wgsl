@@ -2,12 +2,14 @@ struct Frame
 {
   width:        u32,
   height:       u32,
-  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  samplesTaken: u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
   pathCnt:      u32,
   extRayCnt:    u32,
   shadowRayCnt: u32,
+  pad0:         u32,
+  gridDimPath:  vec4u,
+  gridDimSRay:  vec4u
 }
 
 @group(0) @binding(0) var<storage, read> frame: Frame;
@@ -41,6 +43,6 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
   let gidx = frame.width * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accum[gidx].xyz / f32(frame.bouncesSpp >> 8), vec3f(0.4545)), 1.0);
+  let col = vec4f(pow(accum[gidx].xyz / f32(frame.samplesTaken >> 8), vec3f(0.4545)), 1.0);
   return col;
 }

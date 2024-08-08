@@ -2,12 +2,12 @@ struct Frame
 {
   width:        u32,
   height:       u32,
-  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  samplesTaken: u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
   pathCnt:      u32,
   extRayCnt:    u32,
   shadowRayCnt: u32,
+  pad0:         u32,
   gridDimPath:  vec4u,
   gridDimSRay:  vec4u
 }
@@ -62,6 +62,8 @@ const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
 // General constants
 const EPS                 = 0.0001;
 const INF                 = 3.402823466e+38;
+
+const WG_SIZE             = vec3u(8, 8, 1);
 
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
@@ -231,11 +233,10 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
   return false; // Required by firefox
 }
 
-@compute @workgroup_size(8, 8)
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  //let gidx = (frame.gridDimSRay.x << 3) * globalId.y + globalId.x;
-  let gidx = (128u << 3u) * globalId.y + globalId.x;
+  let gidx = frame.gridDimSRay.x * WG_SIZE.x * globalId.y + globalId.x;
   if(gidx >= frame.shadowRayCnt) {
     return;
   }

@@ -23,12 +23,12 @@ struct Frame
 {
   width:        u32,
   height:       u32,
-  spp:          u32,
   frame:        u32,
-  bouncesSpp:   u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  samplesTaken: u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
   pathCnt:      u32,
   extRayCnt:    atomic<u32>,
   shadowRayCnt: atomic<u32>,
+  pad0:         u32,
   gridDimPath:  vec4u,
   gridDimSRay:  vec4u
 }
@@ -114,6 +114,8 @@ const INF                 = 3.402823466e+38;
 const PI                  = 3.141592;
 const TWO_PI              = 6.283185;
 const INV_PI              = 1.0 / PI;
+
+const WG_SIZE             = vec3u(8, 8, 1);
 
 @group(0) @binding(0) var<uniform> globals: Global;
 @group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
@@ -536,11 +538,10 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   *nrm *= select(-1.0, 1.0, dot(-dir, *nrm) > 0 || (*mtl).emissive > 0.0 || (*mtl).refractive > 0.0);
 }
 
-@compute @workgroup_size(8, 8)
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  //let gidx = (frame.gridDimPath.x << 3u) * globalId.y + globalId.x;
-  let gidx = (128u << 3u) * globalId.y + globalId.x;
+  let gidx = frame.gridDimPath.x * WG_SIZE.x * globalId.y + globalId.x;
   if(gidx >= frame.pathCnt) {
     return;
   }
@@ -621,8 +622,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     shadowRays[sidx].pidx = pidx >> 8;
   }
 
-  // Reached max bounces, terminate path
-  if((pidx & 0xff) == (frame.bouncesSpp & 0xff) - 1) {
+  // Reached max bounces (encoded in samples taken lower 8 bits), terminate path
+  if((pidx & 0xff) == (frame.samplesTaken & 0xff) - 1) {
     return;
   }
 
