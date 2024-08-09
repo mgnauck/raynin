@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include "../util/mat4.h"
 #include "types.h"
-#include "view.h"
 
 typedef struct cam cam;
 typedef struct inst inst;
@@ -34,7 +33,6 @@ typedef struct scene {
   cam         *cams;
   uint32_t    cam_cnt;
   cam         *active_cam;
-  view        view;
   vec3        bg_col;
   uint32_t    dirty;
   uint32_t    curr_ofs;

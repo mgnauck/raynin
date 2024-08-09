@@ -1,22 +1,12 @@
 struct Camera
 {
-  // Config
-  bgColor:      vec3f,
-  tlasNodeOfs:  u32,
-  // Camera
-  eye:          vec3f,
-  vertFov:      f32,
-  right:        vec3f,
-  focDist:      f32,
-  up:           vec3f,
-  focAngle:     f32,
-  // View
-  pixelDeltaX:  vec3f,
-  pad1:         f32,
-  pixelDeltaY:  vec3f,
-  pad2:         f32,
-  pixelTopLeft: vec3f,
-  pad3:         f32
+  eye:              vec3f,
+  halfTanVertFov:   f32,
+  right:            vec3f,
+  focDist:          f32,
+  up:               vec3f,
+  halfTanFocAngle:  f32,
+  bgColor:          vec4f       // w is unused / padding
 }
 
 struct Config
@@ -75,16 +65,31 @@ fn sampleDisk(r: vec2f) -> vec2f
 
 fn samplePixel(pixelPos: vec2f, r: vec2f) -> vec3f
 {
-  var pixelSample = camera.pixelTopLeft + camera.pixelDeltaX * pixelPos.x + camera.pixelDeltaY * pixelPos.y;
-  pixelSample += (r.x - 0.5) * camera.pixelDeltaX + (r.y - 0.5) * camera.pixelDeltaY;
+  let height = 2.0 * camera.halfTanVertFov * camera.focDist;
+  let width = height * f32(config.width) / f32(config.height);
+
+  let right = width * camera.right;
+  let down = -height * camera.up;
+
+  let deltaX = right / f32(config.width);
+  let deltaY = down / f32(config.height);
+
+  let forward = cross(camera.right, camera.up);
+
+  let topLeft = camera.eye - camera.focDist * forward - 0.5 * (right + down);
+  let pixTopLeft = topLeft + 0.5 * (deltaX + deltaY);
+
+  var pixelSample = pixTopLeft + deltaX * pixelPos.x + deltaY * pixelPos.y;
+  pixelSample += (r.x - 0.5) * deltaX + (r.y - 0.5) * deltaY;
+
   return pixelSample;
 }
 
 fn sampleEye(r: vec2f) -> vec3f
 {
   var eyeSample = camera.eye;
-  if(camera.focAngle > 0) {
-    let focRadius = camera.focDist * tan(0.5 * radians(camera.focAngle));
+  if(camera.halfTanFocAngle > 0) {
+    let focRadius = camera.focDist * camera.halfTanFocAngle;
     let diskSample = sampleDisk(r);
     eyeSample += focRadius * (diskSample.x * camera.right + diskSample.y * camera.up);
   }

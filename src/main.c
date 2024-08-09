@@ -7,6 +7,7 @@
 #include "scene/mtl.h"
 #include "sys/log.h"
 #include "sys/mutil.h"
+#include "sys/sutil.h"
 #include "rend/renderer.h"
 #include "scene/scene.h"
 #include "util/vec3.h"
@@ -17,18 +18,16 @@
 #define HEIGHT      600
 #endif
 
-scene         scn;
-scene         *cs = &scn;
-render_data   *rd;
-uint32_t      active_cam = 0;
-bool          orbit_cam = false;
+scene     *s = 0;
+uint32_t  active_cam = 0;
+bool      orbit_cam = false;
 
   __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
 {
-  float speed = vec3_max_comp(vec3_scale(vec3_sub(cs->tlas_nodes[0].max, cs->tlas_nodes[0].min), 0.2f));
+  float speed = vec3_max_comp(vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.2f));
 
-  cam *cam = scene_get_active_cam(cs);
+  cam *cam = scene_get_active_cam(s);
 
   switch(key) {
     case 'a':
@@ -59,37 +58,37 @@ void key_down(unsigned char key, float move_vel)
       orbit_cam = !orbit_cam;
       break;
     case 'u':
-      cs->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, cs->bg_col);
+      s->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, s->bg_col);
       break;
     case 'm':
-      active_cam = (active_cam + 1) % cs->cam_cnt;
-      scene_set_active_cam(cs, active_cam);
-      logc("Setting cam %i of %i cams active", active_cam, cs->cam_cnt);
+      active_cam = (active_cam + 1) % s->cam_cnt;
+      scene_set_active_cam(s, active_cam);
+      logc("Setting cam %i of %i cams active", active_cam, s->cam_cnt);
       break;
     case 'n':
-      active_cam = active_cam > 0 ? active_cam - 1 : cs->cam_cnt - 1;
-      scene_set_active_cam(cs, active_cam);
-      logc("Setting cam %i of %i cams active", active_cam, cs->cam_cnt);
+      active_cam = active_cam > 0 ? active_cam - 1 : s->cam_cnt - 1;
+      scene_set_active_cam(s, active_cam);
+      logc("Setting cam %i of %i cams active", active_cam, s->cam_cnt);
       break;
    case 'r':
       // TODO Call JS to reload shader
       break;
   }
 
-  scene_set_dirty(cs, RT_CAM_VIEW);
+  scene_set_dirty(s, RT_CAM_VIEW);
 }
 
 __attribute__((visibility("default")))
 void mouse_move(int32_t dx, int32_t dy, float look_vel)
 {
-  cam *cam = scene_get_active_cam(cs);
+  cam *cam = scene_get_active_cam(s);
 
   float theta = min(max(acosf(-cam->fwd.y) + (float)dy * look_vel, 0.01f), 0.99f * PI);
   float phi = fmodf(atan2f(-cam->fwd.z, cam->fwd.x) + PI - (float)dx * look_vel, 2.0f * PI);
 
   cam_set_dir(cam, vec3_spherical(theta, phi));
 
-  scene_set_dirty(cs, RT_CAM_VIEW);
+  scene_set_dirty(s, RT_CAM_VIEW);
 }
 
 void init_scene_riow(scene *s)
@@ -206,8 +205,8 @@ void init_scene_riow(scene *s)
         mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
-        //scene_add_mesh_inst(s, sid, mtl_id, transform);
+        //scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
+        scene_add_mesh_inst(s, sid, mtl_id, transform);
       }
     }
   }
@@ -216,35 +215,30 @@ void init_scene_riow(scene *s)
 }
 
 __attribute__((visibility("default")))
-uint8_t init_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
+uint8_t init(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz)
 {
-  //return 0;
-  return import_gltf(cs, gltf, gltf_sz, bin, bin_sz);
-}
+  uint8_t ret = 0;
 
-__attribute__((visibility("default")))
-void init(uint32_t width, uint32_t height, uint32_t spp, uint32_t max_bounces)
-{
-  pcg_srand(42u, 303u);
+  s = malloc(sizeof(*s));
 
-  //init_scene_riow(cs);
+  //init_scene_riow(s);
+  ret = import_gltf(s, gltf, gltf_sz, bin, bin_sz);
 
   logc("max tris: %i, max ltris: %i, max mtls: %i, max insts: %i",
-      cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
+      s->max_tri_cnt, s->max_ltri_cnt, s->max_mtl_cnt, s->max_inst_cnt);
 
-  renderer_gpu_alloc(cs->max_tri_cnt, cs->max_ltri_cnt, cs->max_mtl_cnt, cs->max_inst_cnt);
+  // Allocate resource on the GPU
+  if(ret == 0)
+    renderer_gpu_alloc(s->max_tri_cnt, s->max_ltri_cnt, s->max_mtl_cnt, s->max_inst_cnt);
 
-  rd = renderer_init(cs, width, height, max_bounces);
-  renderer_setup(rd, spp);
+  return ret;
 }
 
 __attribute__((visibility("default")))
-void update(float time, uint32_t spp, bool converge)
+void update(float time, bool converge)
 {
-  scene *s = cs;
-
   // Update camera
-  if(orbit_cam) {
+  if(s->tlas_nodes && orbit_cam) {
     cam *cam = scene_get_active_cam(s);
     vec3  e = vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.4f);
     //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
@@ -253,14 +247,14 @@ void update(float time, uint32_t spp, bool converge)
     scene_set_dirty(s, RT_CAM_VIEW);
   }
 
-  renderer_update(rd, spp, converge);
+  renderer_update(s, converge);
 }
 
 __attribute__((visibility("default")))
 void release()
 {
-  renderer_release(rd);
-  scene_release(&scn);
+  scene_release(s);
+  free(s);
 }
 
 #ifdef NATIVE_BUILD
@@ -287,8 +281,8 @@ int main(int argc, char *argv[])
     goto clean_window;
   }
 
-  init_scene(gltf, strlen(gltf), 0, 0);
-  init(WIDTH, HEIGHT, 1);
+  pcg_srand(42u, 303u);
+  init(gltf, strlen(gltf), 0, 0);
 
   bool      quit = false;
   bool      lock_mouse = false;
@@ -323,8 +317,8 @@ int main(int argc, char *argv[])
     SDL_SetWindowTitle(window, title);
     last = SDL_GetTicks64();
 
-    update((last - start) / 1000.0f, 1, false);
-    renderer_render(rd, screen);
+    update((last - start) / 1000.0f, false);
+    renderer_render(screen, s);
 
     SDL_UpdateWindowSurface(window);
   }

@@ -545,7 +545,7 @@ async function render(time)
   device.queue.submit([commandEncoder.finish()]);
 
   // Update scene and renderer for next frame
-  wa.update((time - start) / 1000, SPP, CONVERGE);
+  wa.update((time - start) / 1000, CONVERGE);
   frames++;
 
   requestAnimationFrame(render);
@@ -562,6 +562,9 @@ function startRender()
     canvas.style.left = 0;
     canvas.style.top = 0;
   }
+
+  // Prepare for rendering
+  wa.update(0, false);
 
   installEventHandler();
   requestAnimationFrame(render);
@@ -621,18 +624,12 @@ async function main()
   let gltfBinPtr = wa.malloc(gltfBin.byteLength);
   wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
 
-  // Init scene from gltf data
-  if(wa.init_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength) > 0) {
+  // Init scene from gltf data and alloc GPU resources
+  if(wa.init(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength) > 0) {
     alert("Failed to initialize scene");
     return;
   }
 
-  // Init renderer
-  if(wa.init(WIDTH, HEIGHT, SPP, MAX_BOUNCES) > 0) {
-    alert("Failed to initialize render resources");
-    return;
-  }
-  
   // Shader modules and pipelines
   if(SM_BLIT.includes("END_blit_wgsl")) {
     createPipeline(PL_GENERATE, await (await fetch("generate.wgsl")).text(), "m");

@@ -1,106 +1,96 @@
 struct Camera
 {
-  // Config
-  bgColor:      vec3f,
-  tlasNodeOfs:  u32,
-  // Camera
-  eye:          vec3f,
-  vertFov:      f32,
-  right:        vec3f,
-  focDist:      f32,
-  up:           vec3f,
-  focAngle:     f32,
-  // View
-  pixelDeltaX:  vec3f,
-  pad1:         f32,
-  pixelDeltaY:  vec3f,
-  pad2:         f32,
-  pixelTopLeft: vec3f,
-  pad3:         f32
+  eye:              vec3f,
+  halfTanVertFov:   f32,
+  right:            vec3f,
+  focDist:          f32,
+  up:               vec3f,
+  halfTanFocAngle:  f32,
+  bgColor:          vec4f           // w is unused / padding
 }
 
 struct Config
 {
-  width:        u32,
-  height:       u32,
-  frame:        u32,
-  samplesTaken: u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
-  pathCnt:      u32,
-  extRayCnt:    atomic<u32>,
-  shadowRayCnt: atomic<u32>,
-  pad0:         u32,
-  gridDimPath:  vec4u,
-  gridDimSRay:  vec4u
+  width:            u32,
+  height:           u32,
+  frame:            u32,
+  samplesTaken:     u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  pathCnt:          u32,
+  extRayCnt:        atomic<u32>,
+  shadowRayCnt:     atomic<u32>,
+  pad0:             u32,
+  gridDimPath:      vec4u,
+  gridDimSRay:      vec4u
 }
 
 struct Mtl
 {
-  col:          vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
-  metallic:     f32,            // Appearance range from dielectric to conductor (0 - 1)
-  roughness:    f32,            // Perfect reflection to completely diffuse (0 - 1)
-  ior:          f32,            // Index of refraction
-  refractive:   f32,            // Flag if material refracts
-  emissive:     f32             // Flag if material is emissive
+  col:              vec3f,          // Base color (diff col of non-metallics, spec col of metallics)
+  metallic:         f32,            // Appearance range from dielectric to conductor (0 - 1)
+  roughness:        f32,            // Perfect reflection to completely diffuse (0 - 1)
+  ior:              f32,            // Index of refraction
+  refractive:       f32,            // Flag if material refracts
+  emissive:         f32             // Flag if material is emissive
 }
 
 struct Inst
 {
-  invTransform: mat3x4f,
-  id:           u32,            // (mtl override id << 16) | (inst id & 0xffff)
-  data:         u32,            // See comment on data in inst.h
-  pad0:         u32,
-  pad1:         u32
+  invTransform:     mat3x4f,
+  id:               u32,            // (mtl override id << 16) | (inst id & 0xffff)
+  data:             u32,            // See comment on data in inst.h
+  pad0:             u32,
+  pad1:             u32
 }
 
 struct Tri
 {
-  v0:           vec3f,
-  mtl:          u32,            // (mtl id & 0xffff)
-  v1:           vec3f,
-  ltriId:       u32,            // Set only if tri has light emitting material
-  v2:           vec3f,
-  pad0:         f32,
-  n0:           vec3f,
-  pad1:         f32,
-  n1:           vec3f,
-  pad2:         f32,
-  n2:           vec3f,
-  pad3:         f32
+  v0:               vec3f,
+  mtl:              u32,            // (mtl id & 0xffff)
+  v1:               vec3f,
+  ltriId:           u32,            // Set only if tri has light emitting material
+  v2:               vec3f,
+  pad0:             f32,
+  n0:               vec3f,
+  pad1:             f32,
+  n1:               vec3f,
+  pad2:             f32,
+  n2:               vec3f,
+  pad3:             f32
 }
 
 struct LTri
 {
-  v0:           vec3f,
-  triId:        u32,            // Original tri id of the mesh (w/o inst data ofs)
-  v1:           vec3f,
-  pad0:         f32,
-  v2:           vec3f,
-  area:         f32,
-  nrm:          vec3f,
-  power:        f32,            // Precalculated product of area and emission
-  emission:     vec3f,
-  pad1:         f32
+  v0:               vec3f,
+  triId:            u32,            // Original tri id of the mesh (w/o inst data ofs)
+  v1:               vec3f,
+  pad0:             f32,
+  v2:               vec3f,
+  area:             f32,
+  nrm:              vec3f,
+  power:            f32,            // Precalculated product of area and emission
+  emission:         vec3f,
+  pad1:             f32
 }
 
 struct ShadowRay
 {
-  ori:          vec3f,          // Shadow ray origin
-  pidx:         u32,            // Pixel index where to deposit contribution
-  dir:          vec3f,          // Position on the light (shadow ray target)
-  dist:         f32,
-  contribution: vec3f,
-  pad0:         f32
+  ori:              vec3f,          // Shadow ray origin
+  pidx:             u32,            // Pixel index where to deposit contribution
+  dir:              vec3f,          // Position on the light (shadow ray target)
+  dist:             f32,
+  contribution:     vec3f,
+  pad0:             f32
 }
 
 struct PathState
 {
-  seed:         vec4u,          // Last rng seed used
-  throughput:   vec3f,
-  pdf:          f32,
-  ori:          vec3f,
-  pad0:         f32,
-  dir:          vec3f,
-  pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
+  seed:             vec4u,          // Last rng seed used
+  throughput:       vec3f,
+  pdf:              f32,
+  ori:              vec3f,
+  pad0:             f32,
+  dir:              vec3f,
+  pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
 // Scene data handling
@@ -554,7 +544,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // No hit, terminate path
   if(hit.x == INF) {
-    accum[pidx >> 8] += vec4f(throughput * camera.bgColor, 1.0);
+    accum[pidx >> 8] += vec4f(throughput * camera.bgColor.xyz, 1.0);
     return;
   }
 

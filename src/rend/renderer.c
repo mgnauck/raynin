@@ -10,6 +10,7 @@
 #include "../sys/log.h"
 #include "../sys/mutil.h"
 #include "../sys/sutil.h"
+#include "../util/vec3.h"
 
 #ifdef NATIVE_BUILD
 #include <SDL.h>
@@ -17,11 +18,7 @@
 #include "intersect.h"
 #endif
 
-// Camera uniform buffer offsets
-#define CAM_BUF_OFS_CAM      16
-#define CAM_BUF_OFS_VIEW     64
-#define CAM_BUF_SIZE         112
-
+#define CAM_BUF_SIZE          64
 #define MAX_UNIFORM_BUF_SIZE  65536
 
 // GPU buffer types
@@ -35,13 +32,6 @@ typedef enum buf_type {
 } buf_type;
 
 static uint32_t total_tris = 0;
-
-typedef struct render_data {
-  scene     *scene;
-  uint16_t  width;
-  uint16_t  height;
-  uint8_t   bounces;
-} render_data;
 
 #ifndef NATIVE_BUILD
 
@@ -90,137 +80,132 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
   return 0;
 }
 
-render_data *renderer_init(scene *s, uint16_t width, uint16_t height, uint32_t max_bounces)
+void renderer_update(scene *s, bool converge)
 {
-  render_data *rd = malloc(sizeof(*rd));
-
-  rd->scene = s;
-  rd->width = width;
-  rd->height = height;
-  rd->bounces = max_bounces;
-
-  return rd;
-}
-
-void renderer_release(render_data *rd)
-{
-  free(rd);
-}
-
-void push_cfg(scene *s)
-{
-  uint32_t cfg[4] = { s->bg_col.x, s->bg_col.y, s->bg_col.z, 2 * total_tris };
-  gpu_write_buf(BT_CAM, 0, cfg, sizeof(cfg));
-}
-
-void push_cam_view(scene *s, uint32_t width, uint32_t height)
-{
-  cam *cam = scene_get_active_cam(s);
-  gpu_write_buf(BT_CAM, CAM_BUF_OFS_CAM, cam, CAM_SIZE);
-
-  view_calc(&s->view, width, height, cam);
-  gpu_write_buf(BT_CAM, CAM_BUF_OFS_VIEW, &s->view, sizeof(s->view));
-
-  scene_clr_dirty(s, RT_CAM_VIEW);
-}
-
-void push_mtls(scene *s)
-{
-  gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
-
-  scene_clr_dirty(s, RT_MTL);
-}
-
-void push_tris(scene *s)
-{
-#ifndef NATIVE_BUILD
-  for(uint32_t i=0; i<s->mesh_cnt; i++) {
-    mesh *m = &s->meshes[i];
-    gpu_write_buf(BT_TRI, m->ofs * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
-  }
-#endif
-
-  scene_clr_dirty(s, RT_TRI);
-}
-
-void push_ltris(scene *s)
-{
-  gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
-
-  scene_clr_dirty(s, RT_LTRI);
-}
-
-void push_blas(scene *s)
-{
-  gpu_write_buf(BT_NODE, 0, s->blas_nodes, 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
-
-  scene_clr_dirty(s, RT_MESH);
-}
-
-void push_tlas(scene *s)
-{
-  gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
-  gpu_write_buf(BT_NODE, 2 * total_tris * sizeof(*s->blas_nodes), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
-
-  scene_clr_dirty(s, RT_INST);
-}
-
-void renderer_setup(render_data *rd, uint32_t spp)
-{
-  scene *s = rd->scene;
-
   scene_prepare_render(s);
 
-  push_cfg(s);
-  push_cam_view(s, rd->width, rd->height);
-  push_mtls(s);
-  push_tris(s);
-  push_ltris(s);
-  push_blas(s);
-  push_tlas(s);
-}
-
-void renderer_update(render_data *rd, uint32_t spp, bool converge)
-{
-  scene *s = rd->scene;
-
-  scene_prepare_render(s);
-
-  if(!converge || rd->scene->dirty > 0)
+  if(!converge || s->dirty > 0)
     reset_samples();
 
-  if(rd->scene->dirty & RT_CAM_VIEW)
-    push_cam_view(s, rd->width, rd->height);
-
-  if(rd->scene->dirty & RT_MTL)
-    push_mtls(s);
-
-  if(rd->scene->dirty & RT_LTRI) {
-    push_ltris(s);
-    if(rd->scene->dirty & RT_TRI) // Ltri id in tri is modified by ltri rebuild
-      push_tris(s);
+  if(s->dirty & RT_CAM_VIEW) {
+#ifndef NATIVE_BUILD
+    cam *cam = scene_get_active_cam(s);
+    float cam_data[16] = {
+      cam->eye.x, cam->eye.y, cam->eye.z, tanf(0.5f * cam->vert_fov * PI / 180.0f),
+      cam->right.x, cam->right.y, cam->right.z, cam->foc_dist,
+      cam->up.x, cam->up.y, cam->up.z, tanf(0.5f * cam->foc_angle * PI / 180.0f),
+      s->bg_col.x, s->bg_col.y, s->bg_col.z, 0.0,
+    };
+    gpu_write_buf(BT_CAM, 0, cam_data, sizeof(cam_data));
+#endif
+    scene_clr_dirty(s, RT_CAM_VIEW);
   }
 
-  if(rd->scene->dirty & RT_INST)
-    push_tlas(s);
+  if(s->dirty & RT_MTL) {
+    gpu_write_buf(BT_MTL, 0, s->mtls, s->mtl_cnt * sizeof(*s->mtls));
+    scene_clr_dirty(s, RT_MTL);
+  }
+
+  if(s->dirty & RT_TRI) {
+#ifndef NATIVE_BUILD
+    for(uint32_t i=0; i<s->mesh_cnt; i++) {
+      mesh *m = &s->meshes[i];
+      gpu_write_buf(BT_TRI, m->ofs * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
+    }
+#endif
+    scene_clr_dirty(s, RT_TRI);
+  }
+
+  if(s->dirty & RT_LTRI) {
+    gpu_write_buf(BT_LTRI, 0, s->ltris, s->ltri_cnt * sizeof(*s->ltris));
+    scene_clr_dirty(s, RT_LTRI);
+  }
+
+  if(s->dirty & RT_MESH) {
+    gpu_write_buf(BT_NODE, 0, s->blas_nodes, 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
+    scene_clr_dirty(s, RT_MESH);
+  }
+
+  if(s->dirty & RT_INST) {
+    gpu_write_buf(BT_INST, 0, s->instances, s->inst_cnt * sizeof(*s->instances));
+    gpu_write_buf(BT_NODE, 2 * total_tris * sizeof(*s->blas_nodes), s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
+    scene_clr_dirty(s, RT_INST);
+  }
 }
 
 #ifdef NATIVE_BUILD
-void renderer_render(render_data *rd, SDL_Surface *surface)
+
+typedef struct view {
+  vec3      pix_delta_x;
+  vec3      pix_delta_y;
+  vec3      pix_top_left;
+} view;
+
+void calc_view(view *v, float width, float height, const cam *c)
+{
+  float v_height = 2.0f * tanf(0.5f * c->vert_fov * PI / 180.0f) * c->foc_dist;
+  float v_width = v_height * width / height;
+
+  vec3 v_right = vec3_scale(c->right, v_width);
+  vec3 v_down = vec3_scale(c->up, -v_height);
+
+  v->pix_delta_x = vec3_scale(v_right, 1.0f / width);
+  v->pix_delta_y = vec3_scale(v_down, 1.0f / height);
+
+  // viewport_top_left = eye - foc_dist * fwd - 0.5 * (viewport_right + viewport_down);
+  vec3 v_top_left = vec3_add(c->eye,
+      vec3_add(
+        vec3_scale(c->fwd, -c->foc_dist),
+        vec3_scale(vec3_add(v_right, v_down), -0.5f)));
+
+  // pixel_top_left = viewport_top_left + 0.5 * (pixel_delta_x + pixel_delta_y)
+  v->pix_top_left = vec3_add(v_top_left,
+      vec3_scale(vec3_add(v->pix_delta_x, v->pix_delta_y), 0.5f));
+}
+
+void create_primary_ray(ray *ray, float x, float y, const cam *c, const view *v)
+{
+  // Viewplane pixel position
+  vec3 pix_smpl = vec3_add(v->pix_top_left, vec3_add(
+        vec3_scale(v->pix_delta_x, x), vec3_scale(v->pix_delta_y, y)));
+
+  // Jitter viewplane position (AA)
+  pix_smpl = vec3_add(pix_smpl, vec3_add(
+        vec3_scale(v->pix_delta_x, pcg_randf() - 0.5f),
+        vec3_scale(v->pix_delta_y, pcg_randf() - 0.5f)));
+
+  // Jitter eye (DOF)
+  vec3 eye_smpl = c->eye;
+  if(c->foc_angle > 0.0f) {
+    float foc_rad = c->foc_dist * tanf(0.5f * c->foc_angle * PI / 180.0f);
+    vec3  disk_smpl = vec3_rand2_disk();
+    eye_smpl = vec3_add(eye_smpl,
+        vec3_scale(vec3_add(
+            vec3_scale(c->right, disk_smpl.x),
+            vec3_scale(c->up, disk_smpl.y)),
+          foc_rad));
+  }
+
+  ray_create(ray, eye_smpl, vec3_unit(vec3_sub(pix_smpl, eye_smpl)));
+}
+
+void renderer_render(SDL_Surface *screen, scene *s)
 {
 #define BLOCK_SIZE 4
-  for(uint32_t j=0; j<rd->height; j+=BLOCK_SIZE) {
-    for(uint32_t i=0; i<rd->width; i+=BLOCK_SIZE) {
+  view v;
+  cam *cam = scene_get_active_cam(s);
+  calc_view(&v, screen->w, screen->h, cam);
+  for(uint32_t j=0; j<(uint32_t)screen->h; j+=BLOCK_SIZE) {
+    for(uint32_t i=0; i<(uint32_t)screen->w; i+=BLOCK_SIZE) {
       for(uint32_t y=0; y<BLOCK_SIZE; y++) {
         for(uint32_t x=0; x<BLOCK_SIZE; x++) {
           ray r;
-          cam *cam = scene_get_active_cam(rd->scene);
-          cam_create_primary_ray(cam, &r, (float)(i + x), (float)(j + y), &rd->scene->view);
+          create_primary_ray(&r, (float)(i + x), (float)(j + y), cam, &v);
           hit h = (hit){ .t = MAX_DISTANCE };
-          intersect_tlas(&r, rd->scene->tlas_nodes, rd->scene->instances, rd->scene->meshes, rd->scene->blas_nodes, &h);
-          vec3 c = rd->scene->bg_col;
+          intersect_tlas(&r, s->tlas_nodes, s->instances, s->meshes, s->blas_nodes, &h);
+          vec3 c = s->bg_col;
           if(h.t < MAX_DISTANCE) {
-            inst *inst = &rd->scene->instances[h.e & INST_ID_MASK];
+            inst *inst = &s->instances[h.e & INST_ID_MASK];
             vec3 nrm;
             uint16_t mtl_id;
             if(!(inst->data & SHAPE_TYPE_BIT)) {
@@ -228,7 +213,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
               mat4 inv_transform;
               mat4_from_row3x4(inv_transform, inst->inv_transform);
               uint32_t tri_idx = h.e >> 16;
-              tri* tri = &rd->scene->meshes[inst->data & MESH_SHAPE_MASK].tris[tri_idx];
+              tri* tri = &s->meshes[inst->data & MESH_SHAPE_MASK].tris[tri_idx];
               nrm = vec3_add(vec3_add(vec3_scale(tri->n1, h.u), vec3_scale(tri->n2, h.v)), vec3_scale(tri->n0, 1.0f - h.u - h.v));
               mat4 inv_transform_t;
               mat4_transpose(inv_transform_t, inv_transform);
@@ -265,7 +250,7 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
               mtl_id = inst->id >> 16;
             }
             nrm = vec3_scale(vec3_add(nrm, (vec3){ 1, 1, 1 }), 0.5f);
-            mtl *m = &rd->scene->mtls[mtl_id];
+            mtl *m = &s->mtls[mtl_id];
             c = m->col;
             //c = vec3_mul(nrm, c);
             //c = nrm;
@@ -273,10 +258,11 @@ void renderer_render(render_data *rd, SDL_Surface *surface)
           uint32_t cr = min(255, (uint32_t)(255 * c.x));
           uint32_t cg = min(255, (uint32_t)(255 * c.y));
           uint32_t cb = min(255, (uint32_t)(255 * c.z));
-          ((uint32_t *)surface->pixels)[rd->width * (j + y) + (i + x)] = 0xff << 24 | cr << 16 | cg << 8 | cb;
+          ((uint32_t *)screen->pixels)[screen->w * (j + y) + (i + x)] = 0xff << 24 | cr << 16 | cg << 8 | cb;
         }
       }
     }
   }
 }
+
 #endif
