@@ -91,7 +91,7 @@ void renderer_update(scene *s, bool converge)
 
   if(s->dirty & RT_CFG) {
     gpu_write_buf(BT_CFG, 16 * 4, &s->bg_col, sizeof(vec3));
-    scene_clr_dirty(s, RT_CAM);
+    scene_clr_dirty(s, RT_CFG);
   }
 
   if(s->dirty & RT_CAM) {
