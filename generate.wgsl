@@ -6,32 +6,32 @@ struct Camera
   focDist:          f32,
   up:               vec3f,
   halfTanFocAngle:  f32,
-  bgColor:          vec4f       // w is unused / padding
 }
 
 struct Config
 {
-  width:        u32,
-  height:       u32,
-  frame:        u32,
-  samplesTaken: u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
-  pathCnt:      u32,
-  extRayCnt:    u32,
-  shadowRayCnt: u32,
-  pad0:         u32,
-  gridDimPath:  vec4u,
-  gridDimSRay:  vec4u
+  width:            u32,
+  height:           u32,
+  frame:            u32,
+  samplesTaken:     u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  pathCnt:          u32,
+  extRayCnt:        u32,
+  shadowRayCnt:     u32,
+  pad0:             u32,
+  gridDimPath:      vec4u,
+  gridDimSRay:      vec4u,
+  bgColor:          vec4f           // w is unused
 }
 
 struct PathState
 {
-  seed:         vec4u,          // Last rng seed used
-  throughput:   vec3f,
-  pdf:          f32,
-  ori:          vec3f,
-  pad0:         f32,
-  dir:          vec3f,
-  pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
+  seed:             vec4u,          // Last rng seed used
+  throughput:       vec3f,
+  pdf:              f32,
+  ori:              vec3f,
+  pad0:             f32,
+  dir:              vec3f,
+  pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
 
 // General constants

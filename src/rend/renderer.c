@@ -18,7 +18,7 @@
 #include "intersect.h"
 #endif
 
-#define CAM_BUF_SIZE          64
+#define CAM_BUF_SIZE          48
 #define MAX_UNIFORM_BUF_SIZE  65536
 
 // GPU buffer types
@@ -29,6 +29,8 @@ typedef enum buf_type {
   BT_TRI,
   BT_LTRI,
   BT_NODE, // blas + tlas
+  // ..more buffers JS-side here..
+  BT_CFG = 10
 } buf_type;
 
 static uint32_t total_tris = 0;
@@ -87,18 +89,21 @@ void renderer_update(scene *s, bool converge)
   if(!converge || s->dirty > 0)
     reset_samples();
 
-  if(s->dirty & RT_CAM_VIEW) {
+  if(s->dirty & RT_CFG) {
+    gpu_write_buf(BT_CFG, 16 * 4, &s->bg_col, sizeof(vec3));
+    scene_clr_dirty(s, RT_CAM);
+  }
+
+  if(s->dirty & RT_CAM) {
 #ifndef NATIVE_BUILD
     cam *cam = scene_get_active_cam(s);
-    float cam_data[16] = {
+    float cam_data[12] = {
       cam->eye.x, cam->eye.y, cam->eye.z, tanf(0.5f * cam->vert_fov * PI / 180.0f),
       cam->right.x, cam->right.y, cam->right.z, cam->foc_dist,
-      cam->up.x, cam->up.y, cam->up.z, tanf(0.5f * cam->foc_angle * PI / 180.0f),
-      s->bg_col.x, s->bg_col.y, s->bg_col.z, 0.0,
-    };
+      cam->up.x, cam->up.y, cam->up.z, tanf(0.5f * cam->foc_angle * PI / 180.0f) };
     gpu_write_buf(BT_CAM, 0, cam_data, sizeof(cam_data));
 #endif
-    scene_clr_dirty(s, RT_CAM_VIEW);
+    scene_clr_dirty(s, RT_CAM);
   }
 
   if(s->dirty & RT_MTL) {
@@ -121,9 +126,9 @@ void renderer_update(scene *s, bool converge)
     scene_clr_dirty(s, RT_LTRI);
   }
 
-  if(s->dirty & RT_MESH) {
+  if(s->dirty & RT_BLAS) {
     gpu_write_buf(BT_NODE, 0, s->blas_nodes, 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
-    scene_clr_dirty(s, RT_MESH);
+    scene_clr_dirty(s, RT_BLAS);
   }
 
   if(s->dirty & RT_INST) {

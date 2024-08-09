@@ -59,6 +59,7 @@ void key_down(unsigned char key, float move_vel)
       break;
     case 'u':
       s->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, s->bg_col);
+      scene_set_dirty(s, RT_CFG);
       break;
     case 'm':
       active_cam = (active_cam + 1) % s->cam_cnt;
@@ -75,7 +76,7 @@ void key_down(unsigned char key, float move_vel)
       break;
   }
 
-  scene_set_dirty(s, RT_CAM_VIEW);
+  scene_set_dirty(s, RT_CAM);
 }
 
 __attribute__((visibility("default")))
@@ -88,7 +89,7 @@ void mouse_move(int32_t dx, int32_t dy, float look_vel)
 
   cam_set_dir(cam, vec3_spherical(theta, phi));
 
-  scene_set_dirty(s, RT_CAM_VIEW);
+  scene_set_dirty(s, RT_CAM);
 }
 
 void init_scene_riow(scene *s)
@@ -244,7 +245,7 @@ void update(float time, bool converge)
     //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
     vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 4.0f, e.z * cosf(time * 0.25f) };
     cam_set(cam, pos, vec3_neg(pos));
-    scene_set_dirty(s, RT_CAM_VIEW);
+    scene_set_dirty(s, RT_CAM);
   }
 
   renderer_update(s, converge);

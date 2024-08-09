@@ -9,7 +9,8 @@ struct Config
   shadowRayCnt: u32,
   pad0:         u32,
   gridDimPath:  vec4u,
-  gridDimSRay:  vec4u
+  gridDimSRay:  vec4u,
+  bgColor:      vec4f
 }
 
 @group(0) @binding(0) var<storage, read> config: Config;

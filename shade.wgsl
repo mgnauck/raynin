@@ -1,14 +1,3 @@
-struct Camera
-{
-  eye:              vec3f,
-  halfTanVertFov:   f32,
-  right:            vec3f,
-  focDist:          f32,
-  up:               vec3f,
-  halfTanFocAngle:  f32,
-  bgColor:          vec4f           // w is unused / padding
-}
-
 struct Config
 {
   width:            u32,
@@ -20,7 +9,8 @@ struct Config
   shadowRayCnt:     atomic<u32>,
   pad0:             u32,
   gridDimPath:      vec4u,
-  gridDimSRay:      vec4u
+  gridDimSRay:      vec4u,
+  bgColor:          vec4f           // w is unused
 }
 
 struct Mtl
@@ -107,17 +97,16 @@ const INV_PI              = 1.0 / PI;
 
 const WG_SIZE             = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> camera: Camera;
-@group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(2) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes by default
-@group(0) @binding(3) var<storage, read> tris: array<Tri>;
-@group(0) @binding(4) var<storage, read> ltris: array<LTri>;
-@group(0) @binding(5) var<storage, read> hits: array<vec4f>;
-@group(0) @binding(6) var<storage, read> pathStatesIn: array<PathState>;
-@group(0) @binding(7) var<storage, read_write> config: Config;
-@group(0) @binding(8) var<storage, read_write> pathStatesOut: array<PathState>;
-@group(0) @binding(9) var<storage, read_write> shadowRays: array<ShadowRay>;
-@group(0) @binding(10) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
+@group(0) @binding(1) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes by default
+@group(0) @binding(2) var<storage, read> tris: array<Tri>;
+@group(0) @binding(3) var<storage, read> ltris: array<LTri>;
+@group(0) @binding(4) var<storage, read> hits: array<vec4f>;
+@group(0) @binding(5) var<storage, read> pathStatesIn: array<PathState>;
+@group(0) @binding(6) var<storage, read_write> config: Config;
+@group(0) @binding(7) var<storage, read_write> pathStatesOut: array<PathState>;
+@group(0) @binding(8) var<storage, read_write> shadowRays: array<ShadowRay>;
+@group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
 
 // State of rng seed
 var<private> seed: vec4u;
@@ -544,7 +533,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // No hit, terminate path
   if(hit.x == INF) {
-    accum[pidx >> 8] += vec4f(throughput * camera.bgColor.xyz, 1.0);
+    accum[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
     return;
   }
 

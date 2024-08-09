@@ -41,7 +41,8 @@ void scene_init(scene *s, uint32_t max_mesh_cnt, uint32_t max_mtl_cnt, uint32_t 
 
   s->curr_ofs     = 0;
 
-  scene_set_dirty(s, RT_CAM_VIEW);
+  scene_set_dirty(s, RT_CFG);
+  scene_set_dirty(s, RT_CAM);
 }
 
 void scene_release(scene *s)
@@ -92,6 +93,8 @@ void scene_finalize(scene *s)
     mesh *m = &s->meshes[i];
     blas_build(&s->blas_nodes[2 * m->ofs], m->tris, m->tri_cnt);
   }
+
+  scene_set_dirty(s, RT_BLAS);
 }
 
 void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
@@ -392,7 +395,7 @@ mesh *scene_acquire_mesh(scene *s)
 
 uint32_t scene_attach_mesh(scene *s, mesh *m, bool is_mesh_emissive)
 {
-  scene_set_dirty(s, RT_MESH);
+  scene_set_dirty(s, RT_TRI);
 
   // Set and update offset into tri buffer
   m->ofs = s->curr_ofs;
