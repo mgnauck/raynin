@@ -64,9 +64,9 @@ struct LTri
 
 struct ShadowRay
 {
-  ori:              vec3f,          // Shadow ray origin
+  ori:              vec3f,
   pidx:             u32,            // Pixel index where to deposit contribution
-  dir:              vec3f,          // Position on the light (shadow ray target)
+  dir:              vec3f,
   dist:             f32,
   contribution:     vec3f,
   pad0:             f32
@@ -112,13 +112,31 @@ const WG_SIZE             = vec3u(16, 16, 1);
 var<private> seed: vec4u;
 
 // PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
-fn rand4() -> vec4f
+/*fn rand4() -> vec4f
 {
   seed = seed * 1664525u + 1013904223u;
   seed += seed.yzxy * seed.wxyz;
   seed = seed ^ (seed >> vec4u(16));
   seed += seed.yzxy * seed.wxyz;
   return ldexp(vec4f((seed >> vec4u(22)) ^ seed), vec4i(-32));
+}*/
+
+fn xorshift() -> u32
+{
+  seed.x ^= seed.x << 13u;
+  seed.x ^= seed.x >> 17u;
+  seed.x ^= seed.x <<  5u;
+  return seed.x;
+}
+
+fn rand() -> f32
+{
+  return bitcast<f32>(0x3f800000 | (xorshift() >> 9)) - 1.0;
+}
+
+fn rand4() -> vec4f
+{
+  return vec4f(rand(), rand(), rand(), rand());
 }
 
 fn maxComp3(v: vec3f) -> f32
