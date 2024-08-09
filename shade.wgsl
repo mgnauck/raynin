@@ -74,11 +74,10 @@ struct ShadowRay
 
 struct PathState
 {
-  seed:             vec4u,          // Last rng seed used
   throughput:       vec3f,
   pdf:              f32,
   ori:              vec3f,
-  pad0:             f32,
+  seed:             u32,
   dir:              vec3f,
   pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
@@ -109,29 +108,15 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
 
 // State of rng seed
-var<private> seed: vec4u;
-
-// PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
-/*fn rand4() -> vec4f
-{
-  seed = seed * 1664525u + 1013904223u;
-  seed += seed.yzxy * seed.wxyz;
-  seed = seed ^ (seed >> vec4u(16));
-  seed += seed.yzxy * seed.wxyz;
-  return ldexp(vec4f((seed >> vec4u(22)) ^ seed), vec4i(-32));
-}*/
-
-fn xorshift() -> u32
-{
-  seed.x ^= seed.x << 13u;
-  seed.x ^= seed.x >> 17u;
-  seed.x ^= seed.x <<  5u;
-  return seed.x;
-}
+var<private> seed: u32;
 
 fn rand() -> f32
 {
-  return bitcast<f32>(0x3f800000 | (xorshift() >> 9)) - 1.0;
+  // xorshift32
+  seed ^= seed << 13u;
+  seed ^= seed >> 17u;
+  seed ^= seed <<  5u;
+  return bitcast<f32>(0x3f800000 | (seed >> 9)) - 1.0;
 }
 
 fn rand4() -> vec4f

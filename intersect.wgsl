@@ -48,11 +48,10 @@ struct Tri
 
 struct PathState
 {
-  seed:         vec4u,          // Last rng seed used
   throughput:   vec3f,
   pdf:          f32,
   ori:          vec3f,
-  pad0:         f32,
+  seed:         u32,
   dir:          vec3f,
   pidx:         u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }

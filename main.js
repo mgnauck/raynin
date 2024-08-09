@@ -185,12 +185,12 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[BUF_PATH0] = device.createBuffer({
-    size: WIDTH * HEIGHT * 16 * 4,
+    size: WIDTH * HEIGHT * 12 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_PATH1] = device.createBuffer({
-    size: WIDTH * HEIGHT * 16 * 4,
+    size: WIDTH * HEIGHT * 12 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 

@@ -25,11 +25,10 @@ struct Config
 
 struct PathState
 {
-  seed:             vec4u,          // Last rng seed used
   throughput:       vec3f,
   pdf:              f32,
   ori:              vec3f,
-  pad0:             f32,
+  seed:             u32,
   dir:              vec3f,
   pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
 }
@@ -43,17 +42,7 @@ const WG_SIZE   = vec3u(16, 16, 1);
 @group(0) @binding(2) var<storage, read_write> pathStates: array<PathState>;
 
 // State of rng seed
-var<private> seed: vec4u;
-
-// PCG 4D from Jarzynski/Olano: Hash Functions for GPU Rendering
-/*fn rand4() -> vec4f
-{
-  seed = seed * 1664525u + 1013904223u;
-  seed += seed.yzxy * seed.wxyz;
-  seed = seed ^ (seed >> vec4u(16));
-  seed += seed.yzxy * seed.wxyz;
-  return ldexp(vec4f((seed >> vec4u(22)) ^ seed), vec4i(-32));
-}*/
+var<private> seed: u32;
 
 fn wangHash(x: u32) -> u32
 {
@@ -65,17 +54,13 @@ fn wangHash(x: u32) -> u32
   return v;
 }
 
-fn xorshift() -> u32
-{
-  seed.x ^= seed.x << 13u;
-  seed.x ^= seed.x >> 17u;
-  seed.x ^= seed.x << 5u;
-  return seed.x;
-}
-
 fn rand() -> f32
 {
-  return bitcast<f32>(0x3f800000 | (xorshift() >> 9)) - 1.0;
+  // xorshift32
+  seed ^= seed << 13u;
+  seed ^= seed >> 17u;
+  seed ^= seed << 5u;
+  return bitcast<f32>(0x3f800000 | (seed >> 9)) - 1.0;
 }
 
 fn rand4() -> vec4f
@@ -136,8 +121,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let w = config.width;
   let pix = vec2u(gidx % w, gidx / w);
 
-  //seed = vec4u(pix, config.frame, config.samplesTaken >> 8);
-  seed.x = wangHash(gidx * 32467 + config.frame * 23 + (config.samplesTaken >> 8) * 6173);
+  seed = wangHash(gidx * 32467 + config.frame * 23 + (config.samplesTaken >> 8) * 6173);
 
   let r0 = rand4();
 
