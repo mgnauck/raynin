@@ -64,6 +64,8 @@ const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
 const EPS                 = 0.0001;
 const INF                 = 3.402823466e+38;
 
+const STACK_EMPTY_MARKER  = 0xfffffffi;
+
 const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
@@ -74,7 +76,12 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(5) var<storage, read_write> hits: array<vec4f>;
 
 // Traversal stacks
-const MAX_NODE_CNT = 32u;
+const MAX_NODE_CNT      = 64u;
+const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
+var<private> nodeStack: array<i32, MAX_NODE_CNT>;
+
+// Syncs the workgroup execution
+var<workgroup> foundLeafCnt: atomic<u32>;
 
 fn minComp3(v: vec3f) -> f32
 {
@@ -155,7 +162,108 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f) -> vec3
   return vec3f(dot(edge2, qvec) * invDet, u, v);
 }
 
+// Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
+// https://code.google.com/archive/p/understanding-the-efficiency-of-ray-traversal-on-gpus/
+// Karras: https://developer.nvidia.com/blog/thinking-parallel-part-ii-tree-traversal-gpu/
 fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
+{
+  let blasOfs = dataOfs << 1;
+
+  var nodeStackIndex = HALF_MAX_NODE_CNT + 1u;
+
+  var nodeIndex = 0i; // Start at root node, but do not test its AABB
+  var leafIndex = 0i; // No leaf node (triangle) yet
+
+  while(nodeIndex != STACK_EMPTY_MARKER) {
+
+    // Interior node traversal
+    while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
+      // Get current node's child indices
+      let nodeChildren = nodes[blasOfs + u32(nodeIndex)].children;
+    
+      // Get child nodes
+      let leftChildNode = &nodes[blasOfs + (nodeChildren & SHORT_MASK)];
+      let rightChildNode = &nodes[blasOfs + (nodeChildren >> 16)];
+
+      // Intersect both child node aabbs
+      let leftChildDist = intersectAabb(ori, invDir, (*hit).x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
+      let rightChildDist = intersectAabb(ori, invDir, (*hit).x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+
+      let traverseLeft = leftChildDist < INF;
+      let traverseRight = rightChildDist < INF;
+
+      if(!traverseLeft && !traverseRight) {
+        // Did not hit any child, pop next node from stack
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
+      } else {
+        // Hit one or both children
+        // Note: select(select(), ..) is not working. Compiler will not complain, but we will see nothing :(
+        if(traverseLeft) {
+          // In case of leaf child (= triangle), set its triangle index negated and incremented by one (to account for tri idx of 0)
+          nodeIndex = select(-i32((*leftChildNode).idx + 1), i32(nodeChildren & SHORT_MASK), (*leftChildNode).children > 0);
+        } else {
+          nodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
+        }
+        if(traverseLeft && traverseRight) {
+          // Push the other child on the stack. We just need to find the right one based on which is the closer one.
+          // Apply same logic regarding leaf nodes as above
+          var tempNodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
+          if(rightChildDist < leftChildDist) {
+            // Swap node indices
+            let t = nodeIndex;
+            nodeIndex = tempNodeIndex;
+            tempNodeIndex = t;
+          }
+          nodeStack[nodeStackIndex] = tempNodeIndex;
+          nodeStackIndex++;
+        }
+      }
+
+      // If our next node is a leaf node (as per above leaf nodes have a negative index) and we found no other leaf yet
+      if(nodeIndex < 0 && leafIndex >= 0) {
+        // Store the found leaf, so we can continue traversal
+        leafIndex = nodeIndex;
+        // Pop next node
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
+        // Another one in the workgroup has found a leaf
+        atomicAdd(&foundLeafCnt, 1u);
+      }
+
+      // Synchronize: Everyone in the workgroup has found a leaf
+      if(atomicLoad(&foundLeafCnt) == WG_SIZE.x * WG_SIZE.y) {
+        break;
+      }
+    }
+
+    // Reset
+    atomicStore(&foundLeafCnt, 0u);
+
+    // Triangle "traversal"
+    while(leafIndex < 0) {
+      // Transform leaf index back into triangle index we had stored at the node
+      let triIdx = u32(abs(leafIndex + 1));
+      // Fetch tri data and intersect
+      let tri = tris[dataOfs + triIdx];
+      let tempHit = intersectTri(ori, dir, tri.v0, tri.v1, tri.v2);
+      if(tempHit.x > EPS && tempHit.x < (*hit).x) {
+        // Store closest hit only
+        *hit = vec4f(tempHit, bitcast<f32>((triIdx << 16) | (instId & SHORT_MASK)));
+      }
+      // Set next potential leaf for processing
+      leafIndex = nodeIndex;
+      if(leafIndex < 0) {
+        // Have another leaf/triangle available
+        // Pop next node (which could very well be a leaf too)
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
+      }
+    }
+  }
+}
+
+/*fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
 {
   let blasOfs = dataOfs << 1;
 
@@ -221,7 +329,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       }
     }
   }
-}
+}*/
 
 fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, vec4f>)
 {
@@ -233,7 +341,108 @@ fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, vec4f>)
   intersectBlas(oriObj, dirObj, 1.0 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
 }
 
+// Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
+// https://code.google.com/archive/p/understanding-the-efficiency-of-ray-traversal-on-gpus/
+// Karras: https://developer.nvidia.com/blog/thinking-parallel-part-ii-tree-traversal-gpu/
 fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
+{
+  let invDir = 1.0 / dir;
+
+  let tlasOfs = arrayLength(&tris) << 1;
+
+  var nodeStackIndex = 1u;
+
+  var nodeIndex = 0i; // Start at root node, but do not test its AABB
+  var leafIndex = 0i; // No leaf node (instance) yet
+ 
+  var hit = vec4f(tfar, 0, 0, 0);
+
+  while(nodeIndex != STACK_EMPTY_MARKER) {
+
+    // Interior node traversal
+    while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
+      // Get current node's child indices
+      let nodeChildren = nodes[tlasOfs + u32(nodeIndex)].children;
+    
+      // Get child nodes
+      let leftChildNode = &nodes[tlasOfs + (nodeChildren & SHORT_MASK)];
+      let rightChildNode = &nodes[tlasOfs + (nodeChildren >> 16)];
+
+      // Intersect both child node aabbs
+      let leftChildDist = intersectAabb(ori, invDir, hit.x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
+      let rightChildDist = intersectAabb(ori, invDir, hit.x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+
+      let traverseLeft = leftChildDist < INF;
+      let traverseRight = rightChildDist < INF;
+
+      if(!traverseLeft && !traverseRight) {
+        // Did not hit any child, pop next node from stack
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
+      } else {
+        // Hit one or both children
+        // Note: select(select(), ..) is not working. Compiler will not complain, but we will see nothing :(
+        if(traverseLeft) {
+          // In case of leaf child (= instance id), set its instance index negated and incremented by one (to account for inst idx of 0)
+          nodeIndex = select(-i32((*leftChildNode).idx + 1), i32(nodeChildren & SHORT_MASK), (*leftChildNode).children > 0);
+        } else {
+          nodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
+        }
+        if(traverseLeft && traverseRight) {
+          // Push the other child on the stack. We just need to find the right one based on which is the closer one.
+          // Apply same logic regarding leaf nodes as above
+          var tempNodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
+          if(rightChildDist < leftChildDist) {
+            // Swap node indices
+            let t = nodeIndex;
+            nodeIndex = tempNodeIndex;
+            tempNodeIndex = t;
+          }
+          nodeStack[nodeStackIndex] = tempNodeIndex;
+          nodeStackIndex++;
+        }
+      }
+
+      // If our next node is a leaf node (as per above leaf nodes have a negative index) and we found no other leaf yet
+      if(nodeIndex < 0 && leafIndex >= 0) {
+        // Store the found leaf, so we can continue traversal
+        leafIndex = nodeIndex;
+        // Pop next node
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
+        // Another one in the workgroup has found a leaf
+        atomicAdd(&foundLeafCnt, 1u);
+      }
+
+      // Synchronize: Everyone in the workgroup has found a leaf
+      if(atomicLoad(&foundLeafCnt) == WG_SIZE.x * WG_SIZE.y) {
+        break;
+      }
+    }
+
+    // Reset
+    atomicStore(&foundLeafCnt, 0u);
+
+    // Instance "traversal"
+    while(leafIndex < 0) {
+      // Transform leaf index back into the instance index we had stored at the node
+      let instIdx = u32(abs(leafIndex + 1));
+      intersectInst(ori, dir, instances[instIdx], &hit);
+      // Set next potential leaf for processing
+      leafIndex = nodeIndex;
+      if(leafIndex < 0) {
+        // Have another leaf/instance available
+        // Pop next node (which could very well be a leaf too)
+        nodeStackIndex--;
+        nodeIndex = nodeStack[nodeStackIndex];
+      }
+    }
+  }
+
+  return hit;
+}
+
+/*fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
 
@@ -300,7 +509,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
   }
 
   return hit; // Required for Naga, Tint will warn on this
-}
+}*/
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
@@ -309,6 +518,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   if(gidx >= config.pathCnt) {
     return;
   }
+
+  // Initial reset
+  // TODO Check in spec if zero by default
+  atomicStore(&foundLeafCnt, 0u);
+  
+  // Push empty marker on stack, so we know when to stop
+  nodeStack[                0] = STACK_EMPTY_MARKER;
+  nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
 
   let ofs = (config.width >> 8) * (config.height >> 8) * (config.samplesTaken & 0xff);
   let pathState = pathStates[ofs + gidx];
