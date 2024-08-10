@@ -185,12 +185,12 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[BUF_PATH0] = device.createBuffer({
-    size: WIDTH * HEIGHT * 12 * 4,
+    size: WIDTH * HEIGHT * 12 * 4 * SPP,
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_PATH1] = device.createBuffer({
-    size: WIDTH * HEIGHT * 12 * 4,
+    size: WIDTH * HEIGHT * 12 * 4 * SPP,
     usage: GPUBufferUsage.STORAGE
   });
 
@@ -457,10 +457,12 @@ async function render(time)
   // Initialize config data
   device.queue.writeBuffer(res.buf[BUF_CFG], 0,
     new Uint32Array([
-      WIDTH, HEIGHT, frames, (samples << 8) | (MAX_BOUNCES & 0xff),
+      (WIDTH << 8) | (MAX_BOUNCES & 0xff), (HEIGHT << 8) | (SPP & 0xff), frames, (samples << 8),
+      // Counters
       WIDTH * HEIGHT, 0, 0, 0, // Path cnt, ext ray cnt, shadow ray cnt, pad
-      Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1, 0, // Grid dim path
-      0, 0, 0, 0 ])); // Grid dim shadow rays
+      // Initial grid dims for indirect dispatches
+      Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1, 0, // Path buffer grid dims
+      0, 0, 0, 0 ])); // Shadow ray buffer grid dims
 
   let commandEncoder = device.createCommandEncoder();
   let passEncoder;
@@ -472,15 +474,17 @@ async function render(time)
     if(samples == 0)
       commandEncoder.clearBuffer(res.buf[BUF_ACC]);
 
-    // Copy counter to indirect workgroup grid dimension buffer
+    // Copy counter to workgroup grid dimension buffer for everything we dispatch indirectly
     commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
 
     passEncoder = commandEncoder.beginComputePass();
 
-    // Generate primary rays
-    passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE0 + bindGroup]);
-    passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
-    passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
+    if(i == 0) {
+      // Directly dispatch generation of primary rays for ALL samples at once
+      passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE0 + bindGroup]);
+      passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT * SPP / WG_SIZE_Y), 1);
+    }
 
     for(let j=0; j<MAX_BOUNCES; j++) {
 
@@ -525,6 +529,8 @@ async function render(time)
       bindGroup = 1 - bindGroup;
     }
 
+    // Reset to the initial bind group pointing at the path state buffer with pregenerated primary rays
+    bindGroup = 0;
     samples++;
   }
  

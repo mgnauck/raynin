@@ -1,9 +1,9 @@
 struct Config
 {
-  width:            u32,
-  height:           u32,
-  frame:            u32,
-  samplesTaken:     u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
+  width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
+  height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
+  frame:            u32,            // Current frame number
+  samplesTaken:     u32,            // Bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
   pathCnt:          u32,
   extRayCnt:        atomic<u32>,
   shadowRayCnt:     atomic<u32>,
@@ -529,8 +529,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
+  let w = config.width;
+  let ofs = (w >> 8) * (config.height >> 8) * (config.samplesTaken & 0xff);
   let hit = hits[gidx];
-  let pstate = pathStatesIn[gidx];
+  let pstate = pathStatesIn[ofs + gidx];
   let pidx = pstate.pidx;
   var throughput = select(pstate.throughput, vec3f(1.0), (pidx & 0xff) == 0); // Avoid mem access
 
@@ -605,8 +607,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     shadowRays[sidx].pidx = pidx >> 8;
   }
 
-  // Reached max bounces (encoded in samples taken lower 8 bits), terminate path
-  if((pidx & 0xff) == (config.samplesTaken & 0xff) - 1) {
+  // Reached max bounces (encoded in width lower 8 bits), terminate path
+  if((pidx & 0xff) == (w & 0xff) - 1) {
     return;
   }
 
@@ -623,7 +625,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   throughput *= evalMaterial(mtl, -pstate.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the path state buffer
-  let gidxNext = atomicAdd(&config.extRayCnt, 1u);
+  let gidxNext = ofs + atomicAdd(&config.extRayCnt, 1u);
 
   // Init next path segment 
   pathStatesOut[gidxNext].seed = seed;

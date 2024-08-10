@@ -1,59 +1,59 @@
 struct Config
 {
-  width:        u32,
-  height:       u32,
-  frame:        u32,
-  samplesTaken: u32,            // Bits 8-31 for samples taken, bits 0-7 max bounces
-  pathCnt:      u32,
-  extRayCnt:    u32,
-  shadowRayCnt: u32,
-  pad0:         u32,
-  gridDimPath:  vec4u,
-  gridDimSRay:  vec4u,
-  bgColor:      vec4f
+  width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
+  height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
+  frame:            u32,            // Current frame number 
+  samplesTaken:     u32,            // Bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num 
+  pathCnt:          u32,
+  extRayCnt:        u32,
+  shadowRayCnt:     u32,
+  pad0:             u32,
+  gridDimPath:      vec4u,
+  gridDimSRay:      vec4u,
+  bgColor:          vec4f
 }
 
 struct Inst
 {
-  invTransform: mat3x4f,
-  id:           u32,            // (mtl override id << 16) | (inst id & 0xffff)
-  data:         u32,            // See comment on data in inst.h
-  pad0:         u32,
-  pad1:         u32
+  invTransform:     mat3x4f,
+  id:               u32,            // (mtl override id << 16) | (inst id & 0xffff)
+  data:             u32,            // See comment on data in inst.h
+  pad0:             u32,
+  pad1:             u32
 }
 
 struct Node
 {
-  aabbMin:      vec3f,
-  children:     u32,            // 2x 16 bits for left and right child
-  aabbMax:      vec3f,
-  idx:          u32             // Assigned on leaf nodes only
+  aabbMin:          vec3f,
+  children:         u32,            // 2x 16 bits for left and right child
+  aabbMax:          vec3f,
+  idx:              u32             // Assigned on leaf nodes only
 }
 
 struct Tri
 {
-  v0:           vec3f,
-  mtl:          u32,            // (mtl id & 0xffff)
-  v1:           vec3f,
-  ltriId:       u32,            // Set only if tri has light emitting material
-  v2:           vec3f,
-  pad0:         f32,
-  n0:           vec3f,
-  pad1:         f32,
-  n1:           vec3f,
-  pad2:         f32,
-  n2:           vec3f,
-  pad3:         f32
+  v0:               vec3f,
+  mtl:              u32,            // (mtl id & 0xffff)
+  v1:               vec3f,
+  ltriId:           u32,            // Set only if tri has light emitting material
+  v2:               vec3f,
+  pad0:             f32,
+  n0:               vec3f,
+  pad1:             f32,
+  n1:               vec3f,
+  pad2:             f32,
+  n2:               vec3f,
+  pad3:             f32
 }
 
 struct ShadowRay
 {
-  ori:          vec3f,          // Shadow ray origin
-  pidx:         u32,            // Pixel index where to deposit contribution
-  dir:          vec3f,          // Position on the light (shadow ray target)
-  dist:         f32,
-  contribution: vec3f,
-  pad0:         f32
+  ori:              vec3f,          // Shadow ray origin
+  pidx:             u32,            // Pixel index where to deposit contribution
+  dir:              vec3f,          // Position on the light (shadow ray target)
+  dist:             f32,
+  contribution:     vec3f,
+  pad0:             f32
 }
 
 // Scene data handling
