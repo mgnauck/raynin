@@ -186,11 +186,18 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       let rightChildNode = &nodes[blasOfs + (nodeChildren >> 16)];
 
       // Intersect both child node aabbs
-      let leftChildDist = intersectAabb(ori, invDir, (*hit).x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      let rightChildDist = intersectAabb(ori, invDir, (*hit).x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+      let t0L = ((*leftChildNode).aabbMin - ori) * invDir;
+      let t0R = ((*rightChildNode).aabbMin - ori) * invDir;
+      let t1L = ((*leftChildNode).aabbMax - ori) * invDir;
+      let t1R = ((*rightChildNode).aabbMax - ori) * invDir;
 
-      let traverseLeft = leftChildDist < INF;
-      let traverseRight = rightChildDist < INF;
+      let tminL = maxComp4(vec4f(min(t0L, t1L), EPS));
+      let tminR = maxComp4(vec4f(min(t0R, t1R), EPS));
+      let tmaxL = minComp4(vec4f(max(t0L, t1L), (*hit).x));
+      let tmaxR = minComp4(vec4f(max(t0R, t1R), (*hit).x));
+
+      let traverseLeft = tminL <= tmaxL;
+      let traverseRight = tminR <= tmaxR;
 
       if(!traverseLeft && !traverseRight) {
         // Did not hit any child, pop next node from stack
@@ -209,7 +216,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
           // Push the other child on the stack. We just need to find the right one based on which is the closer one.
           // Apply same logic regarding leaf nodes as above
           var tempNodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
-          if(rightChildDist < leftChildDist) {
+          if(tminR < tminL) {
             // Swap node indices
             let t = nodeIndex;
             nodeIndex = tempNodeIndex;
@@ -369,11 +376,18 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
       let rightChildNode = &nodes[tlasOfs + (nodeChildren >> 16)];
 
       // Intersect both child node aabbs
-      let leftChildDist = intersectAabb(ori, invDir, hit.x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax);
-      let rightChildDist = intersectAabb(ori, invDir, hit.x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax);
+      let t0L = ((*leftChildNode).aabbMin - ori) * invDir;
+      let t0R = ((*rightChildNode).aabbMin - ori) * invDir;
+      let t1L = ((*leftChildNode).aabbMax - ori) * invDir;
+      let t1R = ((*rightChildNode).aabbMax - ori) * invDir;
 
-      let traverseLeft = leftChildDist < INF;
-      let traverseRight = rightChildDist < INF;
+      let tminL = maxComp4(vec4f(min(t0L, t1L), EPS));
+      let tminR = maxComp4(vec4f(min(t0R, t1R), EPS));
+      let tmaxL = minComp4(vec4f(max(t0L, t1L), hit.x));
+      let tmaxR = minComp4(vec4f(max(t0R, t1R), hit.x));
+
+      let traverseLeft = tminL <= tmaxL;
+      let traverseRight = tminR <= tmaxR;
 
       if(!traverseLeft && !traverseRight) {
         // Did not hit any child, pop next node from stack
@@ -392,7 +406,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
           // Push the other child on the stack. We just need to find the right one based on which is the closer one.
           // Apply same logic regarding leaf nodes as above
           var tempNodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
-          if(rightChildDist < leftChildDist) {
+          if(tminR < tminL) {
             // Swap node indices
             let t = nodeIndex;
             nodeIndex = tempNodeIndex;
