@@ -58,8 +58,7 @@ const PL_CONTROL1     = 5;
 const PL_CONTROL2     = 6;
 const PL_BLIT         = 7;
 
-const BG_GENERATE0    = 0;
-const BG_GENERATE1    = 1;
+const BG_GENERATE     = 0;
 const BG_INTERSECT0   = 2;
 const BG_INTERSECT1   = 3;
 const BG_SHADE0       = 4;
@@ -230,21 +229,12 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     ]
   });
 
-  res.bindGroups[BG_GENERATE0] = device.createBindGroup({
+  res.bindGroups[BG_GENERATE] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CAM] } },
       { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 2, resource: { buffer: res.buf[BUF_PATH0] } },
-    ]
-  });
-
-  res.bindGroups[BG_GENERATE1] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_PATH1] } },
     ]
   });
 
@@ -481,9 +471,9 @@ async function render(time)
 
     if(i == 0) {
       // Directly dispatch generation of primary rays for ALL samples at once
-      passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE0 + bindGroup]);
+      passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE]);
       passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT * SPP / WG_SIZE_Y), 1);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16 /* Fixed for ray gen */), Math.ceil(HEIGHT * SPP / 16), 1);
     }
 
     for(let j=0; j<MAX_BOUNCES; j++) {

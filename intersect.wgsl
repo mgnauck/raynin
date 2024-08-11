@@ -520,7 +520,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Initial reset
-  // TODO Check in spec if zero by default
   atomicStore(&foundLeafCnt, 0u);
   
   // Push empty marker on stack, so we know when to stop
