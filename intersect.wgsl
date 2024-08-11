@@ -78,10 +78,10 @@ const WG_SIZE             = vec3u(16, 16, 1);
 // Traversal stacks
 const MAX_NODE_CNT      = 64u;
 const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
-var<private> nodeStack: array<i32, MAX_NODE_CNT>;
+var<private> nodeStack: array<u32, MAX_NODE_CNT>;
 
 // Syncs the workgroup execution
-var<workgroup> foundLeafCnt: atomic<u32>;
+//var<workgroup> foundLeafCnt: atomic<u32>;
 
 fn minComp3(v: vec3f) -> f32
 {
@@ -165,7 +165,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f) -> vec3
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
 // https://code.google.com/archive/p/understanding-the-efficiency-of-ray-traversal-on-gpus/
 // Karras: https://developer.nvidia.com/blog/thinking-parallel-part-ii-tree-traversal-gpu/
-fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
+/*fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
 {
   let blasOfs = dataOfs << 1;
 
@@ -174,55 +174,44 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
   var nodeIndex = 0i; // Start at root node, but do not test its AABB
   var leafIndex = 0i; // No leaf node (triangle) yet
 
+  // Ordered DF traversal, with postponed leaf node processing for improved WG sync
   while(nodeIndex != STACK_EMPTY_MARKER) {
 
     // Interior node traversal
     while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
       // Get current node's child indices
       let nodeChildren = nodes[blasOfs + u32(nodeIndex)].children;
-    
+
       // Get child nodes
       let leftChildNode = &nodes[blasOfs + (nodeChildren & SHORT_MASK)];
       let rightChildNode = &nodes[blasOfs + (nodeChildren >> 16)];
 
       // Intersect both child node aabbs
-      let t0L = ((*leftChildNode).aabbMin - ori) * invDir;
-      let t0R = ((*rightChildNode).aabbMin - ori) * invDir;
-      let t1L = ((*leftChildNode).aabbMax - ori) * invDir;
-      let t1R = ((*rightChildNode).aabbMax - ori) * invDir;
+      var childDists = array<f32, 2>(
+        intersectAabb(ori, invDir, (*hit).x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
+        intersectAabb(ori, invDir, (*hit).x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
-      let tminL = maxComp4(vec4f(min(t0L, t1L), EPS));
-      let tminR = maxComp4(vec4f(min(t0R, t1R), EPS));
-      let tmaxL = minComp4(vec4f(max(t0L, t1L), (*hit).x));
-      let tmaxR = minComp4(vec4f(max(t0R, t1R), (*hit).x));
+      // Find indices of nearer and farther child
+      let near = select(1u, 0u, childDists[0] < childDists[1]);
+      let far = 1u - near;
 
-      let traverseLeft = tminL <= tmaxL;
-      let traverseRight = tminR <= tmaxR;
-
-      if(!traverseLeft && !traverseRight) {
+      if(childDists[near] == INF) {
         // Did not hit any child, pop next node from stack
         nodeStackIndex--;
         nodeIndex = nodeStack[nodeStackIndex];
       } else {
         // Hit one or both children
-        // Note: select(select(), ..) is not working. Compiler will not complain, but we will see nothing :(
-        if(traverseLeft) {
-          // In case of leaf child (= triangle), set its triangle index negated and incremented by one (to account for tri idx of 0)
-          nodeIndex = select(-i32((*leftChildNode).idx + 1), i32(nodeChildren & SHORT_MASK), (*leftChildNode).children > 0);
-        } else {
-          nodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
-        }
-        if(traverseLeft && traverseRight) {
-          // Push the other child on the stack. We just need to find the right one based on which is the closer one.
-          // Apply same logic regarding leaf nodes as above
-          var tempNodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
-          if(tminR < tminL) {
-            // Swap node indices
-            let t = nodeIndex;
-            nodeIndex = tempNodeIndex;
-            tempNodeIndex = t;
-          }
-          nodeStack[nodeStackIndex] = tempNodeIndex;
+        let childNodeIdx = array<u32, 2>( (*leftChildNode).idx, (*rightChildNode).idx );
+        let childChildren = array<u32, 2>( (*leftChildNode).children, (*rightChildNode).children );
+
+        // Set near child as next node
+        // In case of leaf child, set its triangle index negated and incremented by one (to account for idx of 0)
+        nodeIndex = select(-i32(childNodeIdx[near] + 1), i32((nodeChildren >> (near << 4u)) & SHORT_MASK), childChildren[near] > 0);
+
+        if(childDists[far] < INF) {
+          // Push far child on stack. Do the same as above in case this child is a leaf.
+          nodeStack[nodeStackIndex] =
+            select(-i32(childNodeIdx[far] + 1), i32((nodeChildren >> (far << 4u)) & SHORT_MASK), childChildren[far] > 0);
           nodeStackIndex++;
         }
       }
@@ -268,16 +257,16 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       }
     }
   }
-}
+}*/
 
-/*fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
+fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
 {
   let blasOfs = dataOfs << 1;
 
   var nodeIndex = 0u;
   var nodeStackIndex = HALF_MAX_NODE_CNT;
 
-  // Sorted DF traversal, visit near child first
+  // Ordered DF traversal, visit near child first
   loop {
     let node = &nodes[blasOfs + nodeIndex];
     let nodeChildren = (*node).children;
@@ -302,10 +291,8 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     }
 
     // Interior node
-    var childIndices = array<u32, 2>( nodeChildren & SHORT_MASK, nodeChildren >> 16 );
-
-    let leftChildNode = &nodes[blasOfs + childIndices[0]];
-    let rightChildNode = &nodes[blasOfs + childIndices[1]];
+    let leftChildNode = &nodes[blasOfs + (nodeChildren & SHORT_MASK)];
+    let rightChildNode = &nodes[blasOfs + (nodeChildren >> 16)];
 
     // Intersect both child node aabbs
     var childDists = array<f32, 2>(
@@ -313,8 +300,8 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       intersectAabb(ori, invDir, (*hit).x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
     // Find indices of nearer and farther child
-    let near = select(1, 0, childDists[0] < childDists[1]);
-    let far = 1 - near;
+    let near = select(1u, 0u, childDists[0] < childDists[1]);
+    let far = 1u - near;
 
     if(childDists[near] == INF) {
       // Missed both children
@@ -327,15 +314,15 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       }
     } else {
       // Continue with nearer child node
-      nodeIndex = childIndices[near];
+      nodeIndex = (nodeChildren >> (near << 4u)) & SHORT_MASK;
       // Push farther child on stack if also within distance
       if(childDists[far] < INF) {
-        nodeStack[nodeStackIndex] = childIndices[far];
+        nodeStack[nodeStackIndex] = (nodeChildren >> (far << 4u)) & SHORT_MASK;
         nodeStackIndex++;
       }
     }
   }
-}*/
+}
 
 fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, vec4f>)
 {
@@ -350,7 +337,7 @@ fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, vec4f>)
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
 // https://code.google.com/archive/p/understanding-the-efficiency-of-ray-traversal-on-gpus/
 // Karras: https://developer.nvidia.com/blog/thinking-parallel-part-ii-tree-traversal-gpu/
-fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
+/*fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
 
@@ -363,55 +350,44 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
  
   var hit = vec4f(tfar, 0, 0, 0);
 
+  // Ordered DF traversal, with postponed leaf node processing for improved WG sync
   while(nodeIndex != STACK_EMPTY_MARKER) {
 
     // Interior node traversal
     while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
       // Get current node's child indices
       let nodeChildren = nodes[tlasOfs + u32(nodeIndex)].children;
-    
+
       // Get child nodes
       let leftChildNode = &nodes[tlasOfs + (nodeChildren & SHORT_MASK)];
       let rightChildNode = &nodes[tlasOfs + (nodeChildren >> 16)];
 
       // Intersect both child node aabbs
-      let t0L = ((*leftChildNode).aabbMin - ori) * invDir;
-      let t0R = ((*rightChildNode).aabbMin - ori) * invDir;
-      let t1L = ((*leftChildNode).aabbMax - ori) * invDir;
-      let t1R = ((*rightChildNode).aabbMax - ori) * invDir;
+      var childDists = array<f32, 2>(
+        intersectAabb(ori, invDir, hit.x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
+        intersectAabb(ori, invDir, hit.x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
-      let tminL = maxComp4(vec4f(min(t0L, t1L), EPS));
-      let tminR = maxComp4(vec4f(min(t0R, t1R), EPS));
-      let tmaxL = minComp4(vec4f(max(t0L, t1L), hit.x));
-      let tmaxR = minComp4(vec4f(max(t0R, t1R), hit.x));
+      // Find indices of nearer and farther child
+      let near = select(1u, 0u, childDists[0] < childDists[1]);
+      let far = 1u - near;
 
-      let traverseLeft = tminL <= tmaxL;
-      let traverseRight = tminR <= tmaxR;
-
-      if(!traverseLeft && !traverseRight) {
+      if(childDists[near] == INF) {
         // Did not hit any child, pop next node from stack
         nodeStackIndex--;
         nodeIndex = nodeStack[nodeStackIndex];
       } else {
         // Hit one or both children
-        // Note: select(select(), ..) is not working. Compiler will not complain, but we will see nothing :(
-        if(traverseLeft) {
-          // In case of leaf child (= instance id), set its instance index negated and incremented by one (to account for inst idx of 0)
-          nodeIndex = select(-i32((*leftChildNode).idx + 1), i32(nodeChildren & SHORT_MASK), (*leftChildNode).children > 0);
-        } else {
-          nodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
-        }
-        if(traverseLeft && traverseRight) {
-          // Push the other child on the stack. We just need to find the right one based on which is the closer one.
-          // Apply same logic regarding leaf nodes as above
-          var tempNodeIndex = select(-i32((*rightChildNode).idx + 1), i32(nodeChildren >> 16), (*rightChildNode).children > 0);
-          if(tminR < tminL) {
-            // Swap node indices
-            let t = nodeIndex;
-            nodeIndex = tempNodeIndex;
-            tempNodeIndex = t;
-          }
-          nodeStack[nodeStackIndex] = tempNodeIndex;
+        let childNodeIdx = array<u32, 2>( (*leftChildNode).idx, (*rightChildNode).idx );
+        let childChildren = array<u32, 2>( (*leftChildNode).children, (*rightChildNode).children );
+
+        // Set near child as next node
+        // In case of leaf child, set its instance index negated and incremented by one (to account for idx of 0)
+        nodeIndex = select(-i32(childNodeIdx[near] + 1), i32((nodeChildren >> (near << 4u)) & SHORT_MASK), childChildren[near] > 0);
+
+        if(childDists[far] < INF) {
+          // Push far child on stack. Do the same as above in case this child is a leaf.
+          nodeStack[nodeStackIndex] =
+            select(-i32(childNodeIdx[far] + 1), i32((nodeChildren >> (far << 4u)) & SHORT_MASK), childChildren[far] > 0);
           nodeStackIndex++;
         }
       }
@@ -453,9 +429,9 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
   }
 
   return hit;
-}
+}*/
 
-/*fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
+fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
 
@@ -486,10 +462,8 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
     }
 
     // Interior node
-    var childIndices = array<u32, 2>( nodeChildren & SHORT_MASK, nodeChildren >> 16 );
-
-    let leftChildNode = &nodes[tlasOfs + childIndices[0]];
-    let rightChildNode = &nodes[tlasOfs + childIndices[1]];
+    let leftChildNode = &nodes[tlasOfs + (nodeChildren & SHORT_MASK)];
+    let rightChildNode = &nodes[tlasOfs + (nodeChildren >> 16)];
 
     // Intersect both child node aabbs
     var childDists = array<f32, 2>(
@@ -497,8 +471,8 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
       intersectAabb(ori, invDir, hit.x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
     // Find indices of nearer and farther child
-    let near = select(1, 0, childDists[0] < childDists[1]);
-    let far = 1 - near;
+    let near = select(1u, 0u, childDists[0] < childDists[1]);
+    let far = 1u - near;
 
     if(childDists[near] == INF) {
       // Missed both children
@@ -511,17 +485,17 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
       }
     } else {
       // Continue with near child
-      nodeIndex = childIndices[near];
+      nodeIndex = (nodeChildren >> (near << 4u)) & SHORT_MASK;
       // Push farther child on stack if also within distance
       if(childDists[far] < INF) {
-        nodeStack[nodeStackIndex] = childIndices[far];
+        nodeStack[nodeStackIndex] = (nodeChildren >> (far << 4u)) & SHORT_MASK;
         nodeStackIndex++;
       } 
     }
   }
 
   return hit; // Required for Naga, Tint will warn on this
-}*/
+}
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
@@ -532,11 +506,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Initial reset
-  atomicStore(&foundLeafCnt, 0u);
+  /*atomicStore(&foundLeafCnt, 0u);
   
   // Push empty marker on stack, so we know when to stop
   nodeStack[                0] = STACK_EMPTY_MARKER;
   nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
+  */
 
   let ofs = (config.width >> 8) * (config.height >> 8) * (config.samplesTaken & 0xff);
   let pathState = pathStates[ofs + gidx];
