@@ -78,7 +78,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 // Traversal stacks
 const MAX_NODE_CNT      = 64u;
 const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
-var<private> nodeStack: array<u32, MAX_NODE_CNT>;
+var<private> nodeStack: array<u32, MAX_NODE_CNT>; // For Aila traversal, switch to i32
 
 // Syncs the workgroup execution
 //var<workgroup> foundLeafCnt: atomic<u32>;
@@ -304,8 +304,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     let far = 1u - near;
 
     if(childDists[near] == INF) {
-      // Missed both children
-      // Check the stack and continue traversal if something left
+      // Did not hit any child, pop next node from stack
       if(nodeStackIndex == HALF_MAX_NODE_CNT) {
         return;
       } else {
@@ -475,8 +474,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
     let far = 1u - near;
 
     if(childDists[near] == INF) {
-      // Missed both children
-      // Check the stack and continue traversal if something left
+      // Did not hit any child, pop next node from stack
       if(nodeStackIndex == 0) {
         return hit;
       } else {
