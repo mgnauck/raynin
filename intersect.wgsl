@@ -64,7 +64,7 @@ const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
 const EPS                 = 0.0001;
 const INF                 = 3.402823466e+38;
 
-const STACK_EMPTY_MARKER  = 0xfffffffi;
+//const STACK_EMPTY_MARKER  = 0xfffffffi;
 
 const WG_SIZE             = vec3u(16, 16, 1);
 
@@ -295,7 +295,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     let rightChildNode = &nodes[blasOfs + (nodeChildren >> 16)];
 
     // Intersect both child node aabbs
-    var childDists = array<f32, 2>(
+    let childDists = array<f32, 2>(
       intersectAabb(ori, invDir, (*hit).x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
       intersectAabb(ori, invDir, (*hit).x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
@@ -466,7 +466,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
     let rightChildNode = &nodes[tlasOfs + (nodeChildren >> 16)];
 
     // Intersect both child node aabbs
-    var childDists = array<f32, 2>(
+    let childDists = array<f32, 2>(
       intersectAabb(ori, invDir, hit.x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
       intersectAabb(ori, invDir, hit.x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
