@@ -275,8 +275,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
   let blasOfs = dataOfs << 1;
 
   var nodeIndex = 0u;
-  var nodeStackIndex = 0u;
-  var nodeStack: array<u32, MAX_NODE_CNT>;
+  var nodeStackIndex = HALF_MAX_NODE_CNT;
 
   // Sorted DF traversal, visit near child first
   loop {
@@ -293,7 +292,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
         *hit = vec4f(tempHit, bitcast<f32>((nodeIdx << 16) | (instId & SHORT_MASK)));
       }
       // Check the stack and continue traversal if something left
-      if(nodeStackIndex == 0) {
+      if(nodeStackIndex == HALF_MAX_NODE_CNT) {
         return;
       } else {
         nodeStackIndex--;
@@ -320,7 +319,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     if(childDists[near] == INF) {
       // Missed both children
       // Check the stack and continue traversal if something left
-      if(nodeStackIndex == 0) {
+      if(nodeStackIndex == HALF_MAX_NODE_CNT) {
         return;
       } else {
         nodeStackIndex--;
@@ -464,7 +463,6 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 
   var nodeIndex = 0u;
   var nodeStackIndex = 0u;
-  var nodeStack: array<u32, MAX_NODE_CNT>;
 
   var hit = vec4f(tfar, 0, 0, 0);
 
