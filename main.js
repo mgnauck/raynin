@@ -458,7 +458,6 @@ async function render(time)
   let passEncoder;
 
   // Compute passes
-  let bindGroup = 0;
   for(let i=0; i<SPP; i++) {
 
     if(samples == 0)
@@ -476,6 +475,7 @@ async function render(time)
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16 /* Fixed for ray gen */), Math.ceil(HEIGHT * SPP / 16), 1);
     }
 
+    let bindGroup = 0;
     for(let j=0; j<MAX_BOUNCES; j++) {
 
       if(j > 0)
@@ -519,8 +519,6 @@ async function render(time)
       bindGroup = 1 - bindGroup;
     }
 
-    // Reset to the initial bind group pointing at the path state buffer with pregenerated primary rays
-    bindGroup = 0;
     samples++;
   }
  
