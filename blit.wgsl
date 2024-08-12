@@ -19,7 +19,8 @@ struct Config
 @vertex
 fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 {
-  // Workaround for below code which does work with Firefox' naga
+  /*
+  // Workaround for below code which does work with with Naga
   switch(vertexIndex)
   {
     case 0u: {
@@ -35,9 +36,10 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
       return vec4f(vec2f(1.0, -1.0), 0.0, 1.0);
     }
   }
+  */
 
-  //let pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0), vec2f(1.0), vec2f(1.0, -1.0));
-  //return vec4f(pos[vertexIndex], 0.0, 1.0);
+  let pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0), vec2f(1.0), vec2f(1.0, -1.0));
+  return vec4f(pos[vertexIndex], 0.0, 1.0);
 }
 
 @fragment
