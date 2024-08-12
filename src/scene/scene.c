@@ -202,7 +202,11 @@ void scene_prepare_render(scene *s)
           }
         } else {
           // Mesh type, use root node object-space aabb
+#ifndef NATIVE_BUILD
           node *n = &s->blas_nodes[2 * (inst->data & MESH_SHAPE_MASK)];
+#else
+          node *n = &s->blas_nodes[2 * s->meshes[(inst->data & MESH_SHAPE_MASK)].ofs];
+#endif
           mi = n->min;
           ma = n->max;
         }
