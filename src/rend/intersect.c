@@ -89,7 +89,7 @@ void intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id
   const vec3 pvec = vec3_cross(r->dir, edge2);
   const float det = vec3_dot(edge1, pvec);
 
-  if(fabsf(det) < 0.0f)
+  if(fabsf(det) < EPSILON)
     // Ray in plane of triangle
     return;
 
