@@ -570,6 +570,9 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
+  // Increase roughness with each bounce to combat fireflies
+  //mtl.roughness = min(1.0, mtl.roughness + f32(pidx & 0xff) * mtl.roughness * 0.75);
+
   seed = pstate.seed;
   let r0 = rand4();
 

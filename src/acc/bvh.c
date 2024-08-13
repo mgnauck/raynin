@@ -2,6 +2,8 @@
 #include <float.h>
 #include "../scene/inst.h"
 #include "../scene/tri.h"
+#include "../sys/sutil.h"
+#include "../sys/log.h"
 #include "../util/aabb.h"
 
 static uint32_t find_best_node(node *nodes, uint32_t idx, uint32_t *node_indices, uint32_t node_indices_cnt)
@@ -25,6 +27,59 @@ static uint32_t find_best_node(node *nodes, uint32_t idx, uint32_t *node_indices
   }
 
   return best_idx;
+}
+
+void reorder_nodes(node *nodes, uint32_t node_cnt)
+{
+#define MAX_NODE_CNT 4096
+#define STACK_SIZE 32
+
+  if(node_cnt >= MAX_NODE_CNT) { // Debug
+    logc("Failed to reorder nodes because temporary node array is too small.");
+    return; // Error
+  }
+
+  node      tnodes[MAX_NODE_CNT];
+
+  node      *stack[STACK_SIZE];
+  uint32_t  sidx = 0;
+
+  node      *n  = nodes;  // Start at root
+  uint32_t  cnt = 1;      // Root is already added
+
+  // Copy all nodes to temporary nodes buffer
+  memcpy(tnodes, nodes, node_cnt * sizeof(*nodes));
+
+  while(1) {
+    if(n->children > 0) {
+      // Array pos of left child node
+      // Right child is implicitly + 1
+      node *ln = &nodes[cnt];
+
+      // Copy left and right child of current node to output
+      memcpy(ln, &tnodes[n->children & 0xffff], sizeof(*ln));
+      memcpy(ln + 1, &tnodes[n->children >> 16], sizeof(*ln));
+      
+      // Assign adjusted child indices to current node
+      n->children = ((cnt + 1) << 16) | cnt;
+
+      // Left child will be processed next
+      n = ln;
+
+      // Right child will be processed later
+      stack[sidx++] = ln + 1;
+
+      // Account for two nodes added
+      cnt += 2;
+    } else {
+      // Leaf node
+      // Pop next node from stack if available
+      if(sidx > 0)
+        n = stack[--sidx];
+      else
+        return;
+    }
+  }
 }
 
 // Walter et al: Fast Agglomerative Clustering for Rendering
@@ -93,6 +148,9 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
 
   // Root node was formed last (at 2*n), move it to reserved index 0
   nodes[0] = nodes[--node_cnt];
+
+  // Reorder nodes to depth first
+  //reorder_nodes(nodes, node_cnt);
 }
 
 void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
@@ -154,4 +212,7 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
 
   // Root node was formed last (at 2*n), move it to reserved index 0
   nodes[0] = nodes[--node_cnt];
+
+  // Reorder nodes to depth first
+  //reorder_nodes(nodes, node_cnt);
 }
