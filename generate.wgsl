@@ -47,10 +47,10 @@ var<private> seed: u32;
 fn wangHash(x: u32) -> u32
 {
   var v = (x ^ 61) ^ (x >> 16);
-  v *= 9;
-  v ^= v >> 4;
-  v *= 0x27d4eb2d;
-  v ^= v >> 15;
+  v *= 9u;
+  v ^= v >> 4u;
+  v *= 0x27d4eb2du;
+  v ^= v >> 15u;
   return v;
 }
 

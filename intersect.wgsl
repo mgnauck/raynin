@@ -295,7 +295,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     let rightChildNode = &nodes[blasOfs + (nodeChildren >> 16)];
 
     // Intersect both child node aabbs
-    let childDists = array<f32, 2>(
+    let childDists = array<f32, 2u>(
       intersectAabb(ori, invDir, (*hit).x, (*leftChildNode).aabbMin, (*leftChildNode).aabbMax),
       intersectAabb(ori, invDir, (*hit).x, (*rightChildNode).aabbMin, (*rightChildNode).aabbMax) );
 
