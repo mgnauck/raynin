@@ -11,12 +11,12 @@ static uint32_t find_best_node(uint32_t idx, aabb *aabbs, uint32_t *node_indices
   float     best_cost = FLT_MAX;
   uint32_t  best_idx;
 
-  aabb a = aabbs[node_indices[idx]];
+  aabb *a = &aabbs[node_indices[idx]];
 
   // Find smallest combined aabb of current node and any other node
   for(uint32_t i=0; i<node_indices_cnt; i++) {
     if(idx != i) {
-      aabb c = aabb_combine(a, aabbs[node_indices[i]]);
+      aabb c = aabb_combine(a, &aabbs[node_indices[i]]);
       vec3 d = vec3_sub(c.max, c.min);
       float cost = d.x * d.y + d.y * d.z + d.z * d.x; /// Half surface area
       if(cost < best_cost) {
@@ -85,8 +85,8 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
       new_node->rmin = right_aabb->min;
       new_node->rmax = right_aabb->max;
 
-      // Store combined aabb of left and right for this new node
-      aabbs[node_cnt] = aabb_combine(*left_aabb, *right_aabb);
+      // Store combined aabb of left and right child of this node
+      aabbs[node_cnt] = aabb_combine(left_aabb, right_aabb);
 
       // Replace node A with newly created combined node
       node_indices[a] = node_cnt++;
@@ -161,8 +161,8 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
       new_node->rmin = right_aabb->min;
       new_node->rmax = right_aabb->max;
 
-      // Store combined aabb of left and right for this new node
-      aabbs[node_cnt] = aabb_combine(*left_aabb, *right_aabb);
+      // Store combined aabb of left and right child of this node
+      aabbs[node_cnt] = aabb_combine(left_aabb, right_aabb);
 
       // Replace node A with newly created combined node
       node_indices[a] = node_cnt++;

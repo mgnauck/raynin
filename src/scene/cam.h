@@ -3,8 +3,6 @@
 
 #include "../util/vec3.h"
 
-typedef struct ray ray;
-
 typedef struct cam {
   vec3  eye;
   float vert_fov;

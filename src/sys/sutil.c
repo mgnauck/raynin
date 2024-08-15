@@ -1,7 +1,5 @@
 #include "sutil.h"
 
-#ifndef NATIVE_BUILD
-
 extern unsigned char __heap_base;
 static unsigned long heap_pos = (unsigned long)&__heap_base;
 
@@ -73,31 +71,6 @@ int tolower(int c)
   return c > 0x40 && c < 0x5b ? c | 0x60 : c;
 }
 
-/*float atof(const char* s)
-{
-  float res = 0.0f;
-  float fact = 1;
-  
-  if(*s == '-') {
-    s++;
-    fact = -1;
-  }
-
-  for(int pt_seen=0; *s; s++) {
-    if(*s == '.') {
-      pt_seen = 1;
-      continue;
-    }
-    int d = *s - '0';
-    if(d >= 0 && d <= 9) {
-      if(pt_seen)
-        fact /= 10.0f;
-      res = res * 10.0f + (float)d;
-    }
-  }
-  return res * fact;
-}*/
-
 int atoi(const char *s)
 {
   int i = 0;
@@ -107,8 +80,6 @@ int atoi(const char *s)
   }
   return i;
 }
-
-#endif
 
 char *strstr_lower(const char *str, const char *sub)
 {

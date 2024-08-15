@@ -10,9 +10,9 @@ aabb aabb_init()
   };
 }
 
-aabb aabb_combine(aabb a, aabb b)
+aabb aabb_combine(const aabb *a, const aabb *b)
 {
-  return (aabb){ vec3_min(a.min, b.min), vec3_max(a.max, b.max) };
+  return (aabb){ vec3_min(a->min, b->min), vec3_max(a->max, b->max) };
 }
 
 void aabb_grow(aabb *a, vec3 v)
@@ -33,8 +33,8 @@ void aabb_pad(aabb *a)
   }
 }
 
-float aabb_calc_area(aabb a)
+float aabb_calc_area(const aabb *a)
 {
-  vec3 d = vec3_sub(a.max, a.min);
+  vec3 d = vec3_sub(a->max, a->min);
   return d.x * d.y + d.y * d.z + d.z * d.x;
 }

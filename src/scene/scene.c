@@ -151,8 +151,6 @@ void update_ltris(scene *s, inst_info *info)
 
 void scene_prepare_render(scene *s)
 {
-  ///uint64_t start = SDL_GetTicks64();
-
   // Update instances
   bool rebuild_tlas = false;
   bool rebuild_ltris = false;
@@ -202,11 +200,7 @@ void scene_prepare_render(scene *s)
           }
         } else {
           // Mesh type, use root node object-space aabb
-#ifndef NATIVE_BUILD
           node *n = &s->blas_nodes[2 * (inst->data & MESH_SHAPE_MASK)];
-#else
-          node *n = &s->blas_nodes[2 * s->meshes[(inst->data & MESH_SHAPE_MASK)].ofs];
-#endif
           mi = vec3_min(n->lmin, n->rmin);
           ma = vec3_max(n->lmax, n->rmax);
         }
@@ -235,20 +229,10 @@ void scene_prepare_render(scene *s)
   // Current ltri cnt in the scene
   s->ltri_cnt = ltri_cnt;
 
-  //uint64_t inst_upd_end = SDL_GetTicks64();
-
   if(rebuild_tlas) {
-    //logc("Rebuild tlas with max inst: %i, inst: %i", s->max_inst_cnt, s->inst_cnt);
-    //memset(s->tlas_nodes, 0, 2 * s->max_inst_cnt * sizeof(*s->tlas_nodes));
     tlas_build(s->tlas_nodes, s->inst_info, s->inst_cnt);
     scene_set_dirty(s, RT_INST);
   }
-
-  //uint64_t tlas_upd_end = SDL_GetTicks64();
-
-  ///logc("Inst update took: %ld", inst_upd_end - start);
-  //logc("Tlas update took: %ld", tlas_upd_end - inst_upd_end);
-  //logc("Full update took: %ld", tlas_upd_end - start);
 }
 
 // Material updates can trigger light tri changes, so not exposing mtl update for now.
@@ -293,15 +277,10 @@ uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
   // Lowest 16 bits are instance id, i.e. max 65536 instances
   inst->id = s->inst_cnt & INST_ID_MASK;
 
-#ifndef NATIVE_BUILD
   // Lowest 30 bits are shape type (if bit 31 is set) or
   // offset into tris and 2 * data into blas
   // i.e. max offset is triangle 1073741823 :)
   inst->data = (mesh_shape & SHAPE_TYPE_BIT) ? mesh_shape : s->meshes[mesh_shape].ofs;
-#else
-  // For native build, lowest 30 bits are simply the shape type or mesh id
-  inst->data = mesh_shape;
-#endif
 
   // Set transform and mtl override id to instance
   scene_upd_inst_trans(s, s->inst_cnt, transform);

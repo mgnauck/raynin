@@ -1,6 +1,4 @@
 #include "cam.h"
-#include "../sys/mutil.h"
-#include "../util/ray.h"
 
 void cam_calc_base(cam *c)
 {

@@ -12,12 +12,6 @@
 #include "scene/scene.h"
 #include "util/vec3.h"
 
-#ifdef NATIVE_BUILD
-#include <SDL.h>
-#define WIDTH       800
-#define HEIGHT      600
-#endif
-
 scene     *s = 0;
 uint32_t  active_cam = 0;
 bool      orbit_cam = false;
@@ -262,81 +256,3 @@ void release()
   scene_release(s);
   free(s);
 }
-
-#ifdef NATIVE_BUILD
-
-const char *gltf = "TODO";
-
-int main(int argc, char *argv[])
-{
-  int32_t code = EXIT_SUCCESS;
-
-  if(SDL_Init(SDL_INIT_VIDEO) < 0)
-    return EXIT_FAILURE;
-
-  SDL_Window *window = SDL_CreateWindow("unik",
-      SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
-  if(!window) {
-    code = EXIT_FAILURE;
-    goto clean_sdl;
-  }
-
-  SDL_Surface *screen = SDL_GetWindowSurface(window);
-  if(!screen) {
-    code = EXIT_FAILURE;
-    goto clean_window;
-  }
-
-  pcg_srand(42u, 303u);
-  init(gltf, strlen(gltf), 0, 0);
-
-  bool      quit = false;
-  bool      lock_mouse = false;
-  uint64_t  start = SDL_GetTicks64();
-  uint64_t  last = start;
-
-  while(!quit)
-  {
-    SDL_Event event;
-    while(SDL_PollEvent(&event)) {
-      if(event.type == SDL_QUIT)
-        quit = true;
-      else if((event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) ||
-          (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
-        if(!lock_mouse && event.type == SDL_KEYDOWN)
-          quit = true;
-        lock_mouse = !lock_mouse;
-        if(SDL_SetRelativeMouseMode(lock_mouse ? SDL_TRUE : SDL_FALSE) < 0) {
-          code = EXIT_FAILURE;
-          goto clean_window;
-        }
-      }
-      else if(event.type == SDL_KEYDOWN)
-        key_down(event.key.keysym.sym, 0.1f);
-      else if(lock_mouse && event.type == SDL_MOUSEMOTION)
-        mouse_move(event.motion.xrel, event.motion.yrel, 0.005f);
-    }
-
-    uint64_t frame = SDL_GetTicks64() - last;
-    char title[256];
-    snprintf(title, 256, "%ld ms / %6.3f / %4.2fM rays/s", frame, 1000.0f / frame, WIDTH * HEIGHT / (frame * 1000.0f));
-    SDL_SetWindowTitle(window, title);
-    last = SDL_GetTicks64();
-
-    update((last - start) / 1000.0f, false);
-    renderer_render(screen, s);
-
-    SDL_UpdateWindowSurface(window);
-  }
-
-  release();
-
-clean_window:
-  SDL_DestroyWindow(window);
-clean_sdl:
-  SDL_Quit();
-
-  return code;
-}
-
-#endif

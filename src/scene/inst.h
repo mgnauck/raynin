@@ -36,7 +36,6 @@ typedef struct inst_info {
 // Bit 32 indicates if the material override is active (MTL_OVERRIDE_BIT).
 // (For shape types, mtl override is mandatory!)
 // For mesh types, bits 0-30 is an offset into tris or 2 * ofs into blas_nodes
-// In case of native build, bits 0-30 is simply the mesh id
 // For shape types, bits 0-30 indicate the shape type,
 // i.e. unitsphere, unitcylinder, unitbox
 

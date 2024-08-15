@@ -2,9 +2,6 @@
 #define SUTIL_H
 
 #include <stddef.h>
-#include "../settings.h"
-
-#ifndef NATIVE_BUILD
 
 __attribute__((visibility("default")))
 void            *malloc(size_t size);
@@ -22,14 +19,6 @@ int             tolower(int c);
 
 extern float    atof(const char *s); // Imported from JS
 int             atoi(const char *s);
-
-#else
-
-#include <ctype.h>
-#include <stdlib.h>
-#include <string.h>
-
-#endif
 
 char            *strstr_lower(const char *str, const char *sub);
 

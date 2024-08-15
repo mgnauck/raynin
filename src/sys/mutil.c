@@ -28,14 +28,6 @@ float fmodf(float x, float y)
   return x - truncf(x / y) * y;
 }
 
-#ifdef NATIVE_BUILD
-float fracf(float a)
-{
-  float integer;
-  return modff(a, &integer);
-}
-#endif
-
 // https://www.pcg-random.org
 uint32_t pcg32_random_r(pcg32_random_t *rng)
 {

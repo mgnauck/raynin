@@ -3,7 +3,6 @@
 
 #include "../util/mat4.h"
 #include "../util/vec3.h"
-#include "../settings.h"
 
 #define MTL_ID_MASK 0xffff
 
