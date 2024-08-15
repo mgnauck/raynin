@@ -58,8 +58,8 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
     uint32_t total_mtl_cnt, uint32_t total_inst_cnt)
 {
   // Sanity check for implicitly assumed sizes/counts
-  if(sizeof(mtl) > sizeof(inst) || 2 * sizeof(node) > sizeof(inst) ||
-      total_inst_cnt * sizeof(inst) > MAX_UNIFORM_BUF_SIZE || total_mtl_cnt > total_inst_cnt)
+  if(sizeof(mtl) > sizeof(inst) || total_mtl_cnt > total_inst_cnt ||
+      total_inst_cnt * sizeof(inst) > MAX_UNIFORM_BUF_SIZE)
     return 1;
 
   // Adjust max inst count to what the uniform buffer can take.

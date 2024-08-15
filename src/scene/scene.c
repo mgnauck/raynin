@@ -207,8 +207,8 @@ void scene_prepare_render(scene *s)
 #else
           node *n = &s->blas_nodes[2 * s->meshes[(inst->data & MESH_SHAPE_MASK)].ofs];
 #endif
-          mi = n->min;
-          ma = n->max;
+          mi = vec3_min(n->lmin, n->rmin);
+          ma = vec3_max(n->lmax, n->rmax);
         }
 
         // Transform instance aabb to world space
@@ -235,7 +235,7 @@ void scene_prepare_render(scene *s)
   // Current ltri cnt in the scene
   s->ltri_cnt = ltri_cnt;
 
-  ///uint64_t inst_upd_end = SDL_GetTicks64();
+  //uint64_t inst_upd_end = SDL_GetTicks64();
 
   if(rebuild_tlas) {
     //logc("Rebuild tlas with max inst: %i, inst: %i", s->max_inst_cnt, s->inst_cnt);
@@ -244,11 +244,11 @@ void scene_prepare_render(scene *s)
     scene_set_dirty(s, RT_INST);
   }
 
-  ///uint64_t tlas_upd_end = SDL_GetTicks64();
+  //uint64_t tlas_upd_end = SDL_GetTicks64();
 
   ///logc("Inst update took: %ld", inst_upd_end - start);
-  ///logc("Tlas update took: %ld", tlas_upd_end - inst_upd_end);
-  ///logc("Full update took: %ld", tlas_upd_end - start);
+  //logc("Tlas update took: %ld", tlas_upd_end - inst_upd_end);
+  //logc("Full update took: %ld", tlas_upd_end - start);
 }
 
 // Material updates can trigger light tri changes, so not exposing mtl update for now.

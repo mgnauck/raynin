@@ -144,7 +144,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
   triSz = triSz == 0 ? 96 : triSz;
   ltriSz = ltriSz == 0 ? 80 : ltriSz;
-  nodeSz = nodeSz == 0 ? 32 : nodeSz;
+  nodeSz = nodeSz == 0 ? 64 : nodeSz;
 
   res.buf = [];
   res.bindGroups = [];

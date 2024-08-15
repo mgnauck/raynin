@@ -124,6 +124,7 @@ void intersect_tri(const ray *r, const tri *t, uint32_t inst_id, uint32_t tri_id
 
 void intersect_blas(const ray *r, const node *blas_nodes, const tri *tris, uint32_t inst_id, hit *h)
 {
+  /*
 #define NODE_STACK_SIZE 32
   uint32_t    stack_pos = 0;
   const node  *node_stack[NODE_STACK_SIZE];
@@ -169,6 +170,7 @@ void intersect_blas(const ray *r, const node *blas_nodes, const tri *tris, uint3
       }
     }
   }
+  */
 }
 
 void intersect_inst(const ray *r, const inst *inst, const mesh *meshes, const node *blas_nodes, hit *h)
@@ -201,6 +203,7 @@ void intersect_inst(const ray *r, const inst *inst, const mesh *meshes, const no
 
 void intersect_tlas(const ray *r, const node *tlas_nodes, const inst *instances, const mesh *meshes, const node *blas_nodes, hit *h)
 {
+  /*
 #define NODE_STACK_SIZE 32
   uint32_t    stack_pos = 0;
   const node  *node_stack[NODE_STACK_SIZE];
@@ -246,4 +249,5 @@ void intersect_tlas(const ray *r, const node *tlas_nodes, const inst *instances,
       }
     }
   }
+  */
 }

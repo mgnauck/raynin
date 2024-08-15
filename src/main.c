@@ -25,7 +25,10 @@ bool      orbit_cam = false;
   __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
 {
-  float speed = vec3_max_comp(vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.2f));
+  vec3 gmin = vec3_min(s->tlas_nodes[0].lmin, s->tlas_nodes[0].rmin);
+  vec3 gmax = vec3_max(s->tlas_nodes[0].lmax, s->tlas_nodes[0].rmax);
+
+  float speed = vec3_max_comp(vec3_scale(vec3_sub(gmax, gmin), 0.2f));
 
   cam *cam = scene_get_active_cam(s);
 
@@ -241,7 +244,9 @@ void update(float time, bool converge)
   // Update camera
   if(s->tlas_nodes && orbit_cam) {
     cam *cam = scene_get_active_cam(s);
-    vec3  e = vec3_scale(vec3_sub(s->tlas_nodes[0].max, s->tlas_nodes[0].min), 0.4f);
+    vec3 gmin = vec3_min(s->tlas_nodes[0].lmin, s->tlas_nodes[0].rmin);
+    vec3 gmax = vec3_max(s->tlas_nodes[0].lmax, s->tlas_nodes[0].rmax);
+    vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.4f);
     //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
     vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 4.0f, e.z * cosf(time * 0.25f) };
     cam_set(cam, pos, vec3_neg(pos));
