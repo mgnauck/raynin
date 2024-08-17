@@ -22,7 +22,7 @@ struct Inst
   pad1:             u32
 }
 
-struct Node
+/*struct Node
 {
   lmin:             vec3f,
   left:             i32,
@@ -32,7 +32,7 @@ struct Node
   right:            i32,
   rmax:             vec3f,
   pad1:             u32
-}
+}*/
 
 struct Tri
 {
@@ -74,7 +74,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
-@group(0) @binding(2) var<storage, read> nodes: array<Node>;
+@group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: Config;
 @group(0) @binding(4) var<storage, read> pathStates: array<PathState>;
 @group(0) @binding(5) var<storage, read_write> hits: array<vec4f>;
@@ -186,12 +186,16 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
 
       // Get current node
-      let node = &nodes[blasOfs + u32(nodeIndex)];
+      let ofs = (blasOfs + u32(nodeIndex)) * 4;
+      let lmin = nodes[ofs + 0];
+      let lmax = nodes[ofs + 1];
+      let rmin = nodes[ofs + 2];
+      let rmax = nodes[ofs + 3];
 
       // Intersect both child node aabbs
       var dists = array<f32, 2>(
-        intersectAabb(ori, invDir, (*hit).x, (*node).lmin, (*node).lmax),
-        intersectAabb(ori, invDir, (*hit).x, (*node).rmin, (*node).rmax) );
+        intersectAabb(ori, invDir, (*hit).x, lmin.xyz, lmax.xyz),
+        intersectAabb(ori, invDir, (*hit).x, rmin.xyz, rmax.xyz) );
 
       // Find indices of nearer and farther child
       let near = select(1u, 0u, dists[0] < dists[1]);
@@ -203,7 +207,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
         nodeIndex = nodeStack[nodeStackIndex];
       } else {
         // Hit one or both children, set near child as next node
-        let children = array<i32, 2>( (*node).left, (*node).right );
+        let children = array<i32, 2>( bitcast<i32>(lmin.w), bitcast<i32>(rmin.w) );
         nodeIndex = children[near];
         if(dists[far] < INF) {
           // Push far child on stack
@@ -288,12 +292,16 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
     while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
 
       // Get current node
-      let node = &nodes[tlasOfs + u32(nodeIndex)];
+      let ofs = (tlasOfs + u32(nodeIndex)) * 4;
+      let lmin = nodes[ofs + 0];
+      let lmax = nodes[ofs + 1];
+      let rmin = nodes[ofs + 2];
+      let rmax = nodes[ofs + 3];
 
       // Intersect both child node aabbs
       var dists = array<f32, 2>(
-        intersectAabb(ori, invDir, hit.x, (*node).lmin, (*node).lmax),
-        intersectAabb(ori, invDir, hit.x, (*node).rmin, (*node).rmax) );
+        intersectAabb(ori, invDir, hit.x, lmin.xyz, lmax.xyz),
+        intersectAabb(ori, invDir, hit.x, rmin.xyz, rmax.xyz) );
 
       // Find indices of nearer and farther child
       let near = select(1u, 0u, dists[0] < dists[1]);
@@ -305,7 +313,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
         nodeIndex = nodeStack[nodeStackIndex];
       } else {
         // Hit one or both children, set near child as next node
-        let children = array<i32, 2>( (*node).left, (*node).right );
+        let children = array<i32, 2>( bitcast<i32>(lmin.w), bitcast<i32>(rmin.w) );
         nodeIndex = children[near]; 
         if(dists[far] < INF) {
           // Push far child on stack

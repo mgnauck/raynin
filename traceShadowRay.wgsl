@@ -22,7 +22,7 @@ struct Inst
   pad1:             u32
 }
 
-struct Node
+/*struct Node
 {
   lmin:             vec3f,
   left:             i32,
@@ -32,7 +32,7 @@ struct Node
   right:            i32,
   rmax:             vec3f,
   pad1:             u32
-}
+}*/
 
 struct Tri
 {
@@ -74,7 +74,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
-@group(0) @binding(2) var<storage, read> nodes: array<Node>;
+@group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: Config;
 @group(0) @binding(4) var<storage, read> shadowRays: array<ShadowRay>;
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4f>;
@@ -174,11 +174,15 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
     while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
 
       // Get current node
-      let node = &nodes[blasOfs + u32(nodeIndex)];
+      let ofs = (blasOfs + u32(nodeIndex)) * 4;
+      let lmin = nodes[ofs + 0];
+      let lmax = nodes[ofs + 1];
+      let rmin = nodes[ofs + 2];
+      let rmax = nodes[ofs + 3];
 
       // Intersect both child node aabbs
-      let traverseLeft = intersectAabbAnyHit(ori, invDir, tfar, (*node).lmin, (*node).lmax);
-      let traverseRight = intersectAabbAnyHit(ori, invDir, tfar, (*node).rmin, (*node).rmax);
+      let traverseLeft = intersectAabbAnyHit(ori, invDir, tfar, lmin.xyz, lmax.xyz);
+      let traverseRight = intersectAabbAnyHit(ori, invDir, tfar, rmin.xyz, rmax.xyz);
 
       if(!traverseLeft && !traverseRight) {
         // Did not hit any child, pop next node from stack
@@ -186,10 +190,10 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
         nodeIndex = nodeStack[nodeStackIndex];
       } else {
         // Hit one or both children, set left child as next node
-        nodeIndex = select((*node).right, (*node).left, traverseLeft);
+        nodeIndex = select(bitcast<i32>(rmin.w), bitcast<i32>(lmin.w), traverseLeft);
         if(traverseLeft && traverseRight) {
           // Push right child on stack
-          nodeStack[nodeStackIndex] = (*node).right;
+          nodeStack[nodeStackIndex] = bitcast<i32>(rmin.w);
           nodeStackIndex++;
         }
       }
@@ -267,11 +271,15 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
     while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
 
       // Get current node
-      let node = &nodes[tlasOfs + u32(nodeIndex)];
+      let ofs = (tlasOfs + u32(nodeIndex)) * 4;
+      let lmin = nodes[ofs + 0];
+      let lmax = nodes[ofs + 1];
+      let rmin = nodes[ofs + 2];
+      let rmax = nodes[ofs + 3];
 
       // Intersect both child node aabbs
-      let traverseLeft = intersectAabbAnyHit(ori, invDir, tfar, (*node).lmin, (*node).lmax);
-      let traverseRight = intersectAabbAnyHit(ori, invDir, tfar, (*node).rmin, (*node).rmax);
+      let traverseLeft = intersectAabbAnyHit(ori, invDir, tfar, lmin.xyz, lmax.xyz);
+      let traverseRight = intersectAabbAnyHit(ori, invDir, tfar, rmin.xyz, rmax.xyz);
 
       if(!traverseLeft && !traverseRight) {
         // Did not hit any child, pop next node from stack
@@ -279,10 +287,10 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
         nodeIndex = nodeStack[nodeStackIndex];
       } else {
         // Hit one or both children, set left child as next node
-        nodeIndex = select((*node).right, (*node).left, traverseLeft);
+        nodeIndex = select(bitcast<i32>(rmin.w), bitcast<i32>(lmin.w), traverseLeft);
         if(traverseLeft && traverseRight) {
           // Push right child on stack
-          nodeStack[nodeStackIndex] = (*node).right;
+          nodeStack[nodeStackIndex] = bitcast<i32>(rmin.w);
           nodeStackIndex++;
         }
       }
