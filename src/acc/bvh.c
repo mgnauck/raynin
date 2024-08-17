@@ -3,7 +3,6 @@
 #include "../scene/inst.h"
 #include "../scene/tri.h"
 #include "../sys/sutil.h"
-#include "../sys/log.h"
 #include "../util/aabb.h"
 
 static uint32_t find_best_node(uint32_t idx, aabb *aabbs, uint32_t *node_indices, uint32_t node_indices_cnt)
@@ -18,7 +17,7 @@ static uint32_t find_best_node(uint32_t idx, aabb *aabbs, uint32_t *node_indices
     if(idx != i) {
       aabb c = aabb_combine(a, &aabbs[node_indices[i]]);
       vec3 d = vec3_sub(c.max, c.min);
-      float cost = d.x * d.y + d.y * d.z + d.z * d.x; /// Half surface area
+      float cost = d.x * d.y + d.y * d.z + d.z * d.x; // Half surface area
       if(cost < best_cost) {
         best_cost = cost;
         best_idx = i;
@@ -34,28 +33,28 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
 {
   uint32_t  node_indices[tri_cnt]; 
   uint32_t  node_indices_cnt = 0;
-  aabb      aabbs[2 * tri_cnt];
 
-  // Construct temporary leaf node for each tri (will be dropped)
+  // We will have 2 * tri_cnt - 1 nodes, but drop the leafs eventually
+  // Nodes will be placed beginning at the back of the array
+  uint32_t  node_idx = 2 * tri_cnt - 2;
+  aabb      aabbs[2 * tri_cnt - 1];
+
+  // Construct temporary leaf node for each tri
   for(uint32_t i=0; i<tri_cnt; i++) {
       const tri *t = &tris[i];
 
-      aabb *a = &aabbs[1 + node_indices_cnt];
+      aabb *a = &aabbs[node_idx];
       *a = aabb_init();
       aabb_grow(a, t->v0);
       aabb_grow(a, t->v1);
       aabb_grow(a, t->v2);
 
       // Store temporary leaf node with negated data index
-      node *n = &nodes[1 + node_indices_cnt];
+      node *n = &nodes[node_idx];
       n->left = n->right = ~i;
       
-      node_indices[node_indices_cnt] = 1 + node_indices_cnt;
-      node_indices_cnt++;
+      node_indices[node_indices_cnt++] = node_idx--;
   }
-
-  // Account for nodes so far
-  uint32_t node_cnt = 1 + node_indices_cnt;
 
   // Bottom up combining of nodes
   uint32_t a = 0;
@@ -70,7 +69,7 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
       node *node_b = &nodes[idx_b];
 
       // Claim new node which is the combination of node A and B
-      node *new_node = &nodes[node_cnt];
+      node *new_node = &nodes[node_idx];
 
       // Either store the actual node idx or an idx to the data item
       // (Former leaf nodes of data items will be simply "forgotten" here)
@@ -86,10 +85,10 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
       new_node->rmax = right_aabb->max;
 
       // Store combined aabb of left and right child of this node
-      aabbs[node_cnt] = aabb_combine(left_aabb, right_aabb);
+      aabbs[node_idx] = aabb_combine(left_aabb, right_aabb);
 
       // Replace node A with newly created combined node
-      node_indices[a] = node_cnt++;
+      node_indices[a] = node_idx--;
 
       // Remove node B by replacing its slot with last node
       node_indices[b] = node_indices[--node_indices_cnt];
@@ -103,35 +102,35 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
       b = c;
     }
   }
-
-  // Root node was formed last (at 2*n), move it to reserved index 0
-  nodes[0] = nodes[--node_cnt];
 }
 
 void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
 {
-  uint32_t  node_indices[inst_cnt]; 
+  uint32_t  node_indices[inst_cnt];
   uint32_t  node_indices_cnt = 0;
-  aabb      aabbs[2 * inst_cnt];
+
+  // We will have 2 * inst_cnt - 1 nodes, but drop the leafs eventually
+  // Nodes will be placed beginning at the back of the array
+  uint32_t  node_idx = 2 * inst_cnt - 2;
+  aabb      aabbs[2 * inst_cnt - 1];
+
+  bool      gaps = false;
 
   // Construct a leaf node for each instance
   for(uint32_t i=0; i<inst_cnt; i++) {
-    if(!(instances[i].state & IS_DISABLED)) { 
-      aabb *a = &aabbs[1 + node_indices_cnt];
+    if(!(instances[i].state & IS_DISABLED)) {
+      aabb *a = &aabbs[node_idx];
       a->min = instances[i].box.min;
       a->max = instances[i].box.max;
 
       // Store temporary leaf node with negated data index
-      node *n = &nodes[1 + node_indices_cnt];
+      node *n = &nodes[node_idx];
       n->left = n->right = ~i;
       
-      node_indices[node_indices_cnt] = 1 + node_indices_cnt;
-      node_indices_cnt++;
-    }
+      node_indices[node_indices_cnt++] = node_idx--;
+    } else
+      gaps = true;
   }
-
-  // Account for nodes so far
-  uint32_t node_cnt = 1 + node_indices_cnt;
 
   // Bottom up combining of nodes
   uint32_t a = 0;
@@ -146,7 +145,7 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
       node *node_b = &nodes[idx_b];
 
       // Claim new node which is the combination of node A and B
-      node *new_node = &nodes[node_cnt];
+      node *new_node = &nodes[node_idx];
 
       // Either store the actual node idx or an idx to the data item
       // (Former leaf nodes of data items will be simply "forgotten" here)
@@ -162,10 +161,10 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
       new_node->rmax = right_aabb->max;
 
       // Store combined aabb of left and right child of this node
-      aabbs[node_cnt] = aabb_combine(left_aabb, right_aabb);
+      aabbs[node_idx] = aabb_combine(left_aabb, right_aabb);
 
       // Replace node A with newly created combined node
-      node_indices[a] = node_cnt++;
+      node_indices[a] = node_idx--;
 
       // Remove node B by replacing its slot with last node
       node_indices[b] = node_indices[--node_indices_cnt];
@@ -180,6 +179,7 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
     }
   }
 
-  // Root node was formed last (at 2*n), move it to reserved index 0
-  nodes[0] = nodes[--node_cnt];
+  if(gaps)
+    // There are gaps, i.e. not all nodes are populated, move root node to front
+    nodes[0] = nodes[node_idx + 1];
 }
