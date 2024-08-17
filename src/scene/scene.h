@@ -53,8 +53,7 @@ void      scene_set_active_cam(scene *s, uint32_t cam_id);
 cam       *scene_get_active_cam(scene *s);
 cam       *scene_get_cam(scene *s, uint32_t cam_id);
 
-uint32_t  scene_add_mesh_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform); // mtl_id < 0 means no mtl override
-uint32_t  scene_add_shape_inst(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform);
+uint32_t  scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform); // mtl_id < 0 means no mtl override
 
 void      scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform);
 void      scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id);

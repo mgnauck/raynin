@@ -211,23 +211,9 @@ void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx,
   // Create instance
   if(mesh_idx >= 0) {
     // Mesh instance (mesh was either loaded or generated)
-    scene_add_mesh_inst(s, mesh_idx, -1, final);
+    scene_add_inst(s, mesh_idx, -1, final);
     logc("Created mesh instance of gltf mesh %i (%s) (render mesh %i) for node %i (%s).",
         gn->mesh_idx, gm->name, mesh_idx, node_idx, gn->name);
-  } else if(mesh_idx == -1) {
-    // Shape instance
-    obj_type type = get_type(gm->name); 
-    if(type == OT_BOX) {
-      scene_add_shape_inst(s, ST_BOX, gm->prims[0].mtl_idx, final);
-      logc("Created box shape instance of gltf mesh %i (%s) for node %i (%s).",
-          gn->mesh_idx, gm->name, node_idx, gn->name);
-    } else if(type == OT_SPHERE) {
-      scene_add_shape_inst(s, ST_SPHERE, gm->prims[0].mtl_idx, final);
-      logc("Created sphere shape instance of gltf mesh %i (%s) for node %i (%s).",
-          gn->mesh_idx, gm->name, node_idx, gn->name);
-    } else {
-      logc("#### ERROR: Failed to create instance because the shape type is unknown or invalid.");
-    }
   } else {
     logc("#### WARN: Node %i (%s) points at gltf mesh %i (%s) with invalid data. No instance will be created.",
         node_idx, gn->name, gn->mesh_idx, gm->name);
@@ -291,28 +277,18 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   uint32_t mesh_cnt = 0;
 
   // Identify actual meshes
-  logc("-------- Identifying meshes and shapes:");
+  logc("-------- Identifying meshes:");
   for(uint32_t j=0; j<data.mesh_cnt; j++) {
     gltf_mesh *gm = &data.meshes[j];
     mesh_ref *mr = &mesh_map[j];
     if(check_has_valid_mtl(gm, &data)) {
       mr->inst_cnt = 0; // Init for duplicate identification
       bool is_emissive = check_is_emissive_mesh(gm, &data);
-      /// All primitives will end up as meshes
-      ///obj_type type = get_type(gm->name);
-      ///if(is_emissive || check_is_custom(gm) || gm->prim_cnt > 1 || type != OT_SPHERE) {
-        // Meshes that are emissive or need to be loaded or generated will end up as an actual renderer mesh
-        mr->mesh_idx = 1; // Assign something that is not -1 ot indicate it is a mesh, actual index will follow during mesh creation
-        mr->is_emissive = is_emissive;
-        mesh_cnt++;
-        logc("Gltf mesh %i (%s) will be a render mesh in the scene. This mesh is %semissive.",
-            j, gm->name, is_emissive ? "" : "not ");
-      /*} else {
-        // Everything else will be represented as a shape
-        mr->mesh_idx = -1;
-        mr->is_emissive = false;
-        logc("Gltf mesh %i (%s) will be a shape.", j, gm->name);
-      }*/
+      mr->mesh_idx = 1; // Assign something that is not -1 ot indicate it is a mesh, actual index will follow during mesh creation
+      mr->is_emissive = is_emissive;
+      mesh_cnt++;
+      logc("Gltf mesh %i (%s) will be a render mesh in the scene. This mesh is %semissive.",
+          j, gm->name, is_emissive ? "" : "not ");
     } else {
       mr->mesh_idx = -2;
       mr->is_emissive = false;
@@ -373,10 +349,6 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
           logc("Found non-emissive instance of gltf mesh %i for node %i (%s) pointing at render mesh %i",
               gn->mesh_idx, i, gn->name, mr->mesh_idx);
         }
-      } else if(mr->mesh_idx == -1) {
-        render_mesh_ids[i] = -1; // Will be shape, so no render mesh
-        logc("Skipping gltf mesh %i pointed to by node %i (%s) because it will be a shape.",
-            gn->mesh_idx, i, gn->name);
       } else {
         render_mesh_ids[i] = -2; // Not a valid mesh, so no render mesh
         logc("#### WARN: Skipping gltf mesh %i pointed to by node %i (%s) because the gltf has invalid data.",

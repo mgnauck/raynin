@@ -99,7 +99,7 @@ void scene_finalize(scene *s)
 
 void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
 {
-  mesh *m = &s->meshes[info->mesh_shape];
+  mesh *m = &s->meshes[info->mesh_id];
   uint32_t tri_cnt = m->tri_cnt;
   tri *tris = m->tris;
   uint32_t ltri_cnt = 0;
@@ -140,7 +140,7 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
 
 void update_ltris(scene *s, inst_info *info)
 {
-  tri *tris = s->meshes[info->mesh_shape].tris;
+  tri *tris = s->meshes[info->mesh_id].tris;
   for(uint32_t i=0; i<info->ltri_cnt; i++) {
     ltri *lt = &s->ltris[info->ltri_ofs + i];
     tri_update_ltri(lt, &tris[lt->tri_id], info->transform, info->inv_transform);
@@ -185,25 +185,11 @@ void scene_prepare_render(scene *s)
         // Instances receives inverse transform only
         memcpy(inst->inv_transform, info->inv_transform, 12 * sizeof(float));
 
+        // Root node object-space aabb
         vec3 mi, ma;
-        if(inst->data & SHAPE_TYPE_BIT) {
-          // Shape type
-          if((inst->data & MESH_SHAPE_MASK) != ST_PLANE) {
-            // Box and sphere are of unit size
-            mi = (vec3){ -1.0f, -1.0f, -1.0f };
-            ma = (vec3){  1.0f,  1.0f,  1.0f };
-          } else {
-            // Plane is in XZ and has a default size
-            float P = 0.5f * QUAD_DEFAULT_SIZE;
-            mi = (vec3){ -P, -EPSILON, -P };
-            ma = (vec3){  P,  EPSILON,  P };
-          }
-        } else {
-          // Mesh type, use root node object-space aabb
-          node *n = &s->blas_nodes[2 * (inst->data & MESH_SHAPE_MASK)];
-          mi = vec3_min(n->lmin, n->rmin);
-          ma = vec3_max(n->lmax, n->rmax);
-        }
+        node *n = &s->blas_nodes[2 * (inst->data & INST_DATA_MASK)];
+        mi = vec3_min(n->lmin, n->rmin);
+        ma = vec3_max(n->lmax, n->rmax);
 
         // Transform instance aabb to world space
         aabb *a = &info->box;
@@ -265,41 +251,27 @@ cam *scene_get_cam(scene *s, uint32_t cam_id)
   return &s->cams[cam_id];
 }
 
-uint32_t add_inst(scene *s, uint32_t mesh_shape, int32_t mtl_id, mat4 transform)
+uint32_t scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
 {
   inst_info *info = &s->inst_info[s->inst_cnt];
-  info->mesh_shape = mesh_shape;
+  info->mesh_id = mesh_id;
   info->state = IS_TRANS_DIRTY | IS_MTL_DIRTY;
   info->ltri_ofs = 0;
   info->ltri_cnt = 0;
 
   inst *inst = &s->instances[s->inst_cnt];
+
   // Lowest 16 bits are instance id, i.e. max 65536 instances
   inst->id = s->inst_cnt & INST_ID_MASK;
 
-  // Lowest 30 bits are shape type (if bit 31 is set) or
-  // offset into tris and 2 * data into blas
-  // i.e. max offset is triangle 1073741823 :)
-  inst->data = (mesh_shape & SHAPE_TYPE_BIT) ? mesh_shape : s->meshes[mesh_shape].ofs;
+  // Tri ofs and blas node ofs * 2
+  inst->data = s->meshes[mesh_id].ofs;
 
   // Set transform and mtl override id to instance
   scene_upd_inst_trans(s, s->inst_cnt, transform);
   scene_upd_inst_mtl(s, s->inst_cnt, mtl_id);
 
   return s->inst_cnt++;
-}
-
-uint32_t scene_add_mesh_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
-{
-  // Bit 30 not set indicates mesh type
-  return add_inst(s, mesh_id & MESH_SHAPE_MASK, mtl_id, transform);
-}
-
-uint32_t scene_add_shape_inst(scene *s, shape_type shape, uint16_t mtl_id, mat4 transform)
-{
-  // Bit 30 set indicates shape type
-  // Shape types are always using the material override
-  return add_inst(s, SHAPE_TYPE_BIT | (shape & MESH_SHAPE_MASK), mtl_id, transform);
 }
 
 void scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform)
@@ -327,20 +299,18 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
     // Set highest bit to enable the material override
     inst->data |= MTL_OVERRIDE_BIT;
 
-    // For mesh inst only we want to know if mtl is now emissive or not
-    if(!(inst->data & SHAPE_TYPE_BIT)) {
-      if(s->mtls[mtl_id].emissive > 0.0f)
-        info->state |= IS_EMISSIVE;
-      else
-        info->state &= ~IS_EMISSIVE;
-    }
+    // We want to know if mtl is now emissive or not
+    if(s->mtls[mtl_id].emissive > 0.0f)
+      info->state |= IS_EMISSIVE;
+    else
+      info->state &= ~IS_EMISSIVE;
   }
-  // Reset mtl override (for mesh types only)
-  else if(!(inst->data & SHAPE_TYPE_BIT)) {
+  // Reset mtl override
+  else {
     inst->data = inst->data & INST_DATA_MASK;
 
     // Flag instance if mesh is emissive
-    if(s->meshes[info->mesh_shape].is_emissive)
+    if(s->meshes[info->mesh_id].is_emissive)
       info->state |= IS_EMISSIVE;
     else
       info->state &= ~IS_EMISSIVE;

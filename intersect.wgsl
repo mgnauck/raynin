@@ -62,7 +62,7 @@ struct PathState
 
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
-const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
+const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0
 
 // General constants
 const EPS                 = 0.0001;
@@ -262,7 +262,7 @@ fn intersectInst(ori: vec3f, dir: vec3f, inst: Inst, hit: ptr<function, vec4f>)
   let oriObj = (vec4f(ori, 1.0) * m).xyz;
   let dirObj = dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz);
 
-  intersectBlas(oriObj, dirObj, 1.0 / dirObj, inst.id, inst.data & MESH_SHAPE_MASK, hit);
+  intersectBlas(oriObj, dirObj, 1.0 / dirObj, inst.id, inst.data & INST_DATA_MASK, hit);
 }
 
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs

@@ -11,10 +11,4 @@ typedef enum res_type {
   RT_BLAS     = 64
 } res_type;
 
-typedef enum shape_type {
-  ST_PLANE    = 0,
-  ST_BOX      = 1,
-  ST_SPHERE   = 2,
-} shape_type;
-
 #endif

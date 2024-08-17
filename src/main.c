@@ -146,13 +146,12 @@ void init_scene_riow(scene *s)
     mat4_trans(translation, (vec3){ 0.0f, 5.0f, -10.0f + (i * 10.0f) });
     //mat4_trans(translation, (vec3){ 0.0f, 5.0f, (i * 10.0f) });
     mat4_mul(transform, translation, transform);
-    scene_add_mesh_inst(s, lid + i, -1, transform);
+    scene_add_inst(s, lid + i, -1, transform);
   }
 
   // Floor instance
   mat4_scale_u(scale, 12.0f);
-  //scene_add_shape_inst(s, ST_PLANE, mtl_id, scale);
-  scene_add_mesh_inst(s, fid, -1, scale);
+  scene_add_inst(s, fid, -1, scale);
 
   // Reflecting sphere (black)
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -162,8 +161,7 @@ void init_scene_riow(scene *s)
   m.ior = 2.3f;
   m.roughness = 0.0f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  scene_add_mesh_inst(s, sid, mtl_id, translation);
+  scene_add_inst(s, sid, mtl_id, translation);
 
   // Reflecting sphere (white)
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -173,8 +171,7 @@ void init_scene_riow(scene *s)
   m.ior = 1.5f;
   m.roughness = 0.0f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  scene_add_mesh_inst(s, sid, mtl_id, translation);
+  scene_add_inst(s, sid, mtl_id, translation);
 
   // Metallic sphere
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
@@ -184,8 +181,7 @@ void init_scene_riow(scene *s)
   m.metallic = 1.0f;
   m.roughness = 0.5f;
   mtl_id = scene_add_mtl(s, &m);
-  //scene_add_shape_inst(s, ST_SPHERE, mtl_id, translation);
-  scene_add_mesh_inst(s, sid, mtl_id, translation);
+  scene_add_inst(s, sid, mtl_id, translation);
 
   mat4_scale_u(scale, 0.2f);
 
@@ -203,8 +199,7 @@ void init_scene_riow(scene *s)
         mtl_id = scene_add_mtl(s, &m);
         mat4_trans(translation, center);
         mat4_mul(transform, translation, scale);
-        //scene_add_shape_inst(s, ST_SPHERE, mtl_id, transform);
-        scene_add_mesh_inst(s, sid, mtl_id, transform);
+        scene_add_inst(s, sid, mtl_id, transform);
       }
     }
   }

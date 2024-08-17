@@ -6,8 +6,6 @@
 #include "../util/aabb.h"
 
 #define INST_ID_MASK      0xffff
-#define SHAPE_TYPE_BIT    0x40000000
-#define MESH_SHAPE_MASK   0x3fffffff
 #define MTL_OVERRIDE_BIT  0x80000000
 #define INST_DATA_MASK    0x7fffffff
 
@@ -24,20 +22,15 @@ typedef struct inst_info {
   mat4        transform;
   mat4        inv_transform;
   aabb        box;
-  uint32_t    mesh_shape;
+  uint32_t    mesh_id;
   uint32_t    ltri_ofs;
   uint32_t    ltri_cnt;
   uint32_t    state;
 } inst_info;
 
 // inst.data:
-// If bit 31 is set, then the instance is a shape (SHAPE_TYPE_BIT).
-// If bit 31 is not set, then it is a mesh.
 // Bit 32 indicates if the material override is active (MTL_OVERRIDE_BIT).
-// (For shape types, mtl override is mandatory!)
-// For mesh types, bits 0-30 is an offset into tris or 2 * ofs into blas_nodes
-// For shape types, bits 0-30 indicate the shape type,
-// i.e. unitsphere, unitcylinder, unitbox
+// For mesh types, bits 0-31 is an offset into tris or 2 * ofs into blas_nodes
 
 typedef struct inst {
   float       inv_transform[12];

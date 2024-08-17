@@ -85,7 +85,7 @@ struct PathState
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
 const MTL_OVERRIDE_BIT    = 0x80000000u; // Bit 32
-const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
+const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
 
 // General constants
 const EPS                 = 0.001;
@@ -508,7 +508,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   // Note: hit.xyzw = vec4f(t, u, v, (inst.id << 16) | tri id & 0xffff)
   let inst = instances[bitcast<u32>(hit.w) & SHORT_MASK];
  
-  let ofs = inst.data & MESH_SHAPE_MASK;
+  let ofs = inst.data & INST_DATA_MASK;
   let tri = tris[ofs + (bitcast<u32>(hit.w) >> 16)];
 
   // Either use the material id from the triangle or the material override from the instance

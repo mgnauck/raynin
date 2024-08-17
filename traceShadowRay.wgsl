@@ -62,7 +62,7 @@ struct ShadowRay
 
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
-const MESH_SHAPE_MASK     = 0x3fffffffu; // Bits 30-0
+const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
 
 // General constants
 const EPS                 = 0.0001;
@@ -243,7 +243,7 @@ fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, inst: Inst) -> bool
   let oriObj = (vec4f(ori, 1.0) * m).xyz;
   let dirObj = dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz);
 
-  return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar, inst.data & MESH_SHAPE_MASK);
+  return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar, inst.data & INST_DATA_MASK);
 }
 
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
