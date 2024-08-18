@@ -1,4 +1,4 @@
-struct Config
+/*struct Config
 {
   width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
   height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
@@ -11,9 +11,9 @@ struct Config
   gridDimPath:      vec4u,
   gridDimSRay:      vec4u,
   bgColor:          vec4f
-}
+}*/
 
-@group(0) @binding(0) var<storage, read> config: Config;
+@group(0) @binding(0) var<storage, read> config: array<vec4u, 5>;
 @group(0) @binding(1) var<storage, read> accum: array<vec4f>;
 
 @vertex
@@ -45,8 +45,8 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 @fragment
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  let gidx = (config.width >> 8) * u32(pos.y) + u32(pos.x);
-  let s = config.samplesTaken;
-  let col = vec4f(pow(accum[gidx].xyz / f32((s >> 8) + (s & 0xff)), vec3f(0.4545)), 1.0);
+  let frame = config[0];
+  let gidx = (frame.x >> 8) * u32(pos.y) + u32(pos.x); // width 
+  let col = vec4f(pow(accum[gidx].xyz / f32((frame.w >> 8) + (frame.w & 0xff)), vec3f(0.4545)), 1.0); // frame.w = samplesTaken
   return col;
 }

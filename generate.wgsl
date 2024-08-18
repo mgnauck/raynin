@@ -8,7 +8,7 @@
   halfTanFocAngle:  f32,
 }*/
 
-struct Config
+/*struct Config
 {
   width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
   height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
@@ -21,7 +21,7 @@ struct Config
   gridDimPath:      vec4u,
   gridDimSRay:      vec4u,
   bgColor:          vec4f           // w is unused
-}
+}*/
 
 /*struct PathState
 {
@@ -38,7 +38,7 @@ const PI        = 3.141592;
 const WG_SIZE   = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> camera: array<vec4f, 3>;
-@group(0) @binding(1) var<storage, read> config: Config;
+@group(0) @binding(1) var<storage, read> config: array<vec4u, 5>;
 @group(0) @binding(2) var<storage, read_write> pathStates: array<vec4f>;
 
 // State of rng seed
@@ -108,19 +108,22 @@ fn sampleEye(eye: vec4f, right: vec4f, up: vec4f, r0: vec2f) -> vec3f
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let w = config.width >> 8;
-  let h = config.height >> 8;
+  let frame = config[0];
+
+  let w = frame.x >> 8;
+  let h = frame.y >> 8;
 
   let gidx = w * globalId.y + globalId.x;
   if(gidx >= w * h) {
     return;
   }
 
-  // Set seed based on pixel index, current frame and sample num of the frame
-  seed = wangHash(gidx * 32467 + config.frame * 23 + (config.samplesTaken & 0xff) * 6173);
+  // Set seed based on pixel index, current frame (z) and sample num (w) of the frame
+  seed = wangHash(gidx * 32467 + frame.z * 23 + (frame.w & 0xff) * 6173);
 
   let r0 = rand4();
 
+  // Read camera values
   let e = camera[0];
   let r = camera[1];
   let u = camera[2];
@@ -129,10 +132,9 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let ori = sampleEye(e, r, u, r0.xy);
   let dir = normalize(samplePixel(vec2f(globalId.xy), e, r, u, vec2f(f32(w), f32(h)), r0.zw) - ori);
 
-  let ofs = w * h;
-
   // Initialize new path
   // Do not initialize throughput/pdf, will do in shade.wgsl for primary ray
+  let ofs = w * h;
   pathStates[       ofs + gidx] = vec4f(ori, bitcast<f32>(seed));
   pathStates[(ofs << 1) + gidx] = vec4f(dir, bitcast<f32>(gidx << 8)); // Bounce num is implicitly 0
 }

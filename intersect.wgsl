@@ -1,4 +1,4 @@
-struct Config
+/*struct Config
 {
   width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
   height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
@@ -8,10 +8,10 @@ struct Config
   extRayCnt:        u32,
   shadowRayCnt:     u32,
   pad0:             u32,
-  gridDimPath:      vec4u,
-  gridDimSRay:      vec4u,
+  gridDimPath:      vec4u,          // w is unused
+  gridDimSRay:      vec4u,          // w is unused
   bgColor:          vec4f           // w is unused
-}
+}*/
 
 struct Inst
 {
@@ -75,7 +75,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
-@group(0) @binding(3) var<storage, read> config: Config;
+@group(0) @binding(3) var<storage, read> config: array<vec4u, 5>;
 @group(0) @binding(4) var<storage, read> pathStates: array<vec4f>;
 @group(0) @binding(5) var<storage, read_write> hits: array<vec4f>;
 
@@ -363,10 +363,14 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = config.gridDimPath.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= config.pathCnt) {
+  let counter = config[1];
+  let dim = config[2];
+  let gidx = dim.x * WG_SIZE.x * globalId.y + globalId.x; // gridDimPath.x
+  if(gidx >= counter.x) { // pathCnt
     return;
   }
+
+  let frame = config[0];
 
   // Initial reset
   //atomicStore(&foundLeafCnt0, 0u);
@@ -376,6 +380,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   nodeStack[                0] = STACK_EMPTY_MARKER;
   nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
 
-  let ofs = (config.width >> 8) * (config.height >> 8);
+  let ofs = (frame.x >> 8) * (frame.y >> 8);
   hits[gidx] = intersectTlas(pathStates[ofs + gidx].xyz, pathStates[(ofs << 1) + gidx].xyz, INF);
 }

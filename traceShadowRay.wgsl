@@ -1,4 +1,4 @@
-struct Config
+/*struct Config
 {
   width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
   height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
@@ -11,7 +11,7 @@ struct Config
   gridDimPath:      vec4u,
   gridDimSRay:      vec4u,
   bgColor:          vec4f
-}
+}*/
 
 struct Inst
 {
@@ -75,7 +75,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
-@group(0) @binding(3) var<storage, read> config: Config;
+@group(0) @binding(3) var<storage, read> config: array<vec4u, 5>;
 @group(0) @binding(4) var<storage, read> shadowRays: array<vec4f>;
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4f>;
 
@@ -338,8 +338,10 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = config.gridDimSRay.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= config.shadowRayCnt) {
+  let counter = config[1];
+  let dim = config[3];
+  let gidx = dim.x * WG_SIZE.x * globalId.y + globalId.x; // gridDimSRay.x
+  if(gidx >= counter.z) {
     return;
   }
 
@@ -351,11 +353,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   nodeStack[                0] = STACK_EMPTY_MARKER;
   nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
 
-  let ofs = (config.width >> 8) * (config.height >> 8);
+  let frame = config[0];
+
+  let ofs = (frame.x >> 8) * (frame.y >> 8); // widht * height
   let ori = shadowRays[gidx];
   let dir = shadowRays[ofs + gidx];
-  let con = shadowRays[(ofs << 1) + gidx];
+  let ctb = shadowRays[(ofs << 1) + gidx];
   if(!intersectTlasAnyHit(ori.xyz, dir.xyz, dir.w)) {
-    accum[bitcast<u32>(ori.w)] += vec4f(con.xyz, 1.0);
+    accum[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);
   }
 }
