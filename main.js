@@ -184,12 +184,12 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[BUF_PATH0] = device.createBuffer({
-    size: WIDTH * HEIGHT * 12 * 4 * SPP,
+    size: WIDTH * HEIGHT * 12 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_PATH1] = device.createBuffer({
-    size: WIDTH * HEIGHT * 12 * 4 * SPP,
+    size: WIDTH * HEIGHT * 12 * 4,
     usage: GPUBufferUsage.STORAGE
   });
 
@@ -468,12 +468,10 @@ async function render(time)
 
     passEncoder = commandEncoder.beginComputePass();
 
-    if(i == 0) {
-      // Directly dispatch generation of primary rays for ALL samples at once
-      passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE]);
-      passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16 /* Fixed for ray gen */), Math.ceil(HEIGHT * SPP / 16), 1);
-    }
+    // Dispatch primary ray gen directly
+    passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE]);
+    passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
     let bindGroup = 0;
     for(let j=0; j<MAX_BOUNCES; j++) {

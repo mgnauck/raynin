@@ -113,32 +113,26 @@ fn sampleEye(r: vec2f) -> vec3f
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let w = config.width >> 8;
-  let h = config.height;
+  let h = config.height >> 8;
 
   let gidx = w * globalId.y + globalId.x;
-  if(gidx >= w * (h >> 8) * (h & 0xff)) { // w * h * spp
+  if(gidx >= w * h) {
     return;
   }
 
-  // Pixel index
-  let pidx = gidx % (w * (h >> 8));
-
-  // Pixel coords
-  let pix = vec2u(pidx % w, pidx / w);
-
   // Set seed based on pixel index, current frame and sample num of the frame
-  seed = wangHash(pidx * 32467 + config.frame * 23 + (gidx / (w * (h >> 8))) * 6173);
+  seed = wangHash(gidx * 32467 + config.frame * 23 + (config.samplesTaken & 0xff) * 6173);
 
   let r = rand4();
 
   // Create new primary ray
   let ori = sampleEye(r.xy);
-  let dir = normalize(samplePixel(vec2f(pix), r.zw, vec2f(f32(w), f32(h >> 8))) - ori);
+  let dir = normalize(samplePixel(vec2f(globalId.xy), r.zw, vec2f(f32(w), f32(h))) - ori);
 
   // Initialize new path
   pathStates[gidx].seed = seed;
   //pathStates[gidx].throughput = vec3f(1.0);
   pathStates[gidx].ori = ori;
   pathStates[gidx].dir = dir;
-  pathStates[gidx].pidx = pidx << 8; // Bounce num is implicitly 0
+  pathStates[gidx].pidx = gidx << 8; // Bounce num is implicitly 0
 }

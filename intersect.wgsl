@@ -376,7 +376,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   nodeStack[                0] = STACK_EMPTY_MARKER;
   nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
 
-  let ofs = (config.width >> 8) * (config.height >> 8) * (config.samplesTaken & 0xff);
-  let pathState = pathStates[ofs + gidx];
+  let pathState = pathStates[gidx];
   hits[gidx] = intersectTlas(pathState.ori, pathState.dir, INF);
 }

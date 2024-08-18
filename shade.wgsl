@@ -530,9 +530,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let w = config.width;
-  let ofs = (w >> 8) * (config.height >> 8) * (config.samplesTaken & 0xff);
   let hit = hits[gidx];
-  let pstate = pathStatesIn[ofs + gidx];
+  let pstate = pathStatesIn[gidx];
   let pidx = pstate.pidx;
   var throughput = select(pstate.throughput, vec3f(1.0), (pidx & 0xff) == 0); // Avoid mem access
 
@@ -628,7 +627,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   throughput *= evalMaterial(mtl, -pstate.dir, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the path state buffer
-  let gidxNext = ofs + atomicAdd(&config.extRayCnt, 1u);
+  let gidxNext = atomicAdd(&config.extRayCnt, 1u);
 
   // Init next path segment 
   pathStatesOut[gidxNext].seed = seed;
