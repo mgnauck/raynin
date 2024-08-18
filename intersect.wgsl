@@ -50,7 +50,7 @@ struct Tri
   pad3:             f32
 }
 
-struct PathState
+/*struct PathState
 {
   throughput:       vec3f,
   pdf:              f32,
@@ -58,7 +58,7 @@ struct PathState
   seed:             u32,
   dir:              vec3f,
   pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
-}
+}*/
 
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
@@ -76,7 +76,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: Config;
-@group(0) @binding(4) var<storage, read> pathStates: array<PathState>;
+@group(0) @binding(4) var<storage, read> pathStates: array<vec4f>;
 @group(0) @binding(5) var<storage, read_write> hits: array<vec4f>;
 
 // Traversal stacks
@@ -376,6 +376,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   nodeStack[                0] = STACK_EMPTY_MARKER;
   nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
 
-  let pathState = pathStates[gidx];
-  hits[gidx] = intersectTlas(pathState.ori, pathState.dir, INF);
+  let ofs = (config.width >> 8) * (config.height >> 8);
+  hits[gidx] = intersectTlas(pathStates[ofs + gidx].xyz, pathStates[(ofs << 1) + gidx].xyz, INF);
 }

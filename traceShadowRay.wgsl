@@ -50,7 +50,7 @@ struct Tri
   pad3:             f32
 }
 
-struct ShadowRay
+/*struct ShadowRay
 {
   ori:              vec3f,          // Shadow ray origin
   pidx:             u32,            // Pixel index where to deposit contribution
@@ -58,7 +58,7 @@ struct ShadowRay
   dist:             f32,
   contribution:     vec3f,
   pad0:             f32
-}
+}*/
 
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
@@ -76,7 +76,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: Config;
-@group(0) @binding(4) var<storage, read> shadowRays: array<ShadowRay>;
+@group(0) @binding(4) var<storage, read> shadowRays: array<vec4f>;
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4f>;
 
 // Traversal stacks
@@ -351,8 +351,11 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   nodeStack[                0] = STACK_EMPTY_MARKER;
   nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
 
-  let shadowRay = shadowRays[gidx];
-  if(!intersectTlasAnyHit(shadowRay.ori, shadowRay.dir, shadowRay.dist)) {
-    accum[shadowRay.pidx] += vec4f(shadowRay.contribution, 1.0);
+  let ofs = (config.width >> 8) * (config.height >> 8);
+  let ori = shadowRays[gidx];
+  let dir = shadowRays[ofs + gidx];
+  let con = shadowRays[(ofs << 1) + gidx];
+  if(!intersectTlasAnyHit(ori.xyz, dir.xyz, dir.w)) {
+    accum[bitcast<u32>(ori.w)] += vec4f(con.xyz, 1.0);
   }
 }

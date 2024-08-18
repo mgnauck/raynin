@@ -23,7 +23,7 @@ struct Config
   bgColor:          vec4f           // w is unused
 }
 
-struct PathState
+/*struct PathState
 {
   throughput:       vec3f,
   pdf:              f32,
@@ -31,7 +31,7 @@ struct PathState
   seed:             u32,
   dir:              vec3f,
   pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
-}
+}*/
 
 // General constants
 const PI        = 3.141592;
@@ -39,7 +39,7 @@ const WG_SIZE   = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var<storage, read> config: Config;
-@group(0) @binding(2) var<storage, read_write> pathStates: array<PathState>;
+@group(0) @binding(2) var<storage, read_write> pathStates: array<vec4f>;
 
 // State of rng seed
 var<private> seed: u32;
@@ -129,10 +129,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let ori = sampleEye(r.xy);
   let dir = normalize(samplePixel(vec2f(globalId.xy), r.zw, vec2f(f32(w), f32(h))) - ori);
 
+  let ofs = w * h;
+
   // Initialize new path
-  pathStates[gidx].seed = seed;
-  //pathStates[gidx].throughput = vec3f(1.0);
-  pathStates[gidx].ori = ori;
-  pathStates[gidx].dir = dir;
-  pathStates[gidx].pidx = gidx << 8; // Bounce num is implicitly 0
+  // Do not initialize throughput/pdf, will do in shade.wgsl
+  pathStates[       ofs + gidx] = vec4f(ori, bitcast<f32>(seed));
+  pathStates[(ofs << 1) + gidx] = vec4f(dir, bitcast<f32>(gidx << 8)); // Bounce num is implicitly 0
 }
