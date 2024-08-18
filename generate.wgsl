@@ -1,4 +1,4 @@
-struct Camera
+/*struct Camera
 {
   eye:              vec3f,
   halfTanVertFov:   f32,
@@ -6,7 +6,7 @@ struct Camera
   focDist:          f32,
   up:               vec3f,
   halfTanFocAngle:  f32,
-}
+}*/
 
 struct Config
 {
@@ -37,7 +37,7 @@ struct Config
 const PI        = 3.141592;
 const WG_SIZE   = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> camera: Camera;
+@group(0) @binding(0) var<uniform> camera: array<vec4f, 3>;
 @group(0) @binding(1) var<storage, read> config: Config;
 @group(0) @binding(2) var<storage, read_write> pathStates: array<vec4f>;
 
@@ -76,37 +76,33 @@ fn sampleDisk(r: vec2f) -> vec2f
   return vec2f(cos(theta), sin(theta)) * radius;
 }
 
-fn samplePixel(pixelPos: vec2f, r: vec2f, res: vec2f) -> vec3f
+fn samplePixel(pixelPos: vec2f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f, r0: vec2f) -> vec3f
 {
-  let height = 2.0 * camera.halfTanVertFov * camera.focDist;
-  let width = height * res.x / res.y;
+  let vheight = 2.0 * eye.w * right.w; // 2 * halfTanVertFov * focDist
+  let vwidth = vheight * res.x / res.y;
 
-  let right = width * camera.right;
-  let down = -height * camera.up;
+  let vright = vwidth * right.xyz;
+  let vdown = -vheight * up.xyz;
 
-  let deltaX = right / res.x;
-  let deltaY = down / res.y;
+  let deltaX = vright / res.x;
+  let deltaY = vdown / res.y;
 
-  let forward = cross(camera.right, camera.up);
+  let forward = cross(right.xyz, up.xyz);
 
-  let topLeft = camera.eye - camera.focDist * forward - 0.5 * (right + down);
+  let topLeft = eye.xyz - right.w * forward - 0.5 * (vright + vdown); // right.w = focDist
   let pixTopLeft = topLeft + 0.5 * (deltaX + deltaY);
 
   var pixelSample = pixTopLeft + deltaX * pixelPos.x + deltaY * pixelPos.y;
-  pixelSample += (r.x - 0.5) * deltaX + (r.y - 0.5) * deltaY;
+  pixelSample += (r0.x - 0.5) * deltaX + (r0.y - 0.5) * deltaY;
 
   return pixelSample;
 }
 
-fn sampleEye(r: vec2f) -> vec3f
+fn sampleEye(eye: vec4f, right: vec4f, up: vec4f, r0: vec2f) -> vec3f
 {
-  var eyeSample = camera.eye;
-  if(camera.halfTanFocAngle > 0) {
-    let focRadius = camera.focDist * camera.halfTanFocAngle;
-    let diskSample = sampleDisk(r);
-    eyeSample += focRadius * (diskSample.x * camera.right + diskSample.y * camera.up);
-  }
-  return eyeSample;
+  let focRadius = right.w * up.w; // focDist * halfTanFocAngle
+  let diskSample = sampleDisk(r0);
+  return eye.xyz + focRadius * (diskSample.x * right.xyz + diskSample.y * up.xyz);
 }
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
@@ -123,16 +119,20 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Set seed based on pixel index, current frame and sample num of the frame
   seed = wangHash(gidx * 32467 + config.frame * 23 + (config.samplesTaken & 0xff) * 6173);
 
-  let r = rand4();
+  let r0 = rand4();
+
+  let e = camera[0];
+  let r = camera[1];
+  let u = camera[2];
 
   // Create new primary ray
-  let ori = sampleEye(r.xy);
-  let dir = normalize(samplePixel(vec2f(globalId.xy), r.zw, vec2f(f32(w), f32(h))) - ori);
+  let ori = sampleEye(e, r, u, r0.xy);
+  let dir = normalize(samplePixel(vec2f(globalId.xy), e, r, u, vec2f(f32(w), f32(h)), r0.zw) - ori);
 
   let ofs = w * h;
 
   // Initialize new path
-  // Do not initialize throughput/pdf, will do in shade.wgsl
+  // Do not initialize throughput/pdf, will do in shade.wgsl for primary ray
   pathStates[       ofs + gidx] = vec4f(ori, bitcast<f32>(seed));
   pathStates[(ofs << 1) + gidx] = vec4f(dir, bitcast<f32>(gidx << 8)); // Bounce num is implicitly 0
 }
