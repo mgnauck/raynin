@@ -359,9 +359,9 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let pathStateWgSize = config[1];
-  let gidx = pathStateWgSize.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= pathStateWgSize.w) { // path state cnt
+  let pathStateGrid = config[1];
+  let gidx = pathStateGrid.x * WG_SIZE.x * globalId.y + globalId.x;
+  if(gidx >= pathStateGrid.w) { // path state cnt
     return;
   }
 

@@ -334,9 +334,9 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let shadowRayWgSize = config[2];
-  let gidx = shadowRayWgSize.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= shadowRayWgSize.w) { // shadow ray cnt
+  let shadowRayGrid = config[2];
+  let gidx = shadowRayGrid.x * WG_SIZE.x * globalId.y + globalId.x;
+  if(gidx >= shadowRayGrid.w) { // shadow ray cnt
     return;
   }
 
