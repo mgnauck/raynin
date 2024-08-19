@@ -1,21 +1,17 @@
 /*struct Config
 {
-  width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
-  height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
-  frame:            u32,            // Current frame number
-  samplesTaken:     u32,            // Bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
-  pathCnt:          u32,
-  extRayCnt:        u32,
-  shadowRayCnt:     u32,
-  pad0:             u32,
-  gridDimPath:      vec4u,
-  gridDimSRay:      vec4u,
-  bgColor:          vec4f   // w is unused
+  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+                                    // z = current frame number
+                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+  pathStateGrid:    vec4u,          // w = path cnt
+  shadowRayGrid:    vec4u,          // w = shadow ray cnt
+  bgColor:          vec4f           // w = ext ray cnt
 }*/
 
 const WG_SIZE = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<storage, read_write> config: array<vec4u, 5>;
+@group(0) @binding(0) var<storage, read_write> config: array<vec4u, 4>;
 
 @compute @workgroup_size(1)
 fn m0(@builtin(global_invocation_id) globalId: vec3u)
@@ -24,17 +20,18 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  let counter = config[1];
+  // Calc grid dims for path state buf and set path cnt to ext ray cnt
+  let extRayCnt = config[3].w;
+  var dim = u32(ceil(sqrt(f32(extRayCnt)) / f32(WG_SIZE.x)));
+  config[1] = vec4u(dim, dim, 1u, extRayCnt);
 
-  // Reset counters
-  config[1] = vec4u(counter.y, 0u, counter.z, 0u);
+  // Calc grid dim for shadow ray buf and set shadow ray cnt
+  let shadowRayCnt = config[2].w;
+  dim = u32(ceil(sqrt(f32(shadowRayCnt)) / f32(WG_SIZE.x)));
+  config[2] = vec4u(dim, dim, 1u, shadowRayCnt);
 
-  // Calculate workgroup grid sizes for indirect dispatch
-  var dim = u32(ceil(sqrt(f32(counter.y)) / f32(WG_SIZE.x))); // y = extRayCnt
-  config[2] = vec4u(dim, dim, 1u, 0u); // gridDimPath
-
-  dim = u32(ceil(sqrt(f32(counter.z)) / f32(WG_SIZE.x))); // z = shadowRayCnt
-  config[3] = vec4u(dim, dim, 1u, 0u); // gridDimSRay
+  // Reset ext ray cnt to 0
+  config[3].w = 0u;
 }
 
 @compute @workgroup_size(1)
@@ -45,7 +42,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Reset shadow ray cnt
-  config[1].z = 0u;
+  config[2].w = 0u;
 }
 
 @compute @workgroup_size(1)
@@ -62,9 +59,10 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   // Update sample num of current frame
   config[0].w += 1u;
 
-  // Init counters for primary ray generation
-  config[1] = vec4u(w * h, 0u, 0u, 0u);
+  // Calc grid dims for path state buf and set path cnt to w * h (primary rays)
+  config[1] = vec4u(u32(ceil(f32(w) / f32(WG_SIZE.x))), u32(ceil(f32(h) / f32(WG_SIZE.y))), 1u, w * h);
 
-  // Calculate workgroup grid size to dispatch indirectly (= gridDimWidth)
-  config[2] = vec4u(u32(ceil(f32(w) / f32(WG_SIZE.x))), u32(ceil(f32(h) / f32(WG_SIZE.y))), 1u, 0u);
+  // Reset shadow ray cnt and ext ray cnt
+  config[2].w = 0u;
+  config[3].w = 0u;
 }

@@ -1,16 +1,12 @@
 /*struct Config
 {
-  width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
-  height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
-  frame:            u32,            // Current frame number
-  samplesTaken:     u32,            // Bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
-  pathCnt:          u32,
-  extRayCnt:        u32,
-  shadowRayCnt:     u32,
-  pad0:             u32,
-  gridDimPath:      vec4u,          // w is unused
-  gridDimSRay:      vec4u,          // w is unused
-  bgColor:          vec4f           // w is unused
+  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+                                    // z = current frame number
+                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+  pathStateGrid:    vec4u,          // w = path state cnt
+  shadowRayGrid:    vec4u,          // w = shadow ray cnt
+  bgColor:          vec4f           // w = ext ray cnt
 }*/
 
 struct Inst
@@ -75,7 +71,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
-@group(0) @binding(3) var<storage, read> config: array<vec4u, 5>;
+@group(0) @binding(3) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(4) var<storage, read> pathStates: array<vec4f>;
 @group(0) @binding(5) var<storage, read_write> hits: array<vec4f>;
 
@@ -363,10 +359,9 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let counter = config[1];
-  let dim = config[2];
-  let gidx = dim.x * WG_SIZE.x * globalId.y + globalId.x; // gridDimPath.x
-  if(gidx >= counter.x) { // pathCnt
+  let pathStateWgSize = config[1];
+  let gidx = pathStateWgSize.x * WG_SIZE.x * globalId.y + globalId.x;
+  if(gidx >= pathStateWgSize.w) { // path state cnt
     return;
   }
 

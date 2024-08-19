@@ -1,19 +1,15 @@
 /*struct Config
 {
-  width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
-  height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
-  frame:            u32,            // Current frame number
-  samplesTaken:     u32,            // Bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
-  pathCnt:          u32,
-  extRayCnt:        u32,
-  shadowRayCnt:     u32,
-  pad0:             u32,
-  gridDimPath:      vec4u,
-  gridDimSRay:      vec4u,
-  bgColor:          vec4f
+  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+                                    // z = current frame number
+                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+  pathStateGrid:    vec4u,          // w = path state cnt
+  shadowRayGrid:    vec4u,          // w = shadow ray cnt
+  bgColor:          vec4f           // w = ext ray cnt
 }*/
 
-@group(0) @binding(0) var<storage, read> config: array<vec4u, 5>;
+@group(0) @binding(0) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(1) var<storage, read> accum: array<vec4f>;
 
 @vertex

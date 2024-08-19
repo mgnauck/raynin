@@ -1,16 +1,14 @@
 struct Config
 {
-  width:            u32,            // Bits 8-31 for width, bits 0-7 max bounces
-  height:           u32,            // Bit 8-31 for height, bits 0-7 samples per pixel
-  frame:            u32,            // Current frame number
-  samplesTaken:     u32,            // Bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
-  pathCnt:          u32,
-  extRayCnt:        atomic<u32>,
+  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+                                    // z = current frame number
+                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+  pathStateGrid:    vec4u,          // w = path cnt
+  shadowRayGrid:    vec3u,
   shadowRayCnt:     atomic<u32>,
-  pad0:             u32,
-  gridDimPath:      vec4u,
-  gridDimSRay:      vec4u,
-  bgColor:          vec4f           // w is unused
+  bgColor:          vec3f,
+  extRayCnt:        atomic<u32>
 }
 
 struct Mtl
@@ -524,13 +522,15 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
-  let gidx = config.gridDimPath.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= config.pathCnt) {
+  let pathStateGrid = config.pathStateGrid;
+  let gidx = pathStateGrid.x * WG_SIZE.x * globalId.y + globalId.x;
+  if(gidx >= pathStateGrid.w) { // path cnt
     return;
   }
 
-  let w = config.width;
-  let ofs = (w >> 8) * (config.height >> 8);
+  let frame = config.frameData;
+  let w = frame.x;
+  let ofs = (w >> 8) * (frame.y >> 8);
   let hit = hits[gidx];
   let tpp = pathStatesIn[gidx];
   let ori = pathStatesIn[ofs + gidx];
@@ -540,7 +540,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // No hit, terminate path
   if(hit.x == INF) {
-    accum[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
+    accum[pidx >> 8] += vec4f(throughput * config.bgColor, 1.0);
     return;
   }
 

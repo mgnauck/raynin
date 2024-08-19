@@ -204,7 +204,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   });
 
   res.buf[BUF_CFG] = device.createBuffer({
-    size: 20 * 4,
+    size: 16 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
   });
 
@@ -447,12 +447,13 @@ async function render(time)
   // Initialize config data
   device.queue.writeBuffer(res.buf[BUF_CFG], 0,
     new Uint32Array([
+      // Frame data
       (WIDTH << 8) | (MAX_BOUNCES & 0xff), (HEIGHT << 8) | (SPP & 0xff), frames, (samples << 8),
-      // Counters
-      WIDTH * HEIGHT, 0, 0, 0, // Path cnt, ext ray cnt, shadow ray cnt, pad
-      // Initial grid dims for indirect dispatches
-      Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1, 0, // Path buffer grid dims
-      0, 0, 0, 0 ])); // Shadow ray buffer grid dims
+      // Path state grid dimensions + w = path cnt
+      Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1, WIDTH * HEIGHT,
+      // Shadow ray buffer grid dimensions + w = shadow ray cnt
+      0, 0, 0, 0 ]));
+      // Background color + w = ext ray cnt (is not written here, but belongs to the same buffer)
 
   let commandEncoder = device.createCommandEncoder();
   let passEncoder;
@@ -463,12 +464,12 @@ async function render(time)
     if(samples == 0)
       commandEncoder.clearBuffer(res.buf[BUF_ACC]);
 
-    // Copy counter to workgroup grid dimension buffer for everything we dispatch indirectly
-    commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
+    // Copy path state and shadow ray buffer grid dimensions for indirect dispatch
+    commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 4 * 4, res.buf[BUF_GRID], 0, 8 * 4);
 
     passEncoder = commandEncoder.beginComputePass();
 
-    // Dispatch primary ray gen directly
+    // Dispatch primary ray generation directly
     passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE]);
     passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
@@ -489,24 +490,24 @@ async function render(time)
       passEncoder.setPipeline(res.pipelines[PL_SHADE]);
       passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
-      // Update counters and workgroup grid dimensions
+      // Update frame data and workgroup grid dimensions
       passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
       passEncoder.setPipeline(res.pipelines[PL_CONTROL0]);
       passEncoder.dispatchWorkgroups(1);
 
       passEncoder.end();
 
-      // Copy counter to indirect workgroup grid dimension buffer
-      commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 8 * 4, res.buf[BUF_GRID], 0, 8 * 4);
+      // Copy path state and shadow ray buffer grid dimensions for indirect dispatch
+      commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 4 * 4, res.buf[BUF_GRID], 0, 8 * 4);
 
       passEncoder = commandEncoder.beginComputePass();
 
-      // Trace shadow rays with offset pointing to workgroup dim of shadow rays
+      // Trace shadow rays with offset pointing to grid dim of shadow rays
       passEncoder.setBindGroup(0, res.bindGroups[BG_SHADOW]);
       passEncoder.setPipeline(res.pipelines[PL_SHADOW]);
       passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 4 * 4);
 
-      // Reset shadow ray counter. After last bounce, init to primary ray gen and increase sample count.
+      // Reset shadow ray count. After last bounce, init to primary ray gen and increase sample count.
       passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
       passEncoder.setPipeline(res.pipelines[j < MAX_BOUNCES - 1 ? PL_CONTROL1 : PL_CONTROL2]);
       passEncoder.dispatchWorkgroups(1);
