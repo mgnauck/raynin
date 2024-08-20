@@ -21,14 +21,14 @@ struct Mtl
   emissive:         f32             // Flag if material is emissive
 }
 
-struct Inst
+/*struct Inst
 {
   invTransform:     mat3x4f,
   id:               u32,            // (mtl override id << 16) | (inst id & 0xffff)
   data:             u32,            // See comment on data in inst.h
   pad0:             u32,
   pad1:             u32
-}
+}*/
 
 struct Tri
 {
@@ -95,7 +95,7 @@ const INV_PI              = 1.0 / PI;
 const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(1) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes by default
+@group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64k bytes by default
 @group(0) @binding(2) var<storage, read> tris: array<Tri>;
 @group(0) @binding(3) var<storage, read> ltris: array<LTri>;
 @group(0) @binding(4) var<storage, read> hits: array<vec4f>;
@@ -175,18 +175,6 @@ fn sampleHemisphereCos(r: vec2f) -> vec3f
 
   // Project samples up to the hemisphere
   return vec3f(disk.x, sqrt(max(0.0, 1.0 - dot(disk, disk))), disk.y);
-}
-
-fn normalToWorldSpace(nrm: vec3f, inst: Inst) -> vec3f
-{
-  // Transform normal to world space with transpose of inverse
-  return normalize(nrm * transpose(toMat3x3(inst.invTransform)));
-}
-
-fn calcTriNormal(bary: vec2f, inst: Inst, tri: Tri) -> vec3f
-{
-  let nrm = tri.n1 * bary.x + tri.n2 * bary.y + tri.n0 * (1.0 - bary.x - bary.y);
-  return normalToWorldSpace(nrm, inst);
 }
 
 fn luminance(col: vec3f) -> f32
@@ -501,19 +489,37 @@ fn geomSolidAngle(ldir: vec3f, surfNrm: vec3f, ldistInv: f32) -> f32
   return abs(dot(ldir, surfNrm)) * ldistInv * ldistInv;
 }
 
+fn calcTriNormal(bary: vec2f, tri: Tri, m: mat4x4f) -> vec3f
+{
+  let nrm = tri.n1 * bary.x + tri.n2 * bary.y + tri.n0 * (1.0 - bary.x - bary.y);
+  return normalize((vec4f(nrm, 0.0) * transpose(m)).xyz);
+}
+
 fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
 {
-  // Note: hit.xyzw = vec4f(t, u, v, (inst.id << 16) | tri id & 0xffff)
-  let inst = instances[bitcast<u32>(hit.w) & SHORT_MASK];
- 
-  let ofs = inst.data & INST_DATA_MASK;
+  // hit = vec4f(t, u, v, (tri id << 16) | inst id & 0xffff)
+  let instOfs = (bitcast<u32>(hit.w) & SHORT_MASK) << 2;
+
+  // Inst inverse transform
+  let m = mat4x4f(  instances[instOfs + 0],
+                    instances[instOfs + 1],
+                    instances[instOfs + 2],
+                    vec4f(0.0, 0.0, 0.0, 1.0));
+
+  // Inst id + inst data
+  let data = instances[instOfs + 3];
+
+  let instId = bitcast<u32>(data.x);
+  let instData = bitcast<u32>(data.y);
+
+  let ofs = instData & INST_DATA_MASK;
   let tri = tris[ofs + (bitcast<u32>(hit.w) >> 16)];
 
   // Either use the material id from the triangle or the material override from the instance
-  *mtl = materials[select(tri.mtl & SHORT_MASK, inst.id >> 16, (inst.data & MTL_OVERRIDE_BIT) > 0)];
+  *mtl = materials[select(tri.mtl & SHORT_MASK, instId >> 16, (instData & MTL_OVERRIDE_BIT) > 0)];
   *pos = ori + hit.x * dir;
-  *nrm = calcTriNormal(hit.yz, inst, tri);
-  *ltriId = tri.ltriId; // Is not set if not emissive
+  *nrm = calcTriNormal(hit.yz, tri, m);
+  *ltriId = tri.ltriId; // Not set if not emissive
 
   // Flip normal if backside, except if we hit a ltri or refractive mtl
   *nrm *= select(-1.0, 1.0, dot(-dir, *nrm) > 0 || (*mtl).emissive > 0.0 || (*mtl).refractive > 0.0);

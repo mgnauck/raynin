@@ -9,14 +9,14 @@
   bgColor:          vec4f           // w = ext ray cnt
 }*/
 
-struct Inst
+/*struct Inst
 {
   invTransform:     mat3x4f,
   id:               u32,            // (mtl override id << 16) | (inst id & 0xffff)
   data:             u32,            // See comment on data in inst.h
   pad0:             u32,
   pad1:             u32
-}
+}*/
 
 /*struct Node
 {
@@ -68,7 +68,7 @@ const STACK_EMPTY_MARKER  = 0xfffffffi;
 
 const WG_SIZE             = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> instances: array<Inst, 1024>; // Uniform buffer max is 64k bytes
+@group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64k bytes
 @group(0) @binding(1) var<storage, read> tris: array<Tri>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: array<vec4u, 4>;
@@ -236,14 +236,22 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
   return false;
 }
 
-fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, inst: Inst) -> bool
+fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, instOfs: u32) -> bool
 {
-  // Transform to object space of the instance
-  let m = toMat4x4(inst.invTransform);
-  let oriObj = (vec4f(ori, 1.0) * m).xyz;
-  let dirObj = dir * mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz);
+  // Inst inverse transform
+  let m = mat4x4f(  instances[instOfs + 0],
+                    instances[instOfs + 1],
+                    instances[instOfs + 2],
+                    vec4f(0.0, 0.0, 0.0, 1.0));
 
-  return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar, inst.data & INST_DATA_MASK);
+  // Inst id + inst data
+  let data = instances[instOfs + 3];
+
+  // Transform ray to inst object space
+  let oriObj = (vec4f(ori, 1.0) * m).xyz;
+  let dirObj = (vec4f(dir, 0.0) * m).xyz;
+
+  return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar, bitcast<u32>(data.y) & INST_DATA_MASK);
 }
 
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
@@ -314,7 +322,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
     // Instance "traversal"
     while(leafIndex < 0) {
       // Transform negated leaf index back into the actual instance index
-      if(intersectInstAnyHit(ori, dir, tfar, instances[u32(~leafIndex)])) {
+      if(intersectInstAnyHit(ori, dir, tfar, u32(~leafIndex) << 2)) {
         return true;
       }
       // Set next potential leaf for processing
