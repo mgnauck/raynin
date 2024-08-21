@@ -28,6 +28,7 @@ typedef struct scene {
   uint32_t    max_ltri_cnt;
   uint32_t    ltri_cnt;
   ltri        *ltris;
+  uint32_t    *tri_ids;
   uint32_t    max_tri_cnt;
   node        *blas_nodes;
   cam         *cams;

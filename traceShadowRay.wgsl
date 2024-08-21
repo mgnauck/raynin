@@ -30,21 +30,21 @@
   pad1:             u32
 }*/
 
-struct Tri
+/*struct Tri
 {
   v0:               vec3f,
-  mtl:              u32,            // (mtl id & 0xffff)
-  v1:               vec3f,
-  ltriId:           u32,            // Set only if tri has light emitting material
-  v2:               vec3f,
   pad0:             f32,
-  n0:               vec3f,
+  v1:               vec3f,
   pad1:             f32,
-  n1:               vec3f,
+  v2:               vec3f,
   pad2:             f32,
+  n0:               vec3f,
+  mtl:              u32,            // (mtl id & 0xffff)
+  n1:               vec3f,
+  ltriId:           u32,            // Set only if tri has light emitting material
   n2:               vec3f,
   pad3:             f32
-}
+}*/
 
 /*struct ShadowRay
 {
@@ -69,7 +69,7 @@ const STACK_EMPTY_MARKER  = 0xfffffffi;
 const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64k bytes
-@group(0) @binding(1) var<storage, read> tris: array<Tri>;
+@group(0) @binding(1) var<storage, read> tris: array<vec4f>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(4) var<storage, read> shadowRays: array<vec4f>;
@@ -170,7 +170,7 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
     while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
 
       // Get current node
-      let ofs = (blasOfs + u32(nodeIndex)) * 4;
+      let ofs = (blasOfs + u32(nodeIndex)) << 2;
       let lmin = nodes[ofs + 0];
       let lmax = nodes[ofs + 1];
       let rmin = nodes[ofs + 2];
@@ -217,9 +217,8 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
     // Triangle "traversal"
     while(leafIndex < 0) {
       // Transform negated leaf index back into actual triangle index
-      // Fetch tri data and intersect
-      let tri = tris[dataOfs + u32(~leafIndex)];
-      if(intersectTri(ori, dir, tfar, tri.v0, tri.v1, tri.v2)) {
+      let triOfs = (dataOfs + u32(~leafIndex)) * 6; // 6 * vec4f per tri
+      if(intersectTri(ori, dir, tfar, tris[triOfs].xyz, tris[triOfs + 1].xyz, tris[triOfs + 2].xyz)) {
         return true;
       }
       // Set next potential leaf for processing
@@ -261,7 +260,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
   let invDir = 1.0 / dir;
 
-  let tlasOfs = arrayLength(&tris) << 1;
+  let tlasOfs = arrayLength(&tris) / 3; // = skip 2 * tri cnt blas nodes with 6 * vec4f per tri struct
 
   var nodeStackIndex = 1u;
 
@@ -275,7 +274,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
     while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
 
       // Get current node
-      let ofs = (tlasOfs + u32(nodeIndex)) * 4;
+      let ofs = (tlasOfs + u32(nodeIndex)) << 2;
       let lmin = nodes[ofs + 0];
       let lmax = nodes[ofs + 1];
       let rmin = nodes[ofs + 2];

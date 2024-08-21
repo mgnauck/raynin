@@ -30,35 +30,33 @@ struct Mtl
   pad1:             u32
 }*/
 
-struct Tri
+/*struct Tri
 {
   v0:               vec3f,
-  mtl:              u32,            // (mtl id & 0xffff)
-  v1:               vec3f,
-  ltriId:           u32,            // Set only if tri has light emitting material
-  v2:               vec3f,
   pad0:             f32,
-  n0:               vec3f,
+  v1:               vec3f,
   pad1:             f32,
-  n1:               vec3f,
+  v2:               vec3f,
   pad2:             f32,
+  n0:               vec3f,
+  mtl:              u32,            // (mtl id & 0xffff)
+  n1:               vec3f,
+  ltriId:           u32,            // Set only if tri has light emitting material
   n2:               vec3f,
   pad3:             f32
-}
+}*/
 
-struct LTri
+/*struct LTri
 {
   v0:               vec3f,
-  triId:            u32,            // Original tri id of the mesh (w/o inst data ofs)
+  nx:               f32,
   v1:               vec3f,
-  pad0:             f32,
+  ny:               f32,
   v2:               vec3f,
-  area:             f32,
-  nrm:              vec3f,
-  power:            f32,            // Precalculated product of area and emission
+  nz:               f32,
   emission:         vec3f,
-  pad1:             f32
-}
+  area:             f32
+}*/
 
 /*struct ShadowRay
 {
@@ -96,8 +94,8 @@ const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
 @group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64k bytes by default
-@group(0) @binding(2) var<storage, read> tris: array<Tri>;
-@group(0) @binding(3) var<storage, read> ltris: array<LTri>;
+@group(0) @binding(2) var<storage, read> tris: array<vec4f>;
+@group(0) @binding(3) var<storage, read> ltris: array<vec4f>;
 @group(0) @binding(4) var<storage, read> hits: array<vec4f>;
 @group(0) @binding(5) var<storage, read> pathStatesIn: array<vec4f>;
 @group(0) @binding(6) var<storage, read_write> config: Config;
@@ -382,36 +380,41 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
   return vec3f(0);
 }
 
-fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+/*fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let bc = sampleBarycentric(r0.xy);
 
-  let ltriCnt = arrayLength(&ltris);
+  let ltriCnt = arrayLength(&ltris) >> 2; // TODO Use actual ltri cnt because of disabled ones!
   let ltriId = u32(floor(r0.z * f32(ltriCnt)));
 
-  let ltri = &ltris[ltriId];
-  let lpos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
+  let v0 = ltris[(ltriId << 2) + 0]; // w = lnrm.x
+  let v1 = ltris[(ltriId << 2) + 1]; // w = lnrm.y
+  let v2 = ltris[(ltriId << 2) + 2]; // w = lnrm.z
+  let em = ltris[(ltriId << 2) + 3]; // w = area
+
+  let lpos = v0.xyz * bc.x + v1.xyz * bc.y + v2.xyz * bc.z;
 
   var lightDir = lpos - pos;
   *ldistInv = inverseSqrt(dot(lightDir, lightDir));
   lightDir *= *ldistInv;
 
   *ldir = lightDir;
-  *lnrm = (*ltri).nrm;
+  *lnrm = vec3f(v0.w, v1.w, v2.w);
 
   var visible = dot(lightDir, *lnrm) < 0; // Front side of ltri only
   visible &= dot(lightDir, nrm) > 0; // Not facing (behind)
 
-  *emission = (*ltri).emission;
+  *emission = em.xyz;
 
-  *pdf = 1.0 / ((*ltri).area * f32(ltriCnt));
+  *pdf = 1.0 / (em.w * f32(ltriCnt));
 
   return visible;
-}
+}*/
 
 fn sampleLTriUniformPdf(ltriId: u32) -> f32
 {
-  return 1.0 / (ltris[ltriId].area * f32(arrayLength(&ltris)));
+  let area = ltris[(ltriId << 2) + 3].w;
+  return 1.0 / (area * f32(arrayLength(&ltris) >> 2)); // TODO Use actual ltri cnt because of disabled ones!
 }
 
 fn calcLTriContribution(pos: vec3f, nrm: vec3f, lpos: vec3f, lnrm: vec3f, lightPower: f32, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>) -> f32
@@ -441,7 +444,7 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<
   let sampleCnt = 8u;
   
   // Source pdf is uniform selection of ltris
-  let ltriCnt = f32(arrayLength(&ltris));
+  let ltriCnt = f32(arrayLength(&ltris) >> 2); // TODO Use actual ltri cnt because of disabled ones!
   let sourcePdf = 1.0 / f32(ltriCnt);
 
   // Selected sample tracking
@@ -455,24 +458,31 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<
     let bc = sampleBarycentric(r.xy);
 
     // Sample a candidate ltri from all ltris with 'cheap' source pdf
-    let ltri = &ltris[u32(floor(r.z * ltriCnt))];
-    let lpos = (*ltri).v0 * bc.x + (*ltri).v1 * bc.y + (*ltri).v2 * bc.z;
+    let ltriId = u32(floor(r.z * ltriCnt));
+    let v0 = ltris[(ltriId << 2) + 0]; // w = lnrm.x
+    let v1 = ltris[(ltriId << 2) + 1]; // w = lnrm.y
+    let v2 = ltris[(ltriId << 2) + 2]; // w = lnrm.z
+    let em = ltris[(ltriId << 2) + 3]; // w = area
+
+    let lpos = v0.xyz * bc.x + v1.xyz * bc.y + v2.xyz * bc.z;
 
     var ldirCand: vec3f;
     var ldistInvCand: f32;
 
+    let ln = vec3f(v0.w, v1.w, v2.w);
+
     // Re-sample the selected sample to approximate the more accurate target pdf
-    let targetPdf = calcLTriContribution(pos, nrm, lpos, (*ltri).nrm, (*ltri).power, &ldirCand, &ldistInvCand);
+    let targetPdf = calcLTriContribution(pos, nrm, lpos, ln, em.w * (em.x + em.y + em.z), &ldirCand, &ldistInvCand);
     let risWeight = targetPdf / sourcePdf;
     totalWeight += risWeight;
 
     if(r.w < risWeight / totalWeight) {
       // Store data of our latest accepted sample/candidate
-      *lnrm = (*ltri).nrm;
+      *lnrm = ln;
       *ldir = ldirCand;
       *ldistInv = ldistInvCand;
-      *emission = (*ltri).emission;
-      area = (*ltri).area;
+      *emission = em.xyz;
+      area = em.w;
       // Track pdf of the selected sample
       sampleTargetPdf = targetPdf;
     }
@@ -489,9 +499,9 @@ fn geomSolidAngle(ldir: vec3f, surfNrm: vec3f, ldistInv: f32) -> f32
   return abs(dot(ldir, surfNrm)) * ldistInv * ldistInv;
 }
 
-fn calcTriNormal(bary: vec2f, tri: Tri, m: mat4x4f) -> vec3f
+fn calcTriNormal(bary: vec2f, n0: vec3f, n1: vec3f, n2: vec3f, m: mat4x4f) -> vec3f
 {
-  let nrm = tri.n1 * bary.x + tri.n2 * bary.y + tri.n0 * (1.0 - bary.x - bary.y);
+  let nrm = n1 * bary.x + n2 * bary.y + n0 * (1.0 - bary.x - bary.y);
   return normalize((vec4f(nrm, 0.0) * transpose(m)).xyz);
 }
 
@@ -513,13 +523,16 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   let instData = bitcast<u32>(data.y);
 
   let ofs = instData & INST_DATA_MASK;
-  let tri = tris[ofs + (bitcast<u32>(hit.w) >> 16)];
+  let triOfs = (ofs + (bitcast<u32>(hit.w) >> 16)) * 6;
+  let n0 = tris[triOfs + 3]; // w = mtl id
+  let n1 = tris[triOfs + 4]; // w = ltri id
+  let n2 = tris[triOfs + 5];
 
   // Either use the material id from the triangle or the material override from the instance
-  *mtl = materials[select(tri.mtl & SHORT_MASK, instId >> 16, (instData & MTL_OVERRIDE_BIT) > 0)];
+  *mtl = materials[select(bitcast<u32>(n0.w) & SHORT_MASK, instId >> 16, (instData & MTL_OVERRIDE_BIT) > 0)];
   *pos = ori + hit.x * dir;
-  *nrm = calcTriNormal(hit.yz, tri, m);
-  *ltriId = tri.ltriId; // Not set if not emissive
+  *nrm = calcTriNormal(hit.yz, n0.xyz, n1.xyz, n2.xyz, m);
+  *ltriId = bitcast<u32>(n1.w); // Not set if not emissive
 
   // Flip normal if backside, except if we hit a ltri or refractive mtl
   *nrm *= select(-1.0, 1.0, dot(-dir, *nrm) > 0 || (*mtl).emissive > 0.0 || (*mtl).refractive > 0.0);

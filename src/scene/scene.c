@@ -27,6 +27,7 @@ void scene_init(scene *s, uint32_t max_mesh_cnt, uint32_t max_mtl_cnt, uint32_t 
   s->inst_cnt     = 0;
 
   s->ltris        = NULL; // Attach all meshes before initializing ltris
+  s->tri_ids      = NULL;
   s->max_ltri_cnt = 0;
   s->ltri_cnt     = 0;
 
@@ -52,6 +53,7 @@ void scene_release(scene *s)
 
   free(s->cams);
   free(s->blas_nodes);
+  free(s->tri_ids);
   free(s->ltris);
   free(s->tlas_nodes);
   free(s->inst_info);
@@ -82,8 +84,9 @@ void scene_finalize(scene *s)
     s->max_tri_cnt += m->tri_cnt;
   }
 
-  // Allocate space for given ltri cnt
+  // Allocate space for ltris and tri_ids (point from ltris to tris)
   s->ltris = malloc(s->max_ltri_cnt * sizeof(*s->ltris));
+  s->tri_ids = malloc(s->max_ltri_cnt * sizeof(*s->tri_ids));
 
   // Allocate enough blas nodes to cover the tris of all meshes
   s->blas_nodes = malloc(2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
@@ -105,15 +108,16 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
   uint32_t ltri_cnt = 0;
 
   if(inst->data & MTL_OVERRIDE_BIT) {
-    // Material override applies to all tris, create ltri for each of them
+    // Material override applies to all tris, create a ltri for each tri
     for(uint32_t i=0; i<tri_cnt; i++) {
       tri *t = &tris[i];
       uint32_t ltri_id = ltri_ofs + ltri_cnt++;
-      tri_build_ltri(&s->ltris[ltri_id], &tris[i],
-          i, info->transform, info->inv_transform,
-          s->mtls[t->mtl & 0xffff].col);
-      // A tri links its ltri: Tris that emit light need to be unique, i.e.
-      // multiple instances of the same light mesh/tri are not allowed :(
+      tri_build_ltri(&s->ltris[ltri_id], t, info->transform,
+          info->inv_transform, s->mtls[t->mtl & 0xffff].col);
+      // In case of CPU-side updates we need to know which tri a ltri references
+      s->tri_ids[ltri_id] = i;
+      // Vice versa, a tri also links its ltri. Tris that emit light need to be
+      // unique (multiple instances of the same light mesh/tri are not allowed)
       t->ltri_id = ltri_id;
     }
   } else {
@@ -123,8 +127,9 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
       mtl *mtl = &s->mtls[t->mtl & 0xffff];
       if(mtl->emissive > 0.0f) {
         uint32_t ltri_id = ltri_ofs + ltri_cnt++;
-        tri_build_ltri(&s->ltris[ltri_id], t,
-            i, info->transform, info->inv_transform, mtl->col);
+        tri_build_ltri(&s->ltris[ltri_id], t, info->transform,
+            info->inv_transform, mtl->col);
+        s->tri_ids[ltri_id] = i;
         t->ltri_id = ltri_id;
       }
     }
@@ -142,8 +147,10 @@ void update_ltris(scene *s, inst_info *info)
 {
   tri *tris = s->meshes[info->mesh_id].tris;
   for(uint32_t i=0; i<info->ltri_cnt; i++) {
-    ltri *lt = &s->ltris[info->ltri_ofs + i];
-    tri_update_ltri(lt, &tris[lt->tri_id], info->transform, info->inv_transform);
+    uint32_t ltri_id = info->ltri_ofs + i;
+    ltri *lt = &s->ltris[ltri_id];
+    tri_update_ltri(lt, &tris[s->tri_ids[ltri_id]],
+        info->transform, info->inv_transform);
   }
 
   scene_set_dirty(s, RT_LTRI);
