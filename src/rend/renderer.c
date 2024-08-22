@@ -22,7 +22,7 @@ typedef enum buf_type {
   BT_NRM,
   BT_LTRI,
   BT_NODE, // blas + tlas
-  // ..more buffers JS-side here..
+  // ..more buffers on JS-side here..
   BT_CFG = 11
 } buf_type;
 
