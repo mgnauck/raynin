@@ -1,15 +1,15 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include "acc/bvh.h"
 #include "imex/import.h"
+#include "rend/bvh.h"
+#include "rend/renderer.h"
 #include "scene/cam.h"
 #include "scene/mesh.h"
 #include "scene/mtl.h"
+#include "scene/scene.h"
 #include "sys/log.h"
 #include "sys/mutil.h"
 #include "sys/sutil.h"
-#include "rend/renderer.h"
-#include "scene/scene.h"
 #include "util/vec3.h"
 
 scene     *s = 0;

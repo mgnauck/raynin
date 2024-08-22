@@ -29,6 +29,58 @@ static uint32_t find_best_node(uint32_t idx, aabb *aabbs, uint32_t *node_indices
 }
 
 // Walter et al: Fast Agglomerative Clustering for Rendering
+uint32_t cluster_nodes(node *nodes, aabb *aabbs, uint32_t node_idx, uint32_t *node_indices, uint32_t node_indices_cnt)
+{
+  uint32_t a = 0;
+  uint32_t b = find_best_node(a, aabbs, node_indices, node_indices_cnt);
+  while(node_indices_cnt > 1) {
+    uint32_t c = find_best_node(b, aabbs, node_indices, node_indices_cnt);
+    if(a == c) {
+      uint32_t idx_a = node_indices[a];
+      uint32_t idx_b = node_indices[b];
+
+      node *node_a = &nodes[idx_a];
+      node *node_b = &nodes[idx_b];
+
+      // Claim new node which is the combination of node A and B
+      node *new_node = &nodes[node_idx];
+
+      // Either store the actual node idx or an idx to the data item
+      // (Former leaf nodes of data items will simply be "forgotten")
+      new_node->left = (node_a->left != node_a->right) ? idx_a : node_a->left;
+      new_node->right = (node_b->left != node_b->right) ? idx_b : node_b->left;
+
+      aabb *left_aabb = &aabbs[idx_a];
+      new_node->lmin = left_aabb->min;
+      new_node->lmax = left_aabb->max;
+
+      aabb *right_aabb = &aabbs[idx_b];
+      new_node->rmin = right_aabb->min;
+      new_node->rmax = right_aabb->max;
+
+      // Store combined aabb of left and right child of this node
+      aabbs[node_idx] = aabb_combine(left_aabb, right_aabb);
+
+      // Replace node A with newly created combined node
+      node_indices[a] = node_idx--;
+
+      // Remove node B by replacing its slot with last node
+      node_indices[b] = node_indices[--node_indices_cnt];
+
+      // Restart the loop for remaining nodes
+      b = find_best_node(a, aabbs, node_indices, node_indices_cnt);
+    } else {
+      // The best match B we found for A had itself a better match in C, thus
+      // A and B are not best matches and we continue searching with B and C.
+      a = b;
+      b = c;
+    }
+  }
+
+  // Index of root node - 1
+  return node_idx;
+}
+
 void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
 {
   uint32_t  node_indices[tri_cnt]; 
@@ -56,52 +108,7 @@ void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt)
       node_indices[node_indices_cnt++] = node_idx--;
   }
 
-  // Bottom up combining of nodes
-  uint32_t a = 0;
-  uint32_t b = find_best_node(a, aabbs, node_indices, node_indices_cnt);
-  while(node_indices_cnt > 1) {
-    uint32_t c = find_best_node(b, aabbs, node_indices, node_indices_cnt);
-    if(a == c) {
-      uint32_t idx_a = node_indices[a];
-      uint32_t idx_b = node_indices[b];
-
-      node *node_a = &nodes[idx_a];
-      node *node_b = &nodes[idx_b];
-
-      // Claim new node which is the combination of node A and B
-      node *new_node = &nodes[node_idx];
-
-      // Either store the actual node idx or an idx to the data item
-      // (Former leaf nodes of data items will be simply "forgotten" here)
-      new_node->left = (node_a->left != node_a->right) ? idx_a : node_a->left;
-      new_node->right = (node_b->left != node_b->right) ? idx_b : node_b->left;
-
-      aabb *left_aabb = &aabbs[idx_a];
-      new_node->lmin = left_aabb->min;
-      new_node->lmax = left_aabb->max;
-
-      aabb *right_aabb = &aabbs[idx_b];
-      new_node->rmin = right_aabb->min;
-      new_node->rmax = right_aabb->max;
-
-      // Store combined aabb of left and right child of this node
-      aabbs[node_idx] = aabb_combine(left_aabb, right_aabb);
-
-      // Replace node A with newly created combined node
-      node_indices[a] = node_idx--;
-
-      // Remove node B by replacing its slot with last node
-      node_indices[b] = node_indices[--node_indices_cnt];
-
-      // Restart the loop for remaining nodes
-      b = find_best_node(a, aabbs, node_indices, node_indices_cnt);
-    } else {
-      // The best match B we found for A had itself a better match in C, thus
-      // A and B are not best matches and we continue searching with B and C.
-      a = b;
-      b = c;
-    }
-  }
+  cluster_nodes(nodes, aabbs, node_idx, node_indices, node_indices_cnt);
 }
 
 void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
@@ -113,8 +120,6 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
   // Nodes will be placed beginning at the back of the array
   uint32_t  node_idx = 2 * inst_cnt - 2;
   aabb      aabbs[2 * inst_cnt - 1];
-
-  bool      gaps = false;
 
   // Construct a leaf node for each instance
   for(uint32_t i=0; i<inst_cnt; i++) {
@@ -128,58 +133,12 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
       n->left = n->right = ~i;
       
       node_indices[node_indices_cnt++] = node_idx--;
-    } else
-      gaps = true;
-  }
-
-  // Bottom up combining of nodes
-  uint32_t a = 0;
-  uint32_t b = find_best_node(a, aabbs, node_indices, node_indices_cnt);
-  while(node_indices_cnt > 1) {
-    uint32_t c = find_best_node(b, aabbs, node_indices, node_indices_cnt);
-    if(a == c) {
-      uint32_t idx_a = node_indices[a];
-      uint32_t idx_b = node_indices[b];
-
-      node *node_a = &nodes[idx_a];
-      node *node_b = &nodes[idx_b];
-
-      // Claim new node which is the combination of node A and B
-      node *new_node = &nodes[node_idx];
-
-      // Either store the actual node idx or an idx to the data item
-      // (Former leaf nodes of data items will be simply "forgotten" here)
-      new_node->left = (node_a->left != node_a->right) ? idx_a : node_a->left;
-      new_node->right = (node_b->left != node_b->right) ? idx_b : node_b->left;
-
-      aabb *left_aabb = &aabbs[idx_a];
-      new_node->lmin = left_aabb->min;
-      new_node->lmax = left_aabb->max;
-
-      aabb *right_aabb = &aabbs[idx_b];
-      new_node->rmin = right_aabb->min;
-      new_node->rmax = right_aabb->max;
-
-      // Store combined aabb of left and right child of this node
-      aabbs[node_idx] = aabb_combine(left_aabb, right_aabb);
-
-      // Replace node A with newly created combined node
-      node_indices[a] = node_idx--;
-
-      // Remove node B by replacing its slot with last node
-      node_indices[b] = node_indices[--node_indices_cnt];
-
-      // Restart the loop for remaining nodes
-      b = find_best_node(a, aabbs, node_indices, node_indices_cnt);
-    } else {
-      // The best match B we found for A had itself a better match in C, thus
-      // A and B are not best matches and we continue searching with B and C.
-      a = b;
-      b = c;
     }
   }
 
-  if(gaps)
-    // There are gaps, i.e. not all nodes are populated, move root node to front
+  node_idx = cluster_nodes(nodes, aabbs, node_idx, node_indices, node_indices_cnt);
+
+  if(node_idx + 1 > 0)
+    // There were gaps (not all assumed leaf nodes were populated), move root node to front
     nodes[0] = nodes[node_idx + 1];
 }

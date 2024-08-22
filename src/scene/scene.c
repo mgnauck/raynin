@@ -1,5 +1,5 @@
 #include "scene.h"
-#include "../acc/bvh.h"
+#include "../rend/bvh.h"
 #include "../sys/mutil.h"
 #include "../sys/sutil.h"
 #include "../sys/log.h"

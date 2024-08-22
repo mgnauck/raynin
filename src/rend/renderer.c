@@ -1,5 +1,4 @@
 #include "renderer.h"
-#include "../acc/bvh.h"
 #include "../scene/cam.h"
 #include "../scene/inst.h"
 #include "../scene/mesh.h"
@@ -9,6 +8,7 @@
 #include "../sys/mutil.h"
 #include "../sys/sutil.h"
 #include "../util/vec3.h"
+#include "bvh.h"
 
 #define CAM_BUF_SIZE          48
 #define MAX_UNIFORM_BUF_SIZE  65536
