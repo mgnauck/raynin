@@ -30,7 +30,7 @@
   pad1:             u32
 }*/
 
-struct Tri
+/*struct Tri
 {
   v0:               vec3f,
   pad0:             f32,
@@ -38,13 +38,7 @@ struct Tri
   pad1:             f32,
   v2:               vec3f,
   pad2:             f32,
-  n0:               vec3f,
-  mtl:              u32,            // (mtl id & 0xffff)
-  n1:               vec3f,
-  ltriId:           u32,            // Set only if tri has light emitting material
-  n2:               vec3f,
-  pad3:             f32
-}
+}*/
 
 /*struct PathState
 {
@@ -237,7 +231,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       // Transform negated leaf index back into an actual triangle index
       let triIdx = u32(~leafIndex);
       // Fetch tri data and intersect
-      let triOfs = (dataOfs + triIdx) * 6; // 6 vec4f per tri
+      let triOfs = (dataOfs + triIdx) * 3; // 3 vec4f per tri
       let tempHit = intersectTri(ori, dir, tris[triOfs + 0].xyz, tris[triOfs + 1].xyz, tris[triOfs + 2].xyz);
       if(tempHit.x > EPS && tempHit.x < (*hit).x) {
         // Store closest hit only
@@ -280,7 +274,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
 
-  let tlasOfs = arrayLength(&tris) / 3; // = skip 2 * tri cnt blas nodes with 6 * vec4f per tri struct
+  let tlasOfs = 2 * arrayLength(&tris) / 3; // = skip 2 * tri cnt blas nodes with 3 * vec4f per tri struct
 
   var nodeStackIndex = 1u;
 

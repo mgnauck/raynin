@@ -127,6 +127,7 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
     for(uint32_t j=0; j<ind_acc->count / 3; j++) {
 
       tri *t = &m->tris[tri_cnt];
+      tri_nrm *tn = &m->tri_nrms[tri_cnt];
       uint32_t i = j * 3;
 
       uint32_t i0 = (ind_acc->comp_type == 5121) ?
@@ -145,11 +146,11 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
       t->v1 = read_vec(bin, pos_bv->byte_ofs, i1);
       t->v2 = read_vec(bin, pos_bv->byte_ofs, i2);
 
-      t->n0 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i0), inv);
-      t->n1 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i1), inv);
-      t->n2 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i2), inv);
+      tn->n0 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i0), inv);
+      tn->n1 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i1), inv);
+      tn->n2 = vec3_scale(read_vec(bin, nrm_bv->byte_ofs, i2), inv);
 
-      t->mtl = p->mtl_idx;
+      tn->mtl = p->mtl_idx;
       tri_cnt++;
     }
   }

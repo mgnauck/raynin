@@ -18,10 +18,12 @@
 
 typedef struct vec3 vec3;
 typedef struct tri tri;
+typedef struct tri_nrm tri_nrm;
 
 typedef struct mesh {
   uint32_t  tri_cnt;
   tri       *tris;
+  tri_nrm   *tri_nrms;
   bool      is_emissive;
   uint32_t  ofs;
 } mesh;

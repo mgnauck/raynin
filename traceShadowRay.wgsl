@@ -38,12 +38,6 @@
   pad1:             f32,
   v2:               vec3f,
   pad2:             f32,
-  n0:               vec3f,
-  mtl:              u32,            // (mtl id & 0xffff)
-  n1:               vec3f,
-  ltriId:           u32,            // Set only if tri has light emitting material
-  n2:               vec3f,
-  pad3:             f32
 }*/
 
 /*struct ShadowRay
@@ -217,7 +211,7 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
     // Triangle "traversal"
     while(leafIndex < 0) {
       // Transform negated leaf index back into actual triangle index
-      let triOfs = (dataOfs + u32(~leafIndex)) * 6; // 6 * vec4f per tri
+      let triOfs = (dataOfs + u32(~leafIndex)) * 3; // 3 * vec4f per tri
       if(intersectTri(ori, dir, tfar, tris[triOfs].xyz, tris[triOfs + 1].xyz, tris[triOfs + 2].xyz)) {
         return true;
       }
@@ -260,7 +254,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
   let invDir = 1.0 / dir;
 
-  let tlasOfs = arrayLength(&tris) / 3; // = skip 2 * tri cnt blas nodes with 6 * vec4f per tri struct
+  let tlasOfs = 2 * arrayLength(&tris) / 3; // = skip 2 * tri cnt blas nodes with 3 * vec4f per tri struct
 
   var nodeStackIndex = 1u;
 

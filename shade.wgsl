@@ -30,14 +30,8 @@ struct Mtl
   pad1:             u32
 }*/
 
-/*struct Tri
+/*struct TriNrm
 {
-  v0:               vec3f,
-  pad0:             f32,
-  v1:               vec3f,
-  pad1:             f32,
-  v2:               vec3f,
-  pad2:             f32,
   n0:               vec3f,
   mtl:              u32,            // (mtl id & 0xffff)
   n1:               vec3f,
@@ -94,7 +88,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
 @group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64k bytes by default
-@group(0) @binding(2) var<storage, read> tris: array<vec4f>;
+@group(0) @binding(2) var<storage, read> triNrms: array<vec4f>;
 @group(0) @binding(3) var<storage, read> ltris: array<vec4f>;
 @group(0) @binding(4) var<storage, read> hits: array<vec4f>;
 @group(0) @binding(5) var<storage, read> pathStatesIn: array<vec4f>;
@@ -523,10 +517,10 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   let instData = bitcast<u32>(data.y);
 
   let ofs = instData & INST_DATA_MASK;
-  let triOfs = (ofs + (bitcast<u32>(hit.w) >> 16)) * 6;
-  let n0 = tris[triOfs + 3]; // w = mtl id
-  let n1 = tris[triOfs + 4]; // w = ltri id
-  let n2 = tris[triOfs + 5];
+  let triOfs = (ofs + (bitcast<u32>(hit.w) >> 16)) * 3;
+  let n0 = triNrms[triOfs + 0]; // w = mtl id
+  let n1 = triNrms[triOfs + 1]; // w = ltri id
+  let n2 = triNrms[triOfs + 2];
 
   // Either use the material id from the triangle or the material override from the instance
   *mtl = materials[select(bitcast<u32>(n0.w) & SHORT_MASK, instId >> 16, (instData & MTL_OVERRIDE_BIT) > 0)];

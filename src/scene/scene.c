@@ -105,32 +105,35 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
   mesh *m = &s->meshes[info->mesh_id];
   uint32_t tri_cnt = m->tri_cnt;
   tri *tris = m->tris;
+  tri_nrm *tri_nrms = m->tri_nrms;
   uint32_t ltri_cnt = 0;
 
   if(inst->data & MTL_OVERRIDE_BIT) {
     // Material override applies to all tris, create a ltri for each tri
     for(uint32_t i=0; i<tri_cnt; i++) {
       tri *t = &tris[i];
+      tri_nrm *tn = &tri_nrms[i];
       uint32_t ltri_id = ltri_ofs + ltri_cnt++;
-      tri_build_ltri(&s->ltris[ltri_id], t, info->transform,
-          info->inv_transform, s->mtls[t->mtl & 0xffff].col);
+      tri_build_ltri(&s->ltris[ltri_id], t, tn, info->transform,
+          info->inv_transform, s->mtls[tn->mtl & 0xffff].col);
       // In case of CPU-side updates we need to know which tri a ltri references
       s->tri_ids[ltri_id] = i;
       // Vice versa, a tri also links its ltri. Tris that emit light need to be
       // unique (multiple instances of the same light mesh/tri are not allowed)
-      t->ltri_id = ltri_id;
+      tn->ltri_id = ltri_id;
     }
   } else {
     // Create ltris for emissive tris of the mesh only
     for(uint32_t i=0; i<tri_cnt; i++) {
       tri *t = &tris[i];
-      mtl *mtl = &s->mtls[t->mtl & 0xffff];
+      tri_nrm *tn = &tri_nrms[i];
+      mtl *mtl = &s->mtls[tn->mtl & 0xffff];
       if(mtl->emissive > 0.0f) {
         uint32_t ltri_id = ltri_ofs + ltri_cnt++;
-        tri_build_ltri(&s->ltris[ltri_id], t, info->transform,
+        tri_build_ltri(&s->ltris[ltri_id], t, tn, info->transform,
             info->inv_transform, mtl->col);
         s->tri_ids[ltri_id] = i;
-        t->ltri_id = ltri_id;
+        tn->ltri_id = ltri_id;
       }
     }
   }
@@ -146,10 +149,12 @@ void build_ltris(scene *s, inst *inst, inst_info *info, uint32_t ltri_ofs)
 void update_ltris(scene *s, inst_info *info)
 {
   tri *tris = s->meshes[info->mesh_id].tris;
+  tri_nrm *tri_nrms = s->meshes[info->mesh_id].tri_nrms;
   for(uint32_t i=0; i<info->ltri_cnt; i++) {
     uint32_t ltri_id = info->ltri_ofs + i;
     ltri *lt = &s->ltris[ltri_id];
-    tri_update_ltri(lt, &tris[s->tri_ids[ltri_id]],
+    uint32_t tri_id = s->tri_ids[ltri_id];
+    tri_update_ltri(lt, &tris[tri_id], &tri_nrms[tri_id],
         info->transform, info->inv_transform);
   }
 

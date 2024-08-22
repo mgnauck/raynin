@@ -19,17 +19,18 @@ typedef enum buf_type {
   BT_MTL,
   BT_INST,
   BT_TRI,
+  BT_NRM,
   BT_LTRI,
   BT_NODE, // blas + tlas
   // ..more buffers JS-side here..
-  BT_CFG = 10
+  BT_CFG = 11
 } buf_type;
 
 static uint32_t total_tris = 0;
 
 extern void gpu_create_res(uint32_t glob_sz, uint32_t mtl_sz,
-    uint32_t inst_sz, uint32_t tri_sz, uint32_t ltri_sz,
-    uint32_t node_sz);
+    uint32_t inst_sz, uint32_t tri_sz, uint32_t nrm_sz,
+    uint32_t ltri_sz, uint32_t node_sz);
 
 extern void gpu_write_buf(buf_type type, uint32_t dst_ofs,
     const void *src, uint32_t src_sz);
@@ -56,6 +57,7 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
       total_mtl_cnt * sizeof(mtl), // Materials (uniform buf)
       total_inst_cnt * sizeof(inst), // Instances (uniform buf)
       total_tri_cnt * sizeof(tri), // Tris (storage buf)
+      total_tri_cnt * sizeof(tri_nrm), // Tri nrms (storage buf)
       total_ltri_cnt * sizeof(ltri), // LTris (storage buf)
       2 * (total_tri_cnt + total_inst_cnt) * sizeof(node)); // BLAS + TLAS nodes (storage buf)
 
@@ -72,7 +74,7 @@ void renderer_update(scene *s, bool converge)
     reset_samples();
 
   if(s->dirty & RT_CFG) {
-    gpu_write_buf(BT_CFG, 16 * 4, &s->bg_col, sizeof(vec3));
+    gpu_write_buf(BT_CFG, 12 * 4, &s->bg_col, sizeof(vec3));
     scene_clr_dirty(s, RT_CFG);
   }
 
@@ -95,6 +97,7 @@ void renderer_update(scene *s, bool converge)
     for(uint32_t i=0; i<s->mesh_cnt; i++) {
       mesh *m = &s->meshes[i];
       gpu_write_buf(BT_TRI, m->ofs * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
+      gpu_write_buf(BT_NRM, m->ofs * sizeof(*m->tri_nrms), m->tri_nrms, m->tri_cnt * sizeof(*m->tri_nrms));
     }
     scene_clr_dirty(s, RT_TRI);
   }

@@ -39,15 +39,16 @@ const BUF_CAM         = 0; // Accessed from WASM
 const BUF_MTL         = 1; // Accessed from WASM
 const BUF_INST        = 2; // Accessed from WASM
 const BUF_TRI         = 3; // Accessed from WASM
-const BUF_LTRI        = 4; // Accessed from WASM
-const BUF_NODE        = 5; // Accessed from WASM
-const BUF_PATH0       = 6;
-const BUF_PATH1       = 7;
-const BUF_SRAY        = 8;
-const BUF_HIT         = 9;
-const BUF_CFG         = 10; // Accessed from WASM
-const BUF_ACC         = 11;
-const BUF_GRID        = 12;
+const BUF_NRM         = 4; // Accessed from WASM
+const BUF_LTRI        = 5; // Accessed from WASM
+const BUF_NODE        = 6; // Accessed from WASM
+const BUF_PATH0       = 7;
+const BUF_PATH1       = 8;
+const BUF_SRAY        = 9;
+const BUF_HIT         = 10;
+const BUF_CFG         = 11; // Accessed from WASM
+const BUF_ACC         = 12;
+const BUF_GRID        = 13;
 
 const PL_GENERATE     = 0;
 const PL_INTERSECT    = 1;
@@ -126,7 +127,8 @@ function Wasm(module)
       }
       return parseFloat(s); 
     },
-    gpu_create_res: (g, m, i, t, lt, bn) => createGpuResources(g, m, i, t, lt, bn),
+    // Cam, mtl, inst, tri, nrm, ltri, bvh node
+    gpu_create_res: (c, m, i, t, n, l, b) => createGpuResources(c, m, i, t, n, l, b),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
     reset_samples: () => { samples = 0; },
   };
@@ -139,10 +141,11 @@ function Wasm(module)
   }
 }
 
-function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
+function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
 {
   // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
-  triSz = triSz == 0 ? 96 : triSz;
+  triSz = triSz == 0 ? 48 : triSz;
+  nrmSz = nrmSz == 0 ? 48 : nrmSz;
   ltriSz = ltriSz == 0 ? 64 : ltriSz;
   nodeSz = nodeSz == 0 ? 64 : nodeSz;
 
@@ -154,7 +157,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
   /////// Buffers
 
   res.buf[BUF_CAM] = device.createBuffer({
-    size: globSz,
+    size: camSz,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
@@ -170,6 +173,11 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
 
   res.buf[BUF_TRI] = device.createBuffer({
     size: triSz,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[BUF_NRM] = device.createBuffer({
+    size: nrmSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
@@ -299,7 +307,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_MTL] } },
       { binding: 1, resource: { buffer: res.buf[BUF_INST] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_TRI] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_NRM] } },
       { binding: 3, resource: { buffer: res.buf[BUF_LTRI] } },
       { binding: 4, resource: { buffer: res.buf[BUF_HIT] } },
       { binding: 5, resource: { buffer: res.buf[BUF_PATH0] } },
@@ -315,7 +323,7 @@ function createGpuResources(globSz, mtlSz, instSz, triSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_MTL] } },
       { binding: 1, resource: { buffer: res.buf[BUF_INST] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_TRI] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_NRM] } },
       { binding: 3, resource: { buffer: res.buf[BUF_LTRI] } },
       { binding: 4, resource: { buffer: res.buf[BUF_HIT] } },
       { binding: 5, resource: { buffer: res.buf[BUF_PATH1] } },
