@@ -87,7 +87,7 @@ const INV_PI              = 1.0 / PI;
 const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64k bytes by default
+@group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
 @group(0) @binding(2) var<storage, read> triNrms: array<vec4f>;
 @group(0) @binding(3) var<storage, read> ltris: array<vec4f>;
 @group(0) @binding(4) var<storage, read> hits: array<vec4f>;
@@ -95,7 +95,9 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(6) var<storage, read_write> config: Config;
 @group(0) @binding(7) var<storage, read_write> pathStatesOut: array<vec4f>;
 @group(0) @binding(8) var<storage, read_write> shadowRays: array<vec4f>;
-@group(0) @binding(9) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> nrmBuf: array<vec4f>;
+@group(0) @binding(10) var<storage, read_write> posBuf: array<vec4f>;
+@group(0) @binding(11) var<storage, read_write> accumBuf: array<vec4f>;
 
 // State of rng seed
 var<private> seed: u32;
@@ -499,7 +501,7 @@ fn calcTriNormal(bary: vec2f, n0: vec3f, n1: vec3f, n2: vec3f, m: mat4x4f) -> ve
   return normalize((vec4f(nrm, 0.0) * transpose(m)).xyz);
 }
 
-fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
+fn finalizeHit(pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
 {
   // hit = vec4f(t, u, v, (tri id << 16) | inst id & 0xffff)
   let instOfs = (bitcast<u32>(hit.w) & SHORT_MASK) << 2;
@@ -523,13 +525,20 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   let n2 = triNrms[triOfs + 2];
 
   // Either use the material id from the triangle or the material override from the instance
-  *mtl = materials[select(bitcast<u32>(n0.w) & SHORT_MASK, instId >> 16, (instData & MTL_OVERRIDE_BIT) > 0)];
+  let mtlId = select(bitcast<u32>(n0.w) & SHORT_MASK, instId >> 16, (instData & MTL_OVERRIDE_BIT) > 0);
+  *mtl = materials[mtlId];
   *pos = ori + hit.x * dir;
   *nrm = calcTriNormal(hit.yz, n0.xyz, n1.xyz, n2.xyz, m);
   *ltriId = bitcast<u32>(n1.w); // Not set if not emissive
 
   // Flip normal if backside, except if we hit a ltri or refractive mtl
   *nrm *= select(-1.0, 1.0, dot(-dir, *nrm) > 0 || (*mtl).emissive > 0.0 || (*mtl).refractive > 0.0);
+
+  // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
+  if((pidx & 0xff) == 0) {
+    nrmBuf[pidx >> 8] = vec4f(*nrm, 1.0);
+    posBuf[pidx >> 8] = vec4f(*pos, bitcast<f32>(mtlId)); // instId: bitcast<f32>(bitcast<u32>(hit.w) & SHORT_MASK));
+  }
 }
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
@@ -550,10 +559,17 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let dir = pathStatesIn[(ofs << 1) + gidx];
   let pidx = bitcast<u32>(dir.w);
   var throughput = select(tpp.xyz, vec3f(1.0), (pidx & 0xff) == 0); // Avoid mem access
+  let sample = f32((frame.w >> 8) + (frame.w & 0xff));
 
   // No hit, terminate path
   if(hit.x == INF) {
-    accum[pidx >> 8] += vec4f(throughput * config.bgColor, 1.0);
+    // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
+    if((pidx & 0xff) == 0) {
+      nrmBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, 1.0);
+      posBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(SHORT_MASK));
+    }
+    //accumBuf[pidx >> 8] += vec4f(throughput * config.bgColor, 1.0);
+    accumBuf[pidx >> 8] = (accumBuf[pidx >> 8] * sample + vec4f(throughput * config.bgColor, 1.0)) / (sample + 1.0);
     return;
   }
 
@@ -561,7 +577,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var nrm: vec3f;
   var ltriId: u32;
   var mtl: Mtl;
-  finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
+  finalizeHit(pidx, ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
 
   // Hit light via material direction
   if(mtl.emissive > 0.0) {
@@ -575,10 +591,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
         let pdf = tpp.w * geomSolidAngle(ldir * ldistInv, nrm, ldistInv); // tpp.w = pdf
         let lpdf = sampleLTriUniformPdf(ltriId);
         let weight = pdf / (pdf + lpdf);
-        accum[pidx >> 8] += vec4f(throughput * weight * mtl.col, 1.0);
+        //accumBuf[pidx >> 8] += vec4f(throughput * weight * mtl.col, 1.0);
+        accumBuf[pidx >> 8] = (accumBuf[pidx >> 8] * sample + vec4f(throughput * weight * mtl.col, 1.0)) / (sample + 1.0);
       } else {
         // Primary ray hit light
-        accum[pidx >> 8] += vec4f(throughput * mtl.col, 1.0);
+        //accumBuf[pidx >> 8] += vec4f(throughput * mtl.col, 1.0);
+        accumBuf[pidx >> 8] = (accumBuf[pidx >> 8] * sample + vec4f(throughput * mtl.col, 1.0)) / (sample + 1.0);
       }
     }
     // Terminate ray after light hit (lights do not reflect)
@@ -594,7 +612,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Russian roulette
   // Terminate with prob inverse to throughput
   let p = min(0.95, maxComp3(throughput));
-  if(/*(pidx & 0xff) > 0 &&*/ r0.w > p) {
+  if(r0.w > p) { // (pidx & 0xff) > 0
     // Terminate path due to russian roulette
     return;
   }

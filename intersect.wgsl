@@ -62,7 +62,7 @@ const STACK_EMPTY_MARKER  = 0xfffffffi;
 
 const WG_SIZE             = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64k bytes
+@group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
 @group(0) @binding(1) var<storage, read> tris: array<vec4f>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: array<vec4u, 4>;
@@ -132,7 +132,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
   var uvt = vec4f(dot(tvec, pvec), dot(dir, qvec), dot(edge1, qvec), 0.0) / det;
   uvt.w = 1.0 - uvt.x - uvt.y;
 
-  *hit = select(*hit, vec4f(uvt.z, uvt.xy, bitcast<f32>(instTriId)), all(uvt >= vec4f(EPS)) && uvt.z < (*hit).x);
+  *hit = select(*hit, vec4f(uvt.z, uvt.xy, bitcast<f32>(instTriId)), all(uvt > vec4f(EPS)) && uvt.z < (*hit).x);
 }
 
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs

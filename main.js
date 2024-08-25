@@ -31,41 +31,51 @@ END_traceShadowRay_wgsl`;
 const SM_CONTROL = `BEGIN_control_wgsl
 END_control_wgsl`;
 
+const SM_DENOISE = `BEGIN_denoise_wgsl
+END_denoise_wgsl`;
+
 const SM_BLIT = `BEGIN_blit_wgsl
 END_blit_wgsl`;
 
-const BUF_CAM         = 0; // Accessed from WASM
-const BUF_MTL         = 1; // Accessed from WASM
-const BUF_INST        = 2; // Accessed from WASM
-const BUF_TRI         = 3; // Accessed from WASM
-const BUF_NRM         = 4; // Accessed from WASM
-const BUF_LTRI        = 5; // Accessed from WASM
-const BUF_NODE        = 6; // Accessed from WASM
-const BUF_PATH0       = 7;
-const BUF_PATH1       = 8;
-const BUF_SRAY        = 9;
+const BUF_CAM         =  0; // Accessed from WASM
+const BUF_MTL         =  1; // Accessed from WASM
+const BUF_INST        =  2; // Accessed from WASM
+const BUF_TRI         =  3; // Accessed from WASM
+const BUF_TNRM        =  4; // Accessed from WASM
+const BUF_LTRI        =  5; // Accessed from WASM
+const BUF_NODE        =  6; // Accessed from WASM
+const BUF_PATH0       =  7;
+const BUF_PATH1       =  8;
+const BUF_SRAY        =  9;
 const BUF_HIT         = 10;
-const BUF_CFG         = 11; // Accessed from WASM
-const BUF_ACC         = 12;
-const BUF_GRID        = 13;
+const BUF_NRM         = 11;
+const BUF_POS         = 12;
+const BUF_ACC0        = 13;
+const BUF_ACC1        = 14;
+const BUF_CFG         = 15; // Accessed from WASM
+const BUF_GRID        = 16;
 
-const PL_GENERATE     = 0;
-const PL_INTERSECT    = 1;
-const PL_SHADE        = 2;
-const PL_SHADOW       = 3;
-const PL_CONTROL0     = 4;
-const PL_CONTROL1     = 5;
-const PL_CONTROL2     = 6;
-const PL_BLIT         = 7;
+const PL_GENERATE     =  0;
+const PL_INTERSECT    =  1;
+const PL_SHADE        =  2;
+const PL_SHADOW       =  3;
+const PL_CONTROL0     =  4;
+const PL_CONTROL1     =  5;
+const PL_CONTROL2     =  6;
+const PL_CONTROL3     =  7;
+const PL_DENOISE      =  8;
+const PL_BLIT         =  9;
 
 const BG_GENERATE     = 0;
-const BG_INTERSECT0   = 2;
-const BG_INTERSECT1   = 3;
-const BG_SHADE0       = 4;
-const BG_SHADE1       = 5;
-const BG_SHADOW       = 6;
-const BG_CONTROL      = 7;
-const BG_BLIT         = 8;
+const BG_INTERSECT0   = 1;
+const BG_INTERSECT1   = 2;
+const BG_SHADE0       = 3;
+const BG_SHADE1       = 4;
+const BG_SHADOW       = 5;
+const BG_CONTROL      = 6;
+const BG_DENOISE0     = 7;
+const BG_DENOISE1     = 8;
+const BG_BLIT         = 9;
 
 const WG_SIZE_X       = 16;
 const WG_SIZE_Y       = 16;
@@ -177,7 +187,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[BUF_NRM] = device.createBuffer({
+  res.buf[BUF_TNRM] = device.createBuffer({
     size: nrmSz,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
@@ -212,14 +222,29 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE
   });
 
+  res.buf[BUF_NRM] = device.createBuffer({
+    size: WIDTH * HEIGHT * 4 * 4,
+    usage: GPUBufferUsage.STORAGE
+  });
+
+  res.buf[BUF_POS] = device.createBuffer({
+    size: WIDTH * HEIGHT * 4 * 4,
+    usage: GPUBufferUsage.STORAGE
+  });
+
+  res.buf[BUF_ACC0] = device.createBuffer({
+    size: WIDTH * HEIGHT * 4 * 4,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
+  res.buf[BUF_ACC1] = device.createBuffer({
+    size: WIDTH * HEIGHT * 4 * 4,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  });
+
   res.buf[BUF_CFG] = device.createBuffer({
     size: 16 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
-  });
-
-  res.buf[BUF_ACC] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   res.buf[BUF_GRID] = device.createBuffer({
@@ -300,6 +325,8 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
@@ -308,14 +335,16 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_MTL] } },
       { binding: 1, resource: { buffer: res.buf[BUF_INST] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_TNRM] } },
       { binding: 3, resource: { buffer: res.buf[BUF_LTRI] } },
       { binding: 4, resource: { buffer: res.buf[BUF_HIT] } },
       { binding: 5, resource: { buffer: res.buf[BUF_PATH0] } },
       { binding: 6, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 7, resource: { buffer: res.buf[BUF_PATH1] } },
       { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC] } },
+      { binding: 9, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 10, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 11, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -324,14 +353,16 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_MTL] } },
       { binding: 1, resource: { buffer: res.buf[BUF_INST] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_TNRM] } },
       { binding: 3, resource: { buffer: res.buf[BUF_LTRI] } },
       { binding: 4, resource: { buffer: res.buf[BUF_HIT] } },
       { binding: 5, resource: { buffer: res.buf[BUF_PATH1] } },
       { binding: 6, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 7, resource: { buffer: res.buf[BUF_PATH0] } },
       { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC] } },
+      { binding: 9, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 10, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 11, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -357,7 +388,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 2, resource: { buffer: res.buf[BUF_NODE] } },
       { binding: 3, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 4, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_ACC] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -380,6 +411,42 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   res.pipelineLayouts[PL_CONTROL0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_CONTROL1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_CONTROL2] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_CONTROL3] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+  // Denoise
+  bindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+    ]
+  });
+
+  res.bindGroups[BG_DENOISE0] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_ACC1] } },
+    ]
+  });
+
+  res.bindGroups[BG_DENOISE1] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_ACC0] } },
+    ]
+  });
+
+  res.pipelineLayouts[PL_DENOISE] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Blit
   bindGroupLayout = device.createBindGroupLayout({
@@ -393,7 +460,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_ACC] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -471,7 +538,7 @@ async function render(time)
   for(let i=0; i<SPP; i++) {
 
     if(samples == 0)
-      commandEncoder.clearBuffer(res.buf[BUF_ACC]);
+      commandEncoder.clearBuffer(res.buf[BUF_ACC0]);
 
     // Copy path state and shadow ray buffer grid dimensions for indirect dispatch
     commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 4 * 4, res.buf[BUF_GRID], 0, 8 * 4);
@@ -529,7 +596,30 @@ async function render(time)
 
     samples++;
   }
- 
+
+  // Denoise
+  if(!converge) {
+
+    passEncoder = commandEncoder.beginComputePass();
+
+    let bindGroup = 0;
+    for(let i=0; i<5; i++) {
+
+      passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]); // Increase step with each iteration
+      passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+      passEncoder.dispatchWorkgroups(1);
+
+      passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + bindGroup]); // Apply filter
+      passEncoder.setPipeline(res.pipelines[PL_DENOISE]);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+      // Toggle bindgroup to flip in and output accumulation buffer
+      bindGroup = 1 - bindGroup;
+    }
+  
+    passEncoder.end();
+  }
+
   // Blit
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
   
@@ -638,6 +728,8 @@ async function main()
     createPipeline(PL_CONTROL0, await (await fetch("control.wgsl")).text(), "m0");
     createPipeline(PL_CONTROL1, await (await fetch("control.wgsl")).text(), "m1");
     createPipeline(PL_CONTROL2, await (await fetch("control.wgsl")).text(), "m2");
+    createPipeline(PL_CONTROL3, await (await fetch("control.wgsl")).text(), "m3");
+    createPipeline(PL_DENOISE, await (await fetch("denoise.wgsl")).text(), "m");
     createPipeline(PL_BLIT, await (await fetch("blit.wgsl")).text(), "vm", "m");
   } else {
     createPipeline(PL_GENERATE, SM_GENERATE, "m");
@@ -647,6 +739,8 @@ async function main()
     createPipeline(PL_CONTROL0, SM_CONTROL, "m0");
     createPipeline(PL_CONTROL1, SM_CONTROL, "m1");
     createPipeline(PL_CONTROL2, SM_CONTROL, "m2");
+    createPipeline(PL_CONTROL3, SM_CONTROL, "m3");
+    createPipeline(PL_DENOISE, SM_DENOISE, "m");
     createPipeline(PL_BLIT, SM_BLIT, "vm", "m");
   }
 

@@ -66,3 +66,17 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   config[2].w = 0u;
   config[3].w = 0u;
 }
+
+@compute @workgroup_size(1)
+fn m3(@builtin(global_invocation_id) globalId: vec3u)
+{
+  if(globalId.x != 0) {
+    return;
+  }
+
+  let frame = config[0];
+
+  // frame.z will be the step for the denoiser, which is increased with each iteration
+  // frame.w marks the initial reset of the step to 0 when the denoiser iterations start
+  config[0] = select(vec4u(frame.x, frame.y, frame.z + 1, 0u), vec4u(frame.x, frame.y, /* step */ 0u, /* marker */ 0u), frame.w > 0);
+}

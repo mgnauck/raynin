@@ -62,7 +62,7 @@ const STACK_EMPTY_MARKER  = 0xfffffffi;
 
 const WG_SIZE             = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64k bytes
+@group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
 @group(0) @binding(1) var<storage, read> tris: array<vec4f>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: array<vec4u, 4>;
@@ -105,7 +105,7 @@ fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxE
 
 // Moeller/Trumbore: Ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-// (slightly rearranged)
+// (slightlyt rearranged)
 fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec3f) -> bool
 {
   let edge0 = v1 - v0;
@@ -119,7 +119,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec
   var uvt = vec4f(dot(tvec, pvec), dot(dir, qvec), dot(edge1, qvec), 0.0) / det;
   uvt.w = 1.0 - uvt.x - uvt.y;
 
-  return select(false, true, all(uvt >= vec4f(EPS)) && uvt.z < tfar);
+  return select(false, true, all(uvt > vec4f(EPS)) && uvt.z < tfar);
 }
 
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
@@ -328,11 +328,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   let frame = config[0];
 
-  let ofs = (frame.x >> 8) * (frame.y >> 8); // widht * height
+  let sample = f32((frame.w >> 8) + (frame.w & 0xff));
+
+  let ofs = (frame.x >> 8) * (frame.y >> 8); // width * height
   let ori = shadowRays[gidx];
   let dir = shadowRays[ofs + gidx];
   let ctb = shadowRays[(ofs << 1) + gidx];
   if(!intersectTlasAnyHit(ori.xyz, dir.xyz, dir.w)) {
-    accum[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);
+    //accum[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);
+    accum[bitcast<u32>(ori.w)] = (accum[bitcast<u32>(ori.w)] * sample + vec4f(ctb.xyz, 1.0)) / (sample + 1.0);
   }
 }
