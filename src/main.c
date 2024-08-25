@@ -16,6 +16,8 @@ scene     *s = 0;
 uint32_t  active_cam = 0;
 bool      orbit_cam = false;
 
+extern void toggle_converge();
+
   __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
 {
@@ -68,8 +70,8 @@ void key_down(unsigned char key, float move_vel)
       scene_set_active_cam(s, active_cam);
       logc("Setting cam %i of %i cams active", active_cam, s->cam_cnt);
       break;
-   case 'r':
-      // TODO Call JS to reload shader
+   case ' ':
+      toggle_converge();
       break;
   }
 

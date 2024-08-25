@@ -9,7 +9,6 @@ const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 2;
 const MAX_BOUNCES = 5;
-const CONVERGE = false;
 
 const CAM_LOOK_VELOCITY = 0.005;
 const CAM_MOVE_VELOCITY = 0.1;
@@ -75,6 +74,7 @@ let canvas, context, device;
 let wa, res = {};
 let frames = 0;
 let samples = 0;
+let converge = true;
 
 function handleMouseMoveEvent(e)
 {
@@ -131,6 +131,7 @@ function Wasm(module)
     gpu_create_res: (c, m, i, t, n, l, b) => createGpuResources(c, m, i, t, n, l, b),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
     reset_samples: () => { samples = 0; },
+    toggle_converge: () => { converge = !converge; }
   };
 
   this.instantiate = async function()
@@ -543,7 +544,7 @@ async function render(time)
   device.queue.submit([commandEncoder.finish()]);
 
   // Update scene and renderer for next frame
-  wa.update((time - start) / 1000, CONVERGE);
+  wa.update((time - start) / 1000, converge);
   frames++;
 
   requestAnimationFrame(render);
