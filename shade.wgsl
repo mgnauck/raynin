@@ -554,11 +554,11 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let w = frame.x;
   let ofs = (w >> 8) * (frame.y >> 8);
   let hit = hits[gidx];
-  let tpp = pathStatesIn[gidx];
   let ori = pathStatesIn[ofs + gidx];
   let dir = pathStatesIn[(ofs << 1) + gidx];
   let pidx = bitcast<u32>(dir.w);
-  var throughput = select(tpp.xyz, vec3f(1.0), (pidx & 0xff) == 0); // Avoid mem access
+  let throughput4 = select(pathStatesIn[gidx], vec4f(1.0), (pidx & 0xff) == 0); // Avoid mem access on bounce 0
+  var throughput = throughput4.xyz;
   let sample = f32((frame.w >> 8) + (frame.w & 0xff));
 
   // No hit, terminate path
@@ -568,8 +568,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
       nrmBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, 1.0);
       posBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(SHORT_MASK));
     }
-    //accumBuf[pidx >> 8] += vec4f(throughput * config.bgColor, 1.0);
-    accumBuf[pidx >> 8] = (accumBuf[pidx >> 8] * sample + vec4f(throughput * config.bgColor, 1.0)) / (sample + 1.0);
+    accumBuf[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
     return;
   }
 
@@ -588,15 +587,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
         // Secondary ray hit light, apply MIS
         let ldir = pos - ori.xyz;
         let ldistInv = inverseSqrt(dot(ldir, ldir));
-        let pdf = tpp.w * geomSolidAngle(ldir * ldistInv, nrm, ldistInv); // tpp.w = pdf
+        let pdf = throughput4.w * geomSolidAngle(ldir * ldistInv, nrm, ldistInv); // throughput4.w = pdf
         let lpdf = sampleLTriUniformPdf(ltriId);
         let weight = pdf / (pdf + lpdf);
-        //accumBuf[pidx >> 8] += vec4f(throughput * weight * mtl.col, 1.0);
-        accumBuf[pidx >> 8] = (accumBuf[pidx >> 8] * sample + vec4f(throughput * weight * mtl.col, 1.0)) / (sample + 1.0);
+        accumBuf[pidx >> 8] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
       } else {
         // Primary ray hit light
-        //accumBuf[pidx >> 8] += vec4f(throughput * mtl.col, 1.0);
-        accumBuf[pidx >> 8] = (accumBuf[pidx >> 8] * sample + vec4f(throughput * mtl.col, 1.0)) / (sample + 1.0);
+        accumBuf[pidx >> 8] += vec4f(throughput * mtl.col.xyz, 1.0);
       }
     }
     // Terminate ray after light hit (lights do not reflect)

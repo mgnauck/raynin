@@ -132,8 +132,52 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
   var uvt = vec4f(dot(tvec, pvec), dot(dir, qvec), dot(edge1, qvec), 0.0) / det;
   uvt.w = 1.0 - uvt.x - uvt.y;
 
-  *hit = select(*hit, vec4f(uvt.z, uvt.xy, bitcast<f32>(instTriId)), all(uvt > vec4f(EPS)) && uvt.z < (*hit).x);
+  *hit = select(*hit, vec4f(uvt.z, uvt.xy, bitcast<f32>(instTriId)), all(uvt.xyw >= vec3f(0.0)) && uvt.z > EPS && uvt.z < (*hit).x);
 }
+
+// Moeller/Trumbore: Ray-triangle intersection
+// https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
+/*fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTriId: u32, hit: ptr<function, vec4f>)
+{
+  // Vectors of two edges sharing vertex 0
+  let edge1 = v1 - v0;
+  let edge2 = v2 - v0;
+
+  // Calculate determinant and u parameter later on
+  let pvec = cross(dir, edge2);
+  let det = dot(edge1, pvec);
+
+  if(abs(det) < EPS) {
+    // Ray in plane of triangle
+    return;
+  }
+
+  let invDet = 1.0 / det;
+
+  // Distance vertex 0 to origin
+  let tvec = ori - v0;
+
+  // Calculate parameter u and test bounds
+  let u = dot(tvec, pvec) * invDet;
+  if(u < 0.0 || u > 1.0) {
+    return;
+  }
+
+  // Prepare to test for v
+  let qvec = cross(tvec, edge1);
+
+  // Calculate parameter u and test bounds
+  let v = dot(dir, qvec) * invDet;
+  if(v < 0.0 || u + v > 1.0) {
+    return;
+  }
+
+  // Ray intersects, calc distance
+  let t = dot(edge2, qvec) * invDet;
+  if(t > EPS && t < (*hit).x) {
+    *hit = vec4f(t, u, v, bitcast<f32>(instTriId));
+  }
+}*/
 
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
 // https://code.google.com/archive/p/understanding-the-efficiency-of-ray-traversal-on-gpus/

@@ -119,8 +119,50 @@ fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec
   var uvt = vec4f(dot(tvec, pvec), dot(dir, qvec), dot(edge1, qvec), 0.0) / det;
   uvt.w = 1.0 - uvt.x - uvt.y;
 
-  return select(false, true, all(uvt > vec4f(EPS)) && uvt.z < tfar);
+  return select(false, true, all(uvt.xyw >= vec3f(0.0)) && uvt.z > EPS && uvt.z < tfar);
 }
+
+// Moeller/Trumbore: Ray-triangle intersection
+// https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
+/*fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec3f) -> bool
+{
+  // Vectors of two edges sharing vertex 0
+  let edge1 = v1 - v0;
+  let edge2 = v2 - v0;
+
+  // Calculate determinant and u parameter later on
+  let pvec = cross(dir, edge2);
+  let det = dot(edge1, pvec);
+
+  if(abs(det) < EPS) {
+    // Ray in plane of triangle
+    return false;
+  }
+
+  let invDet = 1.0 / det;
+
+  // Distance vertex 0 to origin
+  let tvec = ori - v0;
+
+  // Calculate parameter u and test bounds
+  let u = dot(tvec, pvec) * invDet;
+  if(u < 0.0 || u > 1.0) {
+    return false;
+  }
+
+  // Prepare to test for v
+  let qvec = cross(tvec, edge1);
+
+  // Calculate parameter u and test bounds
+  let v = dot(dir, qvec) * invDet;
+  if(v < 0.0 || u + v > 1.0) {
+    return false;
+  }
+
+  // Ray intersects, calc distance
+  let t = dot(edge2, qvec) * invDet;
+  return select(false, true, t > EPS && t < tfar);
+}*/
 
 // Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
 // https://code.google.com/archive/p/understanding-the-efficiency-of-ray-traversal-on-gpus/
@@ -334,8 +376,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let ori = shadowRays[gidx];
   let dir = shadowRays[ofs + gidx];
   let ctb = shadowRays[(ofs << 1) + gidx];
-  if(!intersectTlasAnyHit(ori.xyz, dir.xyz, dir.w)) {
-    //accum[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);
-    accum[bitcast<u32>(ori.w)] = (accum[bitcast<u32>(ori.w)] * sample + vec4f(ctb.xyz, 1.0)) / (sample + 1.0);
+  if(!intersectTlasAnyHit(ori.xyz, dir.xyz, dir.w)) { // dir.w = distance
+    accum[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);
   }
 }
