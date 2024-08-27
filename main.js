@@ -9,7 +9,7 @@ const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 2;
 const MAX_BOUNCES = 5;
-const DENOISE = false;
+const DENOISE_ITER = 0;
 
 const CAM_LOOK_VELOCITY = 0.005;
 const CAM_MOVE_VELOCITY = 0.1;
@@ -80,7 +80,9 @@ const BG_SHADOW1      =  7;
 const BG_CONTROL      =  8;
 const BG_DENOISE0     =  9;
 const BG_DENOISE1     = 10;
-const BG_BLIT         = 11;
+const BG_DENOISE2     = 11;
+const BG_DENOISE3     = 12;
+const BG_BLIT         = 13;
 
 const WG_SIZE_X       = 16;
 const WG_SIZE_Y       = 16;
@@ -475,12 +477,34 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
       { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_DACC0] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_DACC1] } },
+    ]
+  });
+
+  res.bindGroups[BG_DENOISE1] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_DACC1] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_DACC0] } },
+    ]
+  });
+
+  res.bindGroups[BG_DENOISE2] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
       { binding: 3, resource: { buffer: res.buf[BUF_IACC0] } },
       { binding: 4, resource: { buffer: res.buf[BUF_IACC1] } },
     ]
   });
 
-  res.bindGroups[BG_DENOISE1] = device.createBindGroup({
+  res.bindGroups[BG_DENOISE3] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
@@ -647,18 +671,22 @@ async function render(time)
   }
 
   // Denoise
-  if(!converge && DENOISE) {
+  if(!converge && DENOISE_ITER > 0) {
 
     passEncoder = commandEncoder.beginComputePass();
 
     let bindGroup = 0;
-    for(let i=0; i<5; i++) {
+    for(let i=0; i<DENOISE_ITER; i++) {
 
       passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]); // Increase step with each iteration
       passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
       passEncoder.dispatchWorkgroups(1);
 
-      passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + bindGroup]); // Apply filter
+      passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + bindGroup]); // Apply filter (direct illum)
+      passEncoder.setPipeline(res.pipelines[PL_DENOISE]);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+      passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE2 + bindGroup]); // Apply filter (indir illum)
       passEncoder.setPipeline(res.pipelines[PL_DENOISE]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 

@@ -537,7 +537,7 @@ fn finalizeHit(pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function,
   // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
   if((pidx & 0xff) == 0) {
     nrmBuf[pidx >> 8] = vec4f(*nrm, 1.0);
-    posBuf[pidx >> 8] = vec4f(*pos, bitcast<f32>(mtlId)); // instId: bitcast<f32>(bitcast<u32>(hit.w) & SHORT_MASK));
+    posBuf[pidx >> 8] = vec4f(*pos, select(bitcast<f32>(mtlId), bitcast<f32>(SHORT_MASK), (*mtl).emissive > 0.0));
   }
 }
 
