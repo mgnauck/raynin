@@ -56,7 +56,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let lev = frame.z;
-  let st = i32(1u << lev);
+  let st = 1i << lev;
 
   let sigmaNrm = 0.8;
   let sigmaPos = 1.2;

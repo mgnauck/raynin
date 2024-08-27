@@ -9,7 +9,7 @@ const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 2;
 const MAX_BOUNCES = 5;
-const DENOISE_ITER = 0;
+const DENOISE = false;
 
 const CAM_LOOK_VELOCITY = 0.005;
 const CAM_MOVE_VELOCITY = 0.1;
@@ -530,8 +530,8 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_DACC0] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_IACC0] } },
+      { binding: 1, resource: { buffer: res.buf[DENOISE ? BUF_DACC1 : BUF_DACC0] } },
+      { binding: 2, resource: { buffer: res.buf[DENOISE ? BUF_IACC1 : BUF_IACC0] } },
     ]
   });
 
@@ -671,12 +671,12 @@ async function render(time)
   }
 
   // Denoise
-  if(!converge && DENOISE_ITER > 0) {
+  if(!converge && DENOISE) {
 
     passEncoder = commandEncoder.beginComputePass();
 
     let bindGroup = 0;
-    for(let i=0; i<DENOISE_ITER; i++) {
+    for(let i=0; i<5; i++) {
 
       passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]); // Increase step with each iteration
       passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
