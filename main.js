@@ -51,10 +51,10 @@ const BUF_SRAY        =  9;
 const BUF_HIT         = 10;
 const BUF_NRM         = 11;
 const BUF_POS         = 12;
-const BUF_DACC0       = 13; // Accumulation direct illumination
-const BUF_DACC1       = 14;
-const BUF_IACC0       = 15; // Accumulation indirect illumination
-const BUF_IACC1       = 16;
+const BUF_DCOL        = 13; // Color buffer direct illumination
+const BUF_ICOL        = 14; // Color buffer indirect illumination
+const BUF_ACC0        = 15; // Accumulation buffer
+const BUF_ACC1        = 16; // Accumulation buffer
 const BUF_CFG         = 17; // Accessed from WASM
 const BUF_GRID        = 18;
 
@@ -80,9 +80,8 @@ const BG_SHADOW1      =  7;
 const BG_CONTROL      =  8;
 const BG_DENOISE0     =  9;
 const BG_DENOISE1     = 10;
-const BG_DENOISE2     = 11;
-const BG_DENOISE3     = 12;
-const BG_BLIT         = 13;
+const BG_BLIT0        = 11;
+const BG_BLIT1        = 12;
 
 const WG_SIZE_X       = 16;
 const WG_SIZE_Y       = 16;
@@ -92,6 +91,7 @@ let wa, res = {};
 let frames = 0;
 let samples = 0;
 let converge = false;
+let bindGroupAcc = 0;
 
 function handleMouseMoveEvent(e)
 {
@@ -239,24 +239,24 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[BUF_DACC0] = device.createBuffer({
+  res.buf[BUF_DCOL] = device.createBuffer({
     size: WIDTH * HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[BUF_DACC1] = device.createBuffer({
+  res.buf[BUF_ICOL] = device.createBuffer({
     size: WIDTH * HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[BUF_IACC0] = device.createBuffer({
+  res.buf[BUF_ACC0] = device.createBuffer({
     size: WIDTH * HEIGHT * 4 * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    usage: GPUBufferUsage.STORAGE // | GPUBufferUsage.COPY_DST
   });
 
-  res.buf[BUF_IACC1] = device.createBuffer({
+  res.buf[BUF_ACC1] = device.createBuffer({
     size: WIDTH * HEIGHT * 4 * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    usage: GPUBufferUsage.STORAGE // | GPUBufferUsage.COPY_DST
   });
 
   res.buf[BUF_CFG] = device.createBuffer({
@@ -361,7 +361,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
       { binding: 9, resource: { buffer: res.buf[BUF_NRM] } },
       { binding: 10, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 11, resource: { buffer: res.buf[BUF_DACC0] } },
+      { binding: 11, resource: { buffer: res.buf[BUF_DCOL] } },
     ]
   });
 
@@ -379,7 +379,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
       { binding: 9, resource: { buffer: res.buf[BUF_NRM] } },
       { binding: 10, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 11, resource: { buffer: res.buf[BUF_IACC0] } },
+      { binding: 11, resource: { buffer: res.buf[BUF_ICOL] } },
     ]
   });
 
@@ -397,7 +397,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
       { binding: 9, resource: { buffer: res.buf[BUF_NRM] } },
       { binding: 10, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 11, resource: { buffer: res.buf[BUF_IACC0] } },
+      { binding: 11, resource: { buffer: res.buf[BUF_ICOL] } },
     ]
   });
 
@@ -423,7 +423,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 2, resource: { buffer: res.buf[BUF_NODE] } },
       { binding: 3, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 4, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_DACC0] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_DCOL] } },
     ]
   });
 
@@ -435,7 +435,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 2, resource: { buffer: res.buf[BUF_NODE] } },
       { binding: 3, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 4, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_IACC0] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_ICOL] } },
     ]
   });
 
@@ -467,7 +467,9 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
@@ -477,8 +479,10 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
       { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_DACC0] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_DACC1] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_DCOL] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_ICOL] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_ACC1] } },
     ]
   });
 
@@ -488,30 +492,10 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
       { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_DACC1] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_DACC0] } },
-    ]
-  });
-
-  res.bindGroups[BG_DENOISE2] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_IACC0] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_IACC1] } },
-    ]
-  });
-
-  res.bindGroups[BG_DENOISE3] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_IACC1] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_IACC0] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_DCOL] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_ICOL] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -522,16 +506,22 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
-      { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
     ]
   });
 
-  res.bindGroups[BG_BLIT] = device.createBindGroup({
+  res.bindGroups[BG_BLIT0] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[DENOISE ? BUF_DACC1 : BUF_DACC0] } },
-      { binding: 2, resource: { buffer: res.buf[DENOISE ? BUF_IACC1 : BUF_IACC0] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ACC1] } },
+    ]
+  });
+
+  res.bindGroups[BG_BLIT1] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -606,8 +596,8 @@ async function render(time)
   let passEncoder;
 
   if(samples == 0) {
-    commandEncoder.clearBuffer(res.buf[BUF_DACC0]);
-    commandEncoder.clearBuffer(res.buf[BUF_IACC0]);
+    commandEncoder.clearBuffer(res.buf[BUF_DCOL]);
+    commandEncoder.clearBuffer(res.buf[BUF_ICOL]);
   }
 
   // Compute passes
@@ -623,19 +613,19 @@ async function render(time)
     passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
-    let bindGroup = 0;
+    let bindGroupPathState = 0;
     for(let j=0; j<MAX_BOUNCES; j++) {
 
       if(j > 0)
         passEncoder = commandEncoder.beginComputePass();
 
       // Intersect
-      passEncoder.setBindGroup(0, res.bindGroups[BG_INTERSECT0 + bindGroup]);
+      passEncoder.setBindGroup(0, res.bindGroups[BG_INTERSECT0 + bindGroupPathState]);
       passEncoder.setPipeline(res.pipelines[PL_INTERSECT]);
       passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
       
       // Shade
-      passEncoder.setBindGroup(0, res.bindGroups[(j == 0) ? BG_SHADE0 : (BG_SHADE1 + bindGroup)]);
+      passEncoder.setBindGroup(0, res.bindGroups[(j == 0) ? BG_SHADE0 : (BG_SHADE1 + bindGroupPathState)]);
       passEncoder.setPipeline(res.pipelines[PL_SHADE]);
       passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
@@ -663,46 +653,32 @@ async function render(time)
 
       passEncoder.end();
 
-      // Toggle to the other bindgroup / path state buffer
-      bindGroup = 1 - bindGroup;
+      // Toggle path state buffer
+      bindGroupPathState = 1 - bindGroupPathState;
     }
 
     samples++;
   }
 
-  // Denoise
-  if(!converge && DENOISE) {
+  // Temporal accumulation and denoise
+  passEncoder = commandEncoder.beginComputePass();
 
-    passEncoder = commandEncoder.beginComputePass();
+  //passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]); // Increase step with each iteration
+  //passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+  //passEncoder.dispatchWorkgroups(1);
 
-    let bindGroup = 0;
-    for(let i=0; i<5; i++) {
+  passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + bindGroupAcc]);
+  passEncoder.setPipeline(res.pipelines[PL_DENOISE]);
+  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
-      passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]); // Increase step with each iteration
-      passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
-      passEncoder.dispatchWorkgroups(1);
-
-      passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + bindGroup]); // Apply filter (direct illum)
-      passEncoder.setPipeline(res.pipelines[PL_DENOISE]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-      passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE2 + bindGroup]); // Apply filter (indir illum)
-      passEncoder.setPipeline(res.pipelines[PL_DENOISE]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-      // Toggle bindgroup to flip in and output accumulation buffer
-      bindGroup = 1 - bindGroup;
-    }
-  
-    passEncoder.end();
-  }
+  passEncoder.end();
 
   // Blit
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
   
   passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
   
-  passEncoder.setBindGroup(0, res.bindGroups[BG_BLIT]);
+  passEncoder.setBindGroup(0, res.bindGroups[BG_BLIT0 + bindGroupAcc]);
   passEncoder.setPipeline(res.pipelines[PL_BLIT]);
   passEncoder.draw(4);
   
@@ -713,6 +689,9 @@ async function render(time)
   // Update scene and renderer for next frame
   wa.update((time - start) / 1000, converge);
   frames++;
+
+  // Toggle accumulation buffer
+  bindGroupAcc = 1 - bindGroupAcc;
 
   requestAnimationFrame(render);
 }

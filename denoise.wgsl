@@ -25,26 +25,27 @@ const WG_SIZE = vec3u(16, 16, 1);
 @group(0) @binding(0) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(1) var<storage, read> nrmBuf: array<vec4f>;
 @group(0) @binding(2) var<storage, read> posBuf: array<vec4f>;
-@group(0) @binding(3) var<storage, read> accumInBuf: array<vec4f>;
-@group(0) @binding(4) var<storage, read_write> accumOutBuf: array<vec4f>;
+@group(0) @binding(3) var<storage, read> dirColBuf: array<vec4f>;
+@group(0) @binding(4) var<storage, read> indColBuf: array<vec4f>;
+@group(0) @binding(5) var<storage, read> accumInBuf: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> accumOutBuf: array<vec4f>;
 
-/*@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m0(@builtin(global_invocation_id) globalId: vec3u)
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
+fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = (frame.x >> 8);
+  let h = (frame.y >> 8);
   let gidx = w * globalId.y + globalId.x;
-  if(gidx >= w * (frame.y >> 8)) {
+  if(gidx >= w * h) {
     return;
   }
 
-  // Scale accumulation buffer by samples taken
-  //accumOutBuf[gidx] = vec4f(accumInBuf[gidx].xyz / f32((frame.w >> 8) + (frame.w & 0xff)), 1.0); // frame.w = samplesTaken
-  accumOutBuf[gidx] = vec4f(accumInBuf[gidx].xyz, 1.0); 
-}*/
+  accumOutBuf[gidx] = vec4f(dirColBuf[gidx].xyz + indColBuf[gidx].xyz, 1.0); 
+}
 
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
-@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
+/*@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
@@ -117,4 +118,4 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   accumOutBuf[gidx] = select(vec4f(accumInBuf[gidx].xyz, 1.0), vec4f(sum / weightSum, 1.0), weightSum != 0.0);
-}
+}*/
