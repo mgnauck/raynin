@@ -515,8 +515,8 @@ fn finalizeHit(pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function,
   // Inst id + inst data
   let data = instances[instOfs + 3];
 
-  let instId = bitcast<u32>(data.x);
-  let instData = bitcast<u32>(data.y);
+  let instId = bitcast<u32>(data.x); // mtl id << 16 | inst id
+  let instData = bitcast<u32>(data.y); // mtl override bit << 31 | tri buf ofs
 
   let ofs = instData & INST_DATA_MASK;
   let triOfs = (ofs + (bitcast<u32>(hit.w) >> 16)) * 3;
@@ -537,7 +537,7 @@ fn finalizeHit(pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function,
   // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
   if((pidx & 0xff) == 0) {
     nrmBuf[pidx >> 8] = vec4f(*nrm, 1.0);
-    posBuf[pidx >> 8] = vec4f(*pos, select(bitcast<f32>(mtlId), bitcast<f32>(SHORT_MASK), (*mtl).emissive > 0.0));
+    posBuf[pidx >> 8] = vec4f(*pos, bitcast<f32>((select(mtlId, SHORT_MASK, (*mtl).emissive > 0.0) << 16) | (instId & SHORT_MASK)));
   }
 }
 
@@ -566,7 +566,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
     if((pidx & 0xff) == 0) {
       nrmBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, 1.0);
-      posBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(SHORT_MASK));
+      let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
+      posBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
     }
     accumBuf[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
     return;

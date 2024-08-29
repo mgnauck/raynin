@@ -56,7 +56,8 @@ const BUF_ICOL        = 14; // Color buffer indirect illumination
 const BUF_ACC0        = 15; // Accumulation buffer
 const BUF_ACC1        = 16; // Accumulation buffer
 const BUF_CFG         = 17; // Accessed from WASM
-const BUF_GRID        = 18;
+const BUF_LCAM        = 18;
+const BUF_GRID        = 19;
 
 const PL_GENERATE     =  0;
 const PL_INTERSECT    =  1;
@@ -176,7 +177,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
 
   res.buf[BUF_CAM] = device.createBuffer({
     size: camSz,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
   });
 
   res.buf[BUF_MTL] = device.createBuffer({
@@ -262,6 +263,11 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   res.buf[BUF_CFG] = device.createBuffer({
     size: 16 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
+  });
+
+  res.buf[BUF_LCAM] = device.createBuffer({
+    size: camSz,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
   res.buf[BUF_GRID] = device.createBuffer({
@@ -463,39 +469,45 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   // Denoise
   bindGroupLayout = device.createBindGroupLayout({
     entries: [
-      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
   res.bindGroups[BG_DENOISE0] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_DCOL] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_ICOL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_ACC0] } },
-      { binding: 6, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_CAM] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_LCAM] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_DCOL] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_ICOL] } },
+      { binding: 7, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 8, resource: { buffer: res.buf[BUF_ACC1] } },
     ]
   });
 
   res.bindGroups[BG_DENOISE1] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_NRM] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_DCOL] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_ICOL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_ACC1] } },
-      { binding: 6, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_CAM] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_LCAM] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_DCOL] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_ICOL] } },
+      { binding: 7, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 8, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -672,6 +684,9 @@ async function render(time)
   passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
   passEncoder.end();
+
+  // Copy current cam to last cam
+  commandEncoder.copyBufferToBuffer(res.buf[BUF_CAM], 0, res.buf[BUF_LCAM], 0, 12 * 4);
 
   // Blit
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
