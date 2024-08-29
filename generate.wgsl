@@ -10,10 +10,10 @@
 
 /*struct Config
 {
-  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
-                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+  frameData:        vec4u,          // x = width
+                                    // y = bits 8-31 for height, bits 0-7 max bounces
                                     // z = current frame number
-                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+                                    // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
   bgColor:          vec4f           // w = ext ray cnt
@@ -106,7 +106,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
 
-  let w = frame.x >> 8;
+  let w = frame.x;
   let h = frame.y >> 8;
 
   let gidx = w * globalId.y + globalId.x;
@@ -114,8 +114,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  // Set seed based on pixel index, current frame (z) and sample num (w) of the frame
-  seed = wangHash(gidx * 32467 + frame.z * 23 + (frame.w & 0xff) * 6173);
+  // Set seed based on pixel index, current frame (z) and sample num (w)
+  seed = wangHash(gidx * 32467 + frame.z * 23 + frame.w * 6173);
 
   let r0 = rand4();
 

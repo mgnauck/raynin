@@ -1,9 +1,9 @@
 struct Config
 {
-  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
-                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+  frameData:        vec4u,          // x = width
+                                    // y = bits 8-31 for height, bits 0-7 max bounces
                                     // z = current frame number
-                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+                                    // w = sample number
   pathStateGrid:    vec4u,          // w = path cnt
   shadowRayGrid:    vec3u,
   shadowRayCnt:     atomic<u32>,
@@ -97,7 +97,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(8) var<storage, read_write> shadowRays: array<vec4f>;
 @group(0) @binding(9) var<storage, read_write> nrmBuf: array<vec4f>;
 @group(0) @binding(10) var<storage, read_write> posBuf: array<vec4f>;
-@group(0) @binding(11) var<storage, read_write> accumBuf: array<vec4f>;
+@group(0) @binding(11) var<storage, read_write> colBuf: array<vec4f>;
 
 // State of rng seed
 var<private> seed: u32;
@@ -551,15 +551,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let frame = config.frameData;
-  let w = frame.x;
-  let ofs = (w >> 8) * (frame.y >> 8);
+  let h = frame.y;
+  let ofs = frame.x * (h >> 8);
   let hit = hits[gidx];
   let ori = pathStatesIn[ofs + gidx];
   let dir = pathStatesIn[(ofs << 1) + gidx];
   let pidx = bitcast<u32>(dir.w);
   let throughput4 = select(pathStatesIn[gidx], vec4f(1.0), (pidx & 0xff) == 0); // Avoid mem access on bounce 0
   var throughput = throughput4.xyz;
-  let sample = f32((frame.w >> 8) + (frame.w & 0xff));
 
   // No hit, terminate path
   if(hit.x == INF) {
@@ -569,7 +568,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
       let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
       posBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
     }
-    accumBuf[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
+    colBuf[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
+    //colBuf[pidx >> 8] = vec4f((colBuf[pidx >> 8].xyz * f32(frame.w) + throughput * config.bgColor.xyz) / f32(frame.w + 1), 1.0);
     return;
   }
 
@@ -591,10 +591,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
         let pdf = throughput4.w * geomSolidAngle(ldir * ldistInv, nrm, ldistInv); // throughput4.w = pdf
         let lpdf = sampleLTriUniformPdf(ltriId);
         let weight = pdf / (pdf + lpdf);
-        accumBuf[pidx >> 8] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
+        colBuf[pidx >> 8] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
+        //colBuf[pidx >> 8] = vec4f((colBuf[pidx >> 8].xyz * f32(frame.w) + throughput * weight * mtl.col.xyz) / f32(frame.w + 1), 1.0);
       } else {
         // Primary ray hit light
-        accumBuf[pidx >> 8] += vec4f(throughput * mtl.col.xyz, 1.0);
+        colBuf[pidx >> 8] += vec4f(throughput * mtl.col.xyz, 1.0);
+        //colBuf[pidx >> 8] = vec4f((colBuf[gidx >> 8].xyz * f32(frame.w) + throughput * mtl.col.xyz) / f32(frame.w + 1), 1.0);
       }
     }
     // Terminate ray after light hit (lights do not reflect)
@@ -639,8 +641,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     shadowRays[(ofs << 1) + sidx] = vec4f(throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf, 0.0);
   }
 
-  // Reached max bounces (encoded in width lower 8 bits), terminate path
-  if((pidx & 0xff) == (w & 0xff) - 1) {
+  // Reached max bounces (encoded in height's lower 8 bits), terminate path
+  if((pidx & 0xff) == (h & 0xff) - 1) {
     return;
   }
 

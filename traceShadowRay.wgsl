@@ -1,9 +1,9 @@
 /*struct Config
 {
-  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
-                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+  frameData:        vec4u,          // x = width
+                                    // y = bits 8-31 for height, bits 0-7 max bounces
                                     // z = current frame number
-                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+                                    // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
   bgColor:          vec4f           // w = ext ray cnt
@@ -67,7 +67,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(4) var<storage, read> shadowRays: array<vec4f>;
-@group(0) @binding(5) var<storage, read_write> accum: array<vec4f>;
+@group(0) @binding(5) var<storage, read_write> colBuf: array<vec4f>;
 
 // Traversal stacks
 const MAX_NODE_CNT      = 64u;
@@ -370,13 +370,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   let frame = config[0];
 
-  let sample = f32((frame.w >> 8) + (frame.w & 0xff));
-
-  let ofs = (frame.x >> 8) * (frame.y >> 8); // width * height
+  let ofs = frame.x * (frame.y >> 8); // width * height
   let ori = shadowRays[gidx];
   let dir = shadowRays[ofs + gidx];
   let ctb = shadowRays[(ofs << 1) + gidx];
   if(!intersectTlasAnyHit(ori.xyz, dir.xyz, dir.w)) { // dir.w = distance
-    accum[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);
+    colBuf[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);
+    //colBuf[bitcast<u32>(ori.w)] = vec4f((colBuf[bitcast<u32>(ori.w)].xyz * f32(frame.w) + ctb.xyz) / f32(frame.w + 1), 1.0);
   }
 }

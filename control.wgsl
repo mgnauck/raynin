@@ -1,9 +1,9 @@
 /*struct Config
 {
-  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
-                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+  frameData:        vec4u,          // x = width
+                                    // y = bits 8-31 for height, bits 0-7 max bounces
                                     // z = current frame number
-                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+                                    // w = sample number
   pathStateGrid:    vec4u,          // w = path cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
   bgColor:          vec4f           // w = ext ray cnt
@@ -53,7 +53,7 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let frame = config[0];
-  let w = frame.x >> 8;
+  let w = frame.x;
   let h = frame.y >> 8;
 
   // Update sample num of current frame
@@ -65,18 +65,4 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   // Reset shadow ray cnt and ext ray cnt
   config[2].w = 0u;
   config[3].w = 0u;
-}
-
-@compute @workgroup_size(1)
-fn m3(@builtin(global_invocation_id) globalId: vec3u)
-{
-  if(globalId.x != 0) {
-    return;
-  }
-
-  let frame = config[0];
-
-  // frame.z will be the step for the denoiser, which is increased with each iteration
-  // frame.w marks the initial reset of the step to 0 when the denoiser iterations start
-  config[0] = select(vec4u(frame.x, frame.y, frame.z + 1, 0u), vec4u(frame.x, frame.y, /* step */ 0u, /* marker */ 0u), frame.w > 0);
 }

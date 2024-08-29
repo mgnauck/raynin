@@ -1,9 +1,9 @@
 /*struct Config
 {
-  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
-                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+  frameData:        vec4u,          // x = width
+                                    // y = bits 8-31 for height, bits 0-7 max bounces
                                     // z = current frame number
-                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+                                    // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
   bgColor:          vec4f           // w = ext ray cnt
@@ -395,6 +395,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   nodeStack[                0] = STACK_EMPTY_MARKER;
   nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
 
-  let ofs = (frame.x >> 8) * (frame.y >> 8);
+  let ofs = frame.x * (frame.y >> 8);
   hits[gidx] = intersectTlas(pathStates[ofs + gidx].xyz, pathStates[(ofs << 1) + gidx].xyz, INF);
 }

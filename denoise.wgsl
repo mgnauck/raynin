@@ -10,10 +10,10 @@
 
 /*struct Config
 {
-  frameData:        vec4u,          // x = bits 8-31 for width, bits 0-7 max bounces
-                                    // y = bits 8-31 for height, bits 0-7 samples per pixel
+  frameData:        vec4u,          // x = width
+                                    // y = bits 8-31 for height, bits 0-7 max bounces
                                     // z = current frame number
-                                    // w = bits 8-31 for samples taken (before current frame), bits 0-7 frame's sample num
+                                    // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
   bgColor:          vec4f           // w = ext ray cnt
@@ -89,7 +89,7 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
-  let w = (frame.x >> 8);
+  let w = frame.x;
   let h = (frame.y >> 8);
   let gidx = w * globalId.y + globalId.x;
   if(gidx >= w * h) {
@@ -100,7 +100,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let col = dirColBuf[gidx].xyz + indColBuf[gidx].xyz;
 
   // No temporal reprojection
-  //accumOutBuf[gidx] = vec4f(col, 1.0);
+  //accumOutBuf[gidx] = accumInBuf[gidx] + vec4f(col, 1.0);
   //return;
 
   // Fetch last camera's up vec
@@ -164,7 +164,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
-  let w = (frame.x >> 8);
+  let w = frame.x;
   let h = (frame.y >> 8);
   let gidx = w * globalId.y + globalId.x;
   if(gidx >= w * h) {
