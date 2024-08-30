@@ -560,6 +560,9 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let throughput4 = select(pathStatesIn[gidx], vec4f(1.0), (pidx & 0xff) == 0); // Avoid mem access on bounce 0
   var throughput = throughput4.xyz;
 
+  // For bounce 0 we index into direct col buf, further bounces into indirect col buf
+  let cidx = min(pidx & 0xff, 1u) * ofs + (pidx >> 8);
+
   // No hit, terminate path
   if(hit.x == INF) {
     // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
@@ -568,7 +571,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
       let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
       posBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
     }
-    colBuf[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
+    colBuf[cidx] += vec4f(throughput * config.bgColor.xyz, 1.0);
     return;
   }
 
@@ -590,10 +593,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
         let pdf = throughput4.w * geomSolidAngle(ldir * ldistInv, nrm, ldistInv); // throughput4.w = pdf
         let lpdf = sampleLTriUniformPdf(ltriId);
         let weight = pdf / (pdf + lpdf);
-        colBuf[pidx >> 8] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
+        colBuf[cidx] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
       } else {
         // Primary ray hit light
-        colBuf[pidx >> 8] += vec4f(throughput * mtl.col.xyz, 1.0);
+        colBuf[cidx] += vec4f(throughput * mtl.col.xyz, 1.0);
       }
     }
     // Terminate ray after light hit (lights do not reflect)
@@ -633,7 +636,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
     let sidx = atomicAdd(&config.shadowRayCnt, 1u);
-    shadowRays[             sidx] = vec4f(pos, bitcast<f32>(pidx >> 8));
+    shadowRays[             sidx] = vec4f(pos, bitcast<f32>(cidx));
     shadowRays[       ofs + sidx] = vec4f(ldir, 1.0 / ldistInv - 2.0 * EPS);
     shadowRays[(ofs << 1) + sidx] = vec4f(throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf, 0.0);
   }

@@ -37,10 +37,9 @@ const WG_SIZE = vec3u(16, 16, 1);
 @group(0) @binding(1) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(2) var<storage, read> nrmBuf: array<vec4f>;
 @group(0) @binding(3) var<storage, read> posBuf: array<vec4f>;
-@group(0) @binding(4) var<storage, read> dirColBuf: array<vec4f>;
-@group(0) @binding(5) var<storage, read> indColBuf: array<vec4f>;
-@group(0) @binding(6) var<storage, read> accumInBuf: array<vec4f>;
-@group(0) @binding(7) var<storage, read_write> accumOutBuf: array<vec4f>;
+@group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
+@group(0) @binding(5) var<storage, read> accumInBuf: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> accumOutBuf: array<vec4f>;
 
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
 fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
@@ -96,7 +95,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Color of accumulated direct and indirect illumination
-  let col = (dirColBuf[gidx].xyz + indColBuf[gidx].xyz) / f32(frame.w);
+  let col = (colBuf[gidx].xyz + colBuf[w * h + gidx].xyz) / f32(frame.w);
 
   // Fetch last camera's up vec
   let lup = lastCamera[2];
