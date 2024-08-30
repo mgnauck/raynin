@@ -2,7 +2,7 @@
 {
   frameData:        vec4u,          // x = width
                                     // y = bits 8-31 for height, bits 0-7 max bounces
-                                    // z = current frame number
+                                    // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
@@ -62,7 +62,6 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   // Calc grid dims for path state buf and set path cnt to w * h (primary rays)
   config[1] = vec4u(u32(ceil(f32(w) / f32(WG_SIZE.x))), u32(ceil(f32(h) / f32(WG_SIZE.y))), 1u, w * h);
 
-  // Reset shadow ray cnt and ext ray cnt
+  // Reset shadow ray cnt
   config[2].w = 0u;
-  config[3].w = 0u;
 }

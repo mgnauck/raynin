@@ -2,7 +2,7 @@
 {
   frameData:        vec4u,          // x = width
                                     // y = bits 8-31 for height, bits 0-7 max bounces
-                                    // z = current frame number
+                                    // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
@@ -376,6 +376,5 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let ctb = shadowRays[(ofs << 1) + gidx];
   if(!intersectTlasAnyHit(ori.xyz, dir.xyz, dir.w)) { // dir.w = distance
     colBuf[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);
-    //colBuf[bitcast<u32>(ori.w)] = vec4f((colBuf[bitcast<u32>(ori.w)].xyz * f32(frame.w) + ctb.xyz) / f32(frame.w + 1), 1.0);
   }
 }

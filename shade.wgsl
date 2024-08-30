@@ -2,7 +2,7 @@ struct Config
 {
   frameData:        vec4u,          // x = width
                                     // y = bits 8-31 for height, bits 0-7 max bounces
-                                    // z = current frame number
+                                    // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path cnt
   shadowRayGrid:    vec3u,
@@ -569,7 +569,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
       posBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
     }
     colBuf[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
-    //colBuf[pidx >> 8] = vec4f((colBuf[pidx >> 8].xyz * f32(frame.w) + throughput * config.bgColor.xyz) / f32(frame.w + 1), 1.0);
     return;
   }
 
@@ -592,11 +591,9 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
         let lpdf = sampleLTriUniformPdf(ltriId);
         let weight = pdf / (pdf + lpdf);
         colBuf[pidx >> 8] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
-        //colBuf[pidx >> 8] = vec4f((colBuf[pidx >> 8].xyz * f32(frame.w) + throughput * weight * mtl.col.xyz) / f32(frame.w + 1), 1.0);
       } else {
         // Primary ray hit light
         colBuf[pidx >> 8] += vec4f(throughput * mtl.col.xyz, 1.0);
-        //colBuf[pidx >> 8] = vec4f((colBuf[gidx >> 8].xyz * f32(frame.w) + throughput * mtl.col.xyz) / f32(frame.w + 1), 1.0);
       }
     }
     // Terminate ray after light hit (lights do not reflect)
@@ -641,7 +638,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     shadowRays[(ofs << 1) + sidx] = vec4f(throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf, 0.0);
   }
 
-  // Reached max bounces (encoded in height's lower 8 bits), terminate path
+  // Reached max bounces (encoded in lower 8 bits of height), terminate path
   if((pidx & 0xff) == (h & 0xff) - 1) {
     return;
   }

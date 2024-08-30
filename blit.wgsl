@@ -2,7 +2,7 @@
 {
   frameData:        vec4u,          // x = width
                                     // y = bits 8-31 for height, bits 0-7 max bounces
-                                    // z = current frame number
+                                    // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
@@ -41,8 +41,6 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 @fragment
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  let frame = config[0];
-  let gidx = frame.x * u32(pos.y) + u32(pos.x);
-  let col = vec4f(pow(accumBuf[gidx].xyz / f32(frame.w), vec3f(0.4545)), 1.0);
-  return col;
+  let gidx = config[0].x * u32(pos.y) + u32(pos.x);
+  return vec4f(pow(accumBuf[gidx].xyz, vec3f(0.4545)), 1.0);
 }

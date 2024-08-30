@@ -12,7 +12,7 @@
 {
   frameData:        vec4u,          // x = width
                                     // y = bits 8-31 for height, bits 0-7 max bounces
-                                    // z = current frame number
+                                    // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
   shadowRayGrid:    vec4u,          // w = shadow ray cnt
@@ -96,12 +96,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  // Current color
-  let col = dirColBuf[gidx].xyz + indColBuf[gidx].xyz;
-
-  // No temporal reprojection
-  //accumOutBuf[gidx] = accumInBuf[gidx] + vec4f(col, 1.0);
-  //return;
+  // Color of accumulated direct and indirect illumination
+  let col = (dirColBuf[gidx].xyz + indColBuf[gidx].xyz) / f32(frame.w);
 
   // Fetch last camera's up vec
   let lup = lastCamera[2];
