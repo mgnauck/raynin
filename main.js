@@ -461,44 +461,41 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   bindGroupLayout = device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
-      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
   res.bindGroups[BG_DENOISE0] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_NRM] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_DCOL] } },
-      { binding: 6, resource: { buffer: res.buf[BUF_ICOL] } },
-      { binding: 7, resource: { buffer: res.buf[BUF_ACC0] } }, // in
-      { binding: 8, resource: { buffer: res.buf[BUF_ACC1] } }, // out
+      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_DCOL] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_ICOL] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_ACC0] } }, // in
+      { binding: 7, resource: { buffer: res.buf[BUF_ACC1] } }, // out
     ]
   });
 
   res.bindGroups[BG_DENOISE1] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_NRM] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_POS] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_DCOL] } },
-      { binding: 6, resource: { buffer: res.buf[BUF_ICOL] } },
-      { binding: 7, resource: { buffer: res.buf[BUF_ACC1] } }, // in
-      { binding: 8, resource: { buffer: res.buf[BUF_ACC0] } }, // out
+      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_NRM] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_POS] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_DCOL] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_ICOL] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_ACC1] } }, // in
+      { binding: 7, resource: { buffer: res.buf[BUF_ACC0] } }, // out
     ]
   });
 
