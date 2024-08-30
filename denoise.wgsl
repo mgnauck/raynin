@@ -35,11 +35,10 @@ const WG_SIZE = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> lastCamera: array<vec4f, 3>;
 @group(0) @binding(1) var<storage, read> config: array<vec4u, 4>;
-@group(0) @binding(2) var<storage, read> nrmBuf: array<vec4f>;
-@group(0) @binding(3) var<storage, read> posBuf: array<vec4f>;
-@group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
-@group(0) @binding(5) var<storage, read> accumInBuf: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> accumOutBuf: array<vec4f>;
+@group(0) @binding(2) var<storage, read> attrBuf: array<vec4f>;
+@group(0) @binding(3) var<storage, read> colBuf: array<vec4f>;
+@group(0) @binding(4) var<storage, read> accumInBuf: array<vec4f>;
+@group(0) @binding(5) var<storage, read_write> accumOutBuf: array<vec4f>;
 
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
 fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
@@ -94,8 +93,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
+  let ofs = w * h;
+
   // Color of accumulated direct and indirect illumination
-  let col = (colBuf[gidx].xyz + colBuf[w * h + gidx].xyz) / f32(frame.w);
+  let col = (colBuf[gidx].xyz + colBuf[ofs + gidx].xyz) / f32(frame.w);
 
   // Fetch last camera's up vec
   let lup = lastCamera[2];
@@ -107,7 +108,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Current world space hit pos with material id in w
-  let pos = posBuf[gidx]; // w = mtl id << 16 | inst id
+  let pos = attrBuf[ofs + gidx]; // w = mtl id << 16 | inst id
 
   // Check mtl id if this was a no hit or light hit
   if((bitcast<u32>(pos.w) >> 16) == SHORT_MASK) {
@@ -130,14 +131,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   /* TODO
   // Read last pos with mtl/inst id in w
-  let lpos = lastPosBuf[lgidx];
+  let lpos = lastAttrBuf[ofs + lgidx];
 
   // Check if current and last material and instance ids match
   ignorePrevious &= bitcast<u32>(pos.w) == bitcast<u32>(lpos.w);
 
   // Consider differences of current and last normal
-  let nrm = nrmBuf[gidx];
-  let lnrm = lastNrmBuf[lgidx];
+  let nrm = attrBuf[gidx];
+  let lnrm = lastAttrBuf[lgidx];
   ignorePrevious &= abs(dot(nrm, lnrm)) < 0.1;
   */
 

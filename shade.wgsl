@@ -95,9 +95,8 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(6) var<storage, read_write> config: Config;
 @group(0) @binding(7) var<storage, read_write> pathStatesOut: array<vec4f>;
 @group(0) @binding(8) var<storage, read_write> shadowRays: array<vec4f>;
-@group(0) @binding(9) var<storage, read_write> nrmBuf: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> posBuf: array<vec4f>;
-@group(0) @binding(11) var<storage, read_write> colBuf: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> attrBuf: array<vec4f>;
+@group(0) @binding(10) var<storage, read_write> colBuf: array<vec4f>;
 
 // State of rng seed
 var<private> seed: u32;
@@ -501,7 +500,7 @@ fn calcTriNormal(bary: vec2f, n0: vec3f, n1: vec3f, n2: vec3f, m: mat4x4f) -> ve
   return normalize((vec4f(nrm, 0.0) * transpose(m)).xyz);
 }
 
-fn finalizeHit(pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
+fn finalizeHit(bufOfs: u32, pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
 {
   // hit = vec4f(t, u, v, (tri id << 16) | inst id & 0xffff)
   let instOfs = (bitcast<u32>(hit.w) & SHORT_MASK) << 2;
@@ -536,8 +535,8 @@ fn finalizeHit(pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function,
 
   // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
   if((pidx & 0xff) == 0) {
-    nrmBuf[pidx >> 8] = vec4f(*nrm, 1.0);
-    posBuf[pidx >> 8] = vec4f(*pos, bitcast<f32>((select(mtlId, SHORT_MASK, (*mtl).emissive > 0.0) << 16) | (instId & SHORT_MASK)));
+    attrBuf[pidx >> 8] = vec4f(*nrm, 1.0);
+    attrBuf[bufOfs + (pidx >> 8)] = vec4f(*pos, bitcast<f32>((select(mtlId, SHORT_MASK, (*mtl).emissive > 0.0) << 16) | (instId & SHORT_MASK)));
   }
 }
 
@@ -567,9 +566,9 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   if(hit.x == INF) {
     // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
     if((pidx & 0xff) == 0) {
-      nrmBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, 1.0);
+      attrBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, 1.0);
       let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
-      posBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
+      attrBuf[ofs + (pidx >> 8)] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
     }
     colBuf[cidx] += vec4f(throughput * config.bgColor.xyz, 1.0);
     return;
@@ -579,7 +578,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var nrm: vec3f;
   var ltriId: u32;
   var mtl: Mtl;
-  finalizeHit(pidx, ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
+  finalizeHit(ofs, pidx, ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
 
   // Hit light via material direction
   if(mtl.emissive > 0.0) {
