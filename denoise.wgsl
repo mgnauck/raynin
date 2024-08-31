@@ -148,10 +148,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   // Last color
-  let lcol = accumInBuf[lgidx].xyz;
+  let lcol = accumInBuf[lgidx];
 
   // Mix current with past results
-  accumOutBuf[gidx] = vec4f(mix(lcol, col, TEMPORAL_ALPHA), 1.0);
+  accumOutBuf[gidx] = vec4f(mix(lcol.xyz, col, TEMPORAL_ALPHA), 1.0);
+
+  // Mix current with past results considering age of the earlier sample in blending
+  //let alpha = 1.0 / (lcol.w + 1.0);
+  //accumOutBuf[gidx] = vec4f(mix(lcol.xyz, col, alpha), lcol.w + 1.0);
 }
 
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering

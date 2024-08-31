@@ -326,17 +326,17 @@ fn evalDiffuse(mtl: Mtl, n: vec3f, wi: vec3f) -> vec3f
   return (1.0 - mtl.metallic) * mtl.col * INV_PI;
 }
 
-fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, fres: ptr<function, vec3f>, isSpecular: ptr<function, bool>, pdf: ptr<function, f32>) -> bool
+fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, fres: ptr<function, vec3f>, isSpecRefl: ptr<function, bool>, pdf: ptr<function, f32>) -> bool
 {
   let m = sign(dot(wo, n)) * sampleGGX(n, r0.xy, getRoughness(mtl));
   *fres = fresnelSchlick(dot(wo, m), mtlToF0(mtl));
   let p = luminance(*fres);
 
   if(r0.z < p) {
-    *isSpecular = true;
+    *isSpecRefl = true;
     *pdf = sampleReflection(mtl, wo, n, m, wi) * p;
   } else {
-    *isSpecular = false;
+    *isSpecRefl = false;
     if(mtl.refractive > 0.0) { // Do not write as select, likely error in naga
       *pdf = sampleRefraction(mtl, wo, n, m, wi) * (1.0 - p);
     } else {
@@ -354,9 +354,9 @@ fn sampleMaterialCombinedPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: vec
   return otherPdf * (1.0 - f) + sampleReflectionPdf(mtl, wo, n, wi) * f;
 }
 
-fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: vec3f, isSpecular: bool) -> vec3f
+fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: vec3f, isSpecRefl: bool) -> vec3f
 {
-  if(isSpecular) {
+  if(isSpecRefl) {
     return evalReflection(mtl, wo, n, wi) * fres;
   } else {
     return select(evalDiffuse(mtl, n, wi), evalRefraction(mtl, wo, n, wi), mtl.refractive > 0.0) * (vec3f(1) - fres);
@@ -649,14 +649,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Sample material
   var wi: vec3f;
   var fres: vec3f;
-  var isSpecular: bool;
+  var isSpecRefl: bool;
   var pdf: f32;
-  if(!sampleMaterial(mtl, -dir.xyz, nrm, r0.xyz, &wi, &fres, &isSpecular, &pdf)) {
+  if(!sampleMaterial(mtl, -dir.xyz, nrm, r0.xyz, &wi, &fres, &isSpecRefl, &pdf)) {
     return;
   }
 
   // Apply bsdf
-  throughput *= evalMaterial(mtl, -dir.xyz, nrm, wi, fres, isSpecular) * abs(dot(nrm, wi)) / pdf;
+  throughput *= evalMaterial(mtl, -dir.xyz, nrm, wi, fres, isSpecRefl) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the path state buffer
   let gidxNext = atomicAdd(&config.extRayCnt, 1u);
