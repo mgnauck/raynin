@@ -48,13 +48,14 @@ const BUF_PATH0       =  7;
 const BUF_PATH1       =  8;
 const BUF_SRAY        =  9;
 const BUF_HIT         = 10;
-const BUF_ATTR        = 11; // Attribute gbuf (pos and nrm)
-const BUF_COL         = 12; // Separated direct and indirect illumination
-const BUF_ACC0        = 13; // Temporal accumulation buffer
-const BUF_ACC1        = 14; // Temporal accumulation buffer
-const BUF_CFG         = 15; // Accessed from WASM
-const BUF_LCAM        = 16;
-const BUF_GRID        = 17;
+const BUF_ATTR        = 11; // Attribute buf (pos and nrm)
+const BUF_LATTR       = 12; // Last attribute buf (pos and nrm)
+const BUF_COL         = 13; // Separated direct and indirect illumination
+const BUF_ACC0        = 14; // Temporal accumulation buffer
+const BUF_ACC1        = 15; // Temporal accumulation buffer
+const BUF_CFG         = 16; // Accessed from WASM
+const BUF_LCAM        = 17;
+const BUF_GRID        = 18;
 
 const PL_GENERATE     =  0;
 const PL_INTERSECT    =  1;
@@ -220,7 +221,12 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
 
   res.buf[BUF_ATTR] = device.createBuffer({
     size: WIDTH * HEIGHT * 4 * 4 * 2,
-    usage: GPUBufferUsage.STORAGE
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+  });
+
+  res.buf[BUF_LATTR] = device.createBuffer({
+    size: WIDTH * HEIGHT * 4 * 4 * 2,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   res.buf[BUF_COL] = device.createBuffer({
@@ -418,7 +424,8 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
@@ -428,9 +435,10 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
       { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_ACC0] } }, // in
-      { binding: 5, resource: { buffer: res.buf[BUF_ACC1] } }, // out
+      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_ACC0] } }, // in
+      { binding: 6, resource: { buffer: res.buf[BUF_ACC1] } }, // out
     ]
   });
 
@@ -440,9 +448,10 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
       { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_ACC1] } }, // in
-      { binding: 5, resource: { buffer: res.buf[BUF_ACC0] } }, // out
+      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_ACC1] } }, // in
+      { binding: 6, resource: { buffer: res.buf[BUF_ACC0] } }, // out
     ]
   });
 
@@ -614,8 +623,9 @@ async function render(time)
 
   passEncoder.end();
 
-  // Set current cam as last cam
+  // Remember cam and attribute buffer
   commandEncoder.copyBufferToBuffer(res.buf[BUF_CAM], 0, res.buf[BUF_LCAM], 0, 12 * 4);
+  commandEncoder.copyBufferToBuffer(res.buf[BUF_ATTR], 0, res.buf[BUF_LATTR], 0, WIDTH * HEIGHT * 4 * 2 * 4);
 
   // Toggle accumulation buffer
   res.accumIdx = 1 - res.accumIdx;

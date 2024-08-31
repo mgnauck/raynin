@@ -36,9 +36,10 @@ const WG_SIZE = vec3u(16, 16, 1);
 @group(0) @binding(0) var<uniform> lastCamera: array<vec4f, 3>;
 @group(0) @binding(1) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(2) var<storage, read> attrBuf: array<vec4f>;
-@group(0) @binding(3) var<storage, read> colBuf: array<vec4f>;
-@group(0) @binding(4) var<storage, read> accumInBuf: array<vec4f>;
-@group(0) @binding(5) var<storage, read_write> accumOutBuf: array<vec4f>;
+@group(0) @binding(3) var<storage, read> lastAttrBuf: array<vec4f>;
+@group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
+@group(0) @binding(5) var<storage, read> accumInBuf: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> accumOutBuf: array<vec4f>;
 
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
 fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
@@ -102,7 +103,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let lup = lastCamera[2];
 
   if(all(lup.xyz == vec3f(0.0))) {
-    // Last up not set so it must be the first render with no previous cam yet
+    // Last up vec is not set, so it must be the first render with no previous cam yet
     accumOutBuf[gidx] = vec4f(col, 1.0);
     return;
   }
@@ -129,21 +130,20 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Index in last buffers
   let lgidx = w * u32(spos.y) + u32(spos.x);
 
-  /* TODO
   // Read last pos with mtl/inst id in w
   let lpos = lastAttrBuf[ofs + lgidx];
 
   // Check if current and last material and instance ids match
-  ignorePrevious &= bitcast<u32>(pos.w) == bitcast<u32>(lpos.w);
+  ignorePrevious |= bitcast<u32>(pos.w) != bitcast<u32>(lpos.w);
 
   // Consider differences of current and last normal
   let nrm = attrBuf[gidx];
   let lnrm = lastAttrBuf[lgidx];
-  ignorePrevious &= abs(dot(nrm, lnrm)) < 0.1;
-  */
+  ignorePrevious |= abs(dot(nrm, lnrm)) < 0.1;
 
   if(ignorePrevious) {
-    accumOutBuf[gidx] = vec4f(col, 1.0);
+    accumOutBuf[gidx] = vec4f(col.xyz, 1.0);
+    //accumOutBuf[gidx] = vec4f(1.0, col.yz, 1.0); // Visualize uncorrelated areas
     return;
   }
 

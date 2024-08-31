@@ -537,6 +537,7 @@ fn finalizeHit(bufOfs: u32, pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: 
   if((pidx & 0xff) == 0) {
     attrBuf[pidx >> 8] = vec4f(*nrm, 1.0);
     attrBuf[bufOfs + (pidx >> 8)] = vec4f(*pos, bitcast<f32>((select(mtlId, SHORT_MASK, (*mtl).emissive > 0.0) << 16) | (instId & SHORT_MASK)));
+    //attrBuf[bufOfs + (pidx >> 8)] = vec4f(*pos, bitcast<f32>((mtlId << 16) | (instId & SHORT_MASK)));
   }
 }
 
