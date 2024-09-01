@@ -41,6 +41,10 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 @fragment
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
+  let w = config[0].x;
+  let h = config[0].y >> 8;
   let gidx = config[0].x * u32(pos.y) + u32(pos.x);
-  return vec4f(pow(accumBuf[gidx].xyz, vec3f(0.4545)), 1.0);
+  let dcol = accumBuf[        gidx].xyz;
+  let icol = accumBuf[w * h + gidx].xyz;
+  return vec4f(pow(dcol + icol, vec3f(0.4545)), 1.0);
 }

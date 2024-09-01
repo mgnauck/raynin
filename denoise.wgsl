@@ -22,8 +22,16 @@
 const SHORT_MASK      = 0xffffu;
 const TEMPORAL_ALPHA  = 0.2;
 
+// Gaussian 3x3
+const KERNEL3x3 = array<array<f32, 3>, 3>(
+   array<f32, 3>(0.075, 0.124, 0.075),
+   array<f32, 3>(0.124, 0.204, 0.124),
+   array<f32, 3>(0.075, 0.124, 0.075)
+);
+
 // Gaussian 5x5
-const KERNEL = array<array<f32, 5>, 5>(
+// 1/16 1/4 3/8 1/4 1/16
+const KERNEL5x5 = array<array<f32, 5>, 5>(
    array<f32, 5>(0.0030, 0.0133, 0.0219, 0.0133, 0.0030),
    array<f32, 5>(0.0133, 0.0596, 0.0983, 0.0596, 0.0133),
    array<f32, 5>(0.0219, 0.0983, 0.1621, 0.0983, 0.0219),
@@ -35,9 +43,13 @@ const WG_SIZE = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> lastCamera: array<vec4f, 3>;
 @group(0) @binding(1) var<storage, read> config: array<vec4u, 4>;
-@group(0) @binding(2) var<storage, read> attrBuf: array<vec4f>;
-@group(0) @binding(3) var<storage, read> lastAttrBuf: array<vec4f>;
-@group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
+@group(0) @binding(2) var<storage, read> attrBuf: array<vec4f>; // Nrm + pos
+@group(0) @binding(3) var<storage, read> lastAttrBuf: array<vec4f>; // Nrm + pos
+@group(0) @binding(4) var<storage, read> colBuf: array<vec4f>; // Direct + indirect illum col
+// Moments in (direct + indirect)
+// Moments out (direct + indirect)
+// Filtered variance (direct + indirect)
+// Buffer of 4: direct illum col, indirect illum col, direct illum variance, indirect illum variance
 @group(0) @binding(5) var<storage, read> accumInBuf: array<vec4f>;
 @group(0) @binding(6) var<storage, read_write> accumOutBuf: array<vec4f>;
 
@@ -83,6 +95,7 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   return vec2i(i32(res.x * x), i32(res.y * y));
 }
 
+// Temporal reprojection
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
@@ -96,15 +109,17 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   let ofs = w * h;
 
-  // Color of accumulated direct and indirect illumination
-  let col = (colBuf[gidx].xyz + colBuf[ofs + gidx].xyz) / f32(frame.w);
+  // Color of (accumulated) direct and indirect illumination
+  let dcol = colBuf[      gidx].xyz / f32(frame.w);
+  let icol = colBuf[ofs + gidx].xyz / f32(frame.w);
 
   // Fetch last camera's up vec
   let lup = lastCamera[2];
 
   if(all(lup.xyz == vec3f(0.0))) {
     // Last up vec is not set, so it must be the first render with no previous cam yet
-    accumOutBuf[gidx] = vec4f(col, 1.0);
+    accumOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
     return;
   }
 
@@ -113,7 +128,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Check mtl id if this was a no hit or light hit
   if((bitcast<u32>(pos.w) >> 16) == SHORT_MASK) {
-    accumOutBuf[gidx] = vec4f(col, 1.0);
+    accumOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
     return;
   }
 
@@ -142,20 +158,21 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   ignorePrevious |= abs(dot(nrm, lnrm)) < 0.1;
 
   if(ignorePrevious) {
-    accumOutBuf[gidx] = vec4f(col.xyz, 1.0);
-    //accumOutBuf[gidx] = vec4f(1.0, col.yz, 1.0); // Visualize uncorrelated areas
+    accumOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    // Visualize uncorrelated areas
+    //accumOutBuf[      gidx] = vec4f(1.0, dcol.xy, 1.0); // Direct
+    //accumOutBuf[ofs + gidx] = vec4f(1.0, icol.xy, 1.0); // Indirect
     return;
   }
 
-  // Last color
-  let lcol = accumInBuf[lgidx];
+  // Last direct + indirect color
+  let ldcol = accumInBuf[      lgidx];
+  let licol = accumInBuf[ofs + lgidx];
 
   // Mix current with past results
-  accumOutBuf[gidx] = vec4f(mix(lcol.xyz, col, TEMPORAL_ALPHA), 1.0);
-
-  // Mix current with past results considering age of the earlier sample in blending
-  //let alpha = 1.0 / (lcol.w + 1.0);
-  //accumOutBuf[gidx] = vec4f(mix(lcol.xyz, col, alpha), lcol.w + 1.0);
+  accumOutBuf[      gidx] = vec4f(mix(ldcol.xyz, dcol, TEMPORAL_ALPHA), 1.0);
+  accumOutBuf[ofs + gidx] = vec4f(mix(licol.xyz, icol, TEMPORAL_ALPHA), 1.0);
 }
 
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
