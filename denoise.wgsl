@@ -41,17 +41,37 @@ const KERNEL5x5 = array<array<f32, 5>, 5>(
 
 const WG_SIZE = vec3u(16, 16, 1);
 
+// Attribute buf are 2x buf vec4f for nrm + pos
+//  nrm = xyz, w unusued
+//  pos = xyz, w = mtl id << 16 | inst id
+//
+// Color buffer are 2x buf vec4f for direct and indirect illum col
+//
+// Accum moments buf are 2x buf vec4f for direct and indirect
+//  xy = first and second moment direct illum, z = age
+//  xy = first and second moment indirect illum, z = age
+//
+// Filtered variance buf is 2x buf f32 for direct and indirect
+//
+// Accum col buf are 2x buf vec4f:
+//  xyz = direct illum col, w = direct illum variance
+//  xyz = indirect illum col, w = indirect illum variance
+
 @group(0) @binding(0) var<uniform> lastCamera: array<vec4f, 3>;
 @group(0) @binding(1) var<storage, read> config: array<vec4u, 4>;
-@group(0) @binding(2) var<storage, read> attrBuf: array<vec4f>; // Nrm + pos
-@group(0) @binding(3) var<storage, read> lastAttrBuf: array<vec4f>; // Nrm + pos
-@group(0) @binding(4) var<storage, read> colBuf: array<vec4f>; // Direct + indirect illum col
-// Moments in (direct + indirect)
-// Moments out (direct + indirect)
-// Filtered variance (direct + indirect)
-// Buffer of 4: direct illum col, indirect illum col, direct illum variance, indirect illum variance
-@group(0) @binding(5) var<storage, read> accumInBuf: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> accumOutBuf: array<vec4f>;
+@group(0) @binding(2) var<storage, read> attrBuf: array<vec4f>;
+@group(0) @binding(3) var<storage, read> lastAttrBuf: array<vec4f>;
+@group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
+@group(0) @binding(5) var<storage, read> accumMomInBuf: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> accumMomOutBuf: array<vec4f>;
+@group(0) @binding(7) var<storage, read_write> filteredVarianceBuf: array<f32>;
+@group(0) @binding(8) var<storage, read> accumColInBuf: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> accumColOutBuf: array<vec4f>;
+
+fn luminance(col: vec3f) -> f32
+{
+  return dot(col, vec3f(0.2126, 0.7152, 0.0722));
+}
 
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
 fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
@@ -95,9 +115,10 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   return vec2i(i32(res.x * x), i32(res.y * y));
 }
 
-// Temporal reprojection
+// Temporal reprojection of current pixel to past frame
+// Accumulate direct and indirect illumination and moments
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m(@builtin(global_invocation_id) globalId: vec3u)
+fn m0(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;
@@ -109,27 +130,34 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   let ofs = w * h;
 
-  // Color of (accumulated) direct and indirect illumination
+  // Color of direct and multi-bounce indirect illumination
   let dcol = colBuf[      gidx].xyz / f32(frame.w);
   let icol = colBuf[ofs + gidx].xyz / f32(frame.w);
+
+  let dlum = luminance(dcol);
+  let ilum = luminance(icol);
 
   // Fetch last camera's up vec
   let lup = lastCamera[2];
 
   if(all(lup.xyz == vec3f(0.0))) {
-    // Last up vec is not set, so it must be the first render with no previous cam yet
-    accumOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    // Last up vec is not set, so it must be the first frame with no previous cam yet
+    accumColOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumColOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
+    accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
     return;
   }
 
-  // Current world space hit pos with material id in w
-  let pos = attrBuf[ofs + gidx]; // w = mtl id << 16 | inst id
+  // Current world space hit pos with w = mtl id << 16 | inst id
+  let pos = attrBuf[ofs + gidx];
 
   // Check mtl id if this was a no hit or light hit
   if((bitcast<u32>(pos.w) >> 16) == SHORT_MASK) {
-    accumOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    accumColOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumColOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
+    accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
     return;
   }
 
@@ -158,21 +186,40 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   ignorePrevious |= abs(dot(nrm, lnrm)) < 0.1;
 
   if(ignorePrevious) {
-    accumOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    accumColOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumColOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
     // Visualize uncorrelated areas
-    //accumOutBuf[      gidx] = vec4f(1.0, dcol.xy, 1.0); // Direct
-    //accumOutBuf[ofs + gidx] = vec4f(1.0, icol.xy, 1.0); // Indirect
+    //accumColOutBuf[      gidx] = vec4f(1.0, dcol.xy, 1.0); // Direct
+    //accumColOutBuf[ofs + gidx] = vec4f(1.0, icol.xy, 1.0); // Indirect
+    accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
+    accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
     return;
   }
 
   // Last direct + indirect color
-  let ldcol = accumInBuf[      lgidx];
-  let licol = accumInBuf[ofs + lgidx];
+  let ldcol = accumColInBuf[      lgidx].xyz;
+  let licol = accumColInBuf[ofs + lgidx].xyz;
 
-  // Mix current with past results
-  accumOutBuf[      gidx] = vec4f(mix(ldcol.xyz, dcol, TEMPORAL_ALPHA), 1.0);
-  accumOutBuf[ofs + gidx] = vec4f(mix(licol.xyz, icol, TEMPORAL_ALPHA), 1.0);
+  // Last direct + indirect moments
+  let ldmom = accumMomInBuf[      lgidx]; // z has age, w is unused
+  let limom = accumMomInBuf[ofs + lgidx];
+
+  // Accumulate col by mixing current with past results
+  accumColOutBuf[      gidx] = vec4f(mix(ldcol, dcol, TEMPORAL_ALPHA), 1.0);
+  accumColOutBuf[ofs + gidx] = vec4f(mix(licol, icol, TEMPORAL_ALPHA), 1.0);
+
+  // Similaryly, accumulate 'variance' as first and second moment of current sample's luminance
+  accumMomOutBuf[      gidx] = vec4f(mix(ldmom.xy, vec2f(dlum, dlum * dlum), TEMPORAL_ALPHA), ldmom.z + 1.0, 0.0); // Increase age in z
+  accumMomOutBuf[ofs + gidx] = vec4f(mix(limom.xy, vec2f(ilum, ilum * ilum), TEMPORAL_ALPHA), limom.z + 1.0, 0.0);
+}
+
+// Calc filtered variance from moments buffer
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
+fn m1(@builtin(global_invocation_id) globalId: vec3u)
+{
+  // TODO
+  // variance (temporal) = max(0.0, mom.y - mom.x * mom.x)
+  // fall back to spatial variance for age < 4
 }
 
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
@@ -198,13 +245,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let pos4 = posBuf[gidx];
   let instId = bitcast<u32>(pos4.w);
   if(instId == SHORT_MASK) {
-    accumOutBuf[gidx] = accumInBuf[gidx]; // Was no hit
+    accumColOutBuf[gidx] = accumColInBuf[gidx]; // Was no hit
     return;
   }
 
   let nrm = nrmBuf[gidx].xyz;
   let pos = pos4.xyz;
-  let acc = accumInBuf[gidx].xyz;
+  let acc = accumColInBuf[gidx].xyz;
 
   var sum = vec3f(0.0);
   var weightSum = 0.0;
@@ -229,7 +276,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
       // Fetch data at pixel q
       let qnrm = nrmBuf[qidx].xyz;
       let qpos = qpos4.xyz;
-      let qacc = accumInBuf[qidx].xyz;
+      let qacc = accumColInBuf[qidx].xyz;
 
       // Calc weights for edge avoidance
       let distAccSqr = dot(acc - qacc, acc - qacc);
@@ -248,5 +295,5 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     }
   }
 
-  accumOutBuf[gidx] = select(vec4f(accumInBuf[gidx].xyz, 1.0), vec4f(sum / weightSum, 1.0), weightSum != 0.0);
+  accumColOutBuf[gidx] = select(vec4f(accumColInBuf[gidx].xyz, 1.0), vec4f(sum / weightSum, 1.0), weightSum != 0.0);
 }*/

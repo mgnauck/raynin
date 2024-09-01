@@ -10,7 +10,9 @@
 }*/
 
 @group(0) @binding(0) var<storage, read> config: array<vec4u, 4>;
-@group(0) @binding(1) var<storage, read> accumBuf: array<vec4f>;
+@group(0) @binding(1) var<storage, read> accumMomBuf: array<vec4f>; // DEBUG
+@group(0) @binding(2) var<storage, read> filteredVarianceBuf: array<f32>; // DEBUG
+@group(0) @binding(3) var<storage, read> accumColBuf: array<vec4f>;
 
 @vertex
 fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
@@ -44,7 +46,7 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
   let w = config[0].x;
   let h = config[0].y >> 8;
   let gidx = config[0].x * u32(pos.y) + u32(pos.x);
-  let dcol = accumBuf[        gidx].xyz;
-  let icol = accumBuf[w * h + gidx].xyz;
+  let dcol = accumColBuf[        gidx].xyz;
+  let icol = accumColBuf[w * h + gidx].xyz;
   return vec4f(pow(dcol + icol, vec3f(0.4545)), 1.0);
 }
