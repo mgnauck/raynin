@@ -22,6 +22,7 @@
 const SHORT_MASK      = 0xffffu;
 const TEMPORAL_ALPHA  = 0.2;
 
+// TODO Adjust filters
 // Gaussian 3x3
 const KERNEL3x3 = array<array<f32, 3>, 3>(
    array<f32, 3>(0.075, 0.124, 0.075),
@@ -30,7 +31,6 @@ const KERNEL3x3 = array<array<f32, 3>, 3>(
 );
 
 // Gaussian 5x5
-// 1/16 1/4 3/8 1/4 1/16
 const KERNEL5x5 = array<array<f32, 5>, 5>(
    array<f32, 5>(0.0030, 0.0133, 0.0219, 0.0133, 0.0030),
    array<f32, 5>(0.0133, 0.0596, 0.0983, 0.0596, 0.0133),
@@ -53,7 +53,7 @@ const WG_SIZE = vec3u(16, 16, 1);
 //
 // Filtered variance buf is 2x buf f32 for direct and indirect
 //
-// Accum col buf are 2x buf vec4f:
+// Accum coli/variance buf are 2x buf vec4f:
 //  xyz = direct illum col, w = direct illum variance
 //  xyz = indirect illum col, w = indirect illum variance
 
@@ -65,8 +65,8 @@ const WG_SIZE = vec3u(16, 16, 1);
 @group(0) @binding(5) var<storage, read> accumMomInBuf: array<vec4f>;
 @group(0) @binding(6) var<storage, read_write> accumMomOutBuf: array<vec4f>;
 @group(0) @binding(7) var<storage, read_write> filteredVarianceBuf: array<f32>;
-@group(0) @binding(8) var<storage, read> accumColInBuf: array<vec4f>;
-@group(0) @binding(9) var<storage, read_write> accumColOutBuf: array<vec4f>;
+@group(0) @binding(8) var<storage, read> accumColVarInBuf: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> accumColVarOutBuf: array<vec4f>;
 
 fn luminance(col: vec3f) -> f32
 {
@@ -115,7 +115,7 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   return vec2i(i32(res.x * x), i32(res.y * y));
 }
 
-// Temporal reprojection of current pixel to past frame
+// Temporal reprojection and filtering of current pixel to past frame
 // Accumulate direct and indirect illumination and moments
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m0(@builtin(global_invocation_id) globalId: vec3u)
@@ -127,6 +127,10 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   if(gidx >= w * h) {
     return;
   }
+
+  // TODO
+  // Sample reprojected color values using a small filter
+  // Check and redistribute consistency of back projection
 
   let ofs = w * h;
 
@@ -142,8 +146,8 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
 
   if(all(lup.xyz == vec3f(0.0))) {
     // Last up vec is not set, so it must be the first frame with no previous cam yet
-    accumColOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumColOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
     accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
     accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
     return;
@@ -154,8 +158,8 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
 
   // Check mtl id if this was a no hit or light hit
   if((bitcast<u32>(pos.w) >> 16) == SHORT_MASK) {
-    accumColOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumColOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
     accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
     accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
     return;
@@ -186,40 +190,120 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   ignorePrevious |= abs(dot(nrm, lnrm)) < 0.1;
 
   if(ignorePrevious) {
-    accumColOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumColOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+    accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+    accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
     // Visualize uncorrelated areas
-    //accumColOutBuf[      gidx] = vec4f(1.0, dcol.xy, 1.0); // Direct
-    //accumColOutBuf[ofs + gidx] = vec4f(1.0, icol.xy, 1.0); // Indirect
+    //accumColVarOutBuf[      gidx] = vec4f(1.0, dcol.xy, 1.0); // Direct
+    //accumColVarOutBuf[ofs + gidx] = vec4f(1.0, icol.xy, 1.0); // Indirect
     accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
     accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
     return;
   }
 
   // Last direct + indirect color
-  let ldcol = accumColInBuf[      lgidx].xyz;
-  let licol = accumColInBuf[ofs + lgidx].xyz;
+  let ldcol = accumColVarInBuf[      lgidx].xyz;
+  let licol = accumColVarInBuf[ofs + lgidx].xyz;
 
   // Last direct + indirect moments
   let ldmom = accumMomInBuf[      lgidx]; // z has age, w is unused
   let limom = accumMomInBuf[ofs + lgidx];
 
   // Accumulate col by mixing current with past results
-  accumColOutBuf[      gidx] = vec4f(mix(ldcol, dcol, TEMPORAL_ALPHA), 1.0);
-  accumColOutBuf[ofs + gidx] = vec4f(mix(licol, icol, TEMPORAL_ALPHA), 1.0);
+  accumColVarOutBuf[      gidx] = vec4f(mix(ldcol, dcol, TEMPORAL_ALPHA), 1.0);
+  accumColVarOutBuf[ofs + gidx] = vec4f(mix(licol, icol, TEMPORAL_ALPHA), 1.0);
 
-  // Similaryly, accumulate 'variance' as first and second moment of current sample's luminance
+  // Similaryly, accumulate per pixel 'luminance variance' using first and second raw moments of current sample col luminance
   accumMomOutBuf[      gidx] = vec4f(mix(ldmom.xy, vec2f(dlum, dlum * dlum), TEMPORAL_ALPHA), ldmom.z + 1.0, 0.0); // Increase age in z
   accumMomOutBuf[ofs + gidx] = vec4f(mix(limom.xy, vec2f(ilum, ilum * ilum), TEMPORAL_ALPHA), limom.z + 1.0, 0.0);
 }
 
-// Calc filtered variance from moments buffer
+// Per pixel luminance variance estimation from temporally accumulated moments buffer
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m1(@builtin(global_invocation_id) globalId: vec3u)
 {
-  // TODO
-  // variance (temporal) = max(0.0, mom.y - mom.x * mom.x)
-  // fall back to spatial variance for age < 4
+  let frame = config[0];
+  let w = frame.x;
+  let h = (frame.y >> 8);
+  let gidx = w * globalId.y + globalId.x;
+  if(gidx >= w * h) {
+    return;
+  }
+
+  let ofs = w * h;
+  
+  // xy = moments, z = age, w = unused
+  let dmom = accumMomOutBuf[      gidx];
+  let imom = accumMomOutBuf[ofs + gidx];
+
+  if(dmom.z < 4.0) {
+    // Spatialily estimate the variance because history ("age") of accumulated moments is too short
+    var sumMomDir = vec2f(0.0);
+    var sumMomInd = vec2f(0.0);
+    var cnt = 0u;
+    for(var j=-1; j<=1; j++) {
+      for(var i=-1; i<=1; i++) {
+        let qx = i32(globalId.x) + i;
+        let qy = i32(globalId.y) + j;
+        if(qx < 0 || qy < 0 || qx >= i32(w) || qy >= i32(h)) {
+          continue;
+        }
+
+        let qidx = w * u32(qy) + u32(qx);
+
+        sumMomDir += accumMomOutBuf[      gidx].xy;
+        sumMomInd += accumMomOutBuf[ofs + gidx].xy;
+        cnt++;
+      }
+    }
+
+    sumMomDir /= f32(cnt);
+    sumMomInd /= f32(cnt);
+
+    accumColVarOutBuf[      gidx].w = sumMomDir.y - sumMomDir.x * sumMomDir.x;
+    accumColVarOutBuf[ofs + gidx].w = sumMomInd.y - sumMomInd.x * sumMomInd.x;
+  } else {
+    // Estimate temporal variance from integrated moments
+    accumColVarOutBuf[      gidx].w = dmom.y - dmom.x * dmom.x;
+    accumColVarOutBuf[ofs + gidx].w = imom.y - imom.x * imom.x;
+  }
+}
+
+// Calculated filtered variance
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
+fn m2(@builtin(global_invocation_id) globalId: vec3u)
+{
+  let frame = config[0];
+  let w = frame.x;
+  let h = (frame.y >> 8);
+  let gidx = w * globalId.y + globalId.x;
+  if(gidx >= w * h) {
+    return;
+  }
+
+  let ofs = w * h;
+
+  var sumVarDir = 0.0;
+  var sumVarInd = 0.0;
+  var sumWeight = 0.0;
+  for(var j=-1; j<=1; j++) {
+    for(var i=-1; i<=1; i++) {
+      let qx = i32(globalId.x) + i;
+      let qy = i32(globalId.y) + j;
+      if(qx < 0 || qy < 0 || qx >= i32(w) || qy >= i32(h)) {
+        continue;
+      }
+
+      let qidx = w * u32(qy) + u32(qx);
+
+      let weight = KERNEL3x3[i + 1][j + 1];
+      sumVarDir += weight * accumColVarOutBuf[      qidx].w;
+      sumVarInd += weight * accumColVarOutBuf[ofs + qidx].w;
+      sumWeight += weight;
+    }
+  }
+
+  filteredVarianceBuf[      gidx] = sumVarDir / sumWeight;
+  filteredVarianceBuf[ofs + gidx] = sumVarInd / sumWeight;
 }
 
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
@@ -245,13 +329,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let pos4 = posBuf[gidx];
   let instId = bitcast<u32>(pos4.w);
   if(instId == SHORT_MASK) {
-    accumColOutBuf[gidx] = accumColInBuf[gidx]; // Was no hit
+    accumColVarOutBuf[gidx] = accumColVarInBuf[gidx]; // Was no hit
     return;
   }
 
   let nrm = nrmBuf[gidx].xyz;
   let pos = pos4.xyz;
-  let acc = accumColInBuf[gidx].xyz;
+  let acc = accumColVarInBuf[gidx].xyz;
 
   var sum = vec3f(0.0);
   var weightSum = 0.0;
@@ -276,7 +360,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
       // Fetch data at pixel q
       let qnrm = nrmBuf[qidx].xyz;
       let qpos = qpos4.xyz;
-      let qacc = accumColInBuf[qidx].xyz;
+      let qacc = accumColVarInBuf[qidx].xyz;
 
       // Calc weights for edge avoidance
       let distAccSqr = dot(acc - qacc, acc - qacc);
@@ -295,5 +379,5 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     }
   }
 
-  accumColOutBuf[gidx] = select(vec4f(accumColInBuf[gidx].xyz, 1.0), vec4f(sum / weightSum, 1.0), weightSum != 0.0);
+  accumColVarOutBuf[gidx] = select(vec4f(accumColVarInBuf[gidx].xyz, 1.0), vec4f(sum / weightSum, 1.0), weightSum != 0.0);
 }*/

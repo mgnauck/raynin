@@ -69,7 +69,8 @@ const PL_CONTROL1     =  5;
 const PL_CONTROL2     =  6;
 const PL_DENOISE0     =  7;
 const PL_DENOISE1     =  8;
-const PL_BLIT         =  9;
+const PL_DENOISE2     =  9;
+const PL_BLIT         = 10;
 
 const BG_GENERATE     =  0;
 const BG_INTERSECT0   =  1;
@@ -485,6 +486,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
 
   res.pipelineLayouts[PL_DENOISE0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_DENOISE1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_DENOISE2] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Blit
   bindGroupLayout = device.createBindGroupLayout({
@@ -649,11 +651,22 @@ async function render(time)
     samples++;
   }
 
-  // Temporal accumulation and denoise
+  // SVGF
   let passEncoder = commandEncoder.beginComputePass();
 
+  // Temporal reprojection/accumulation
   passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
   passEncoder.setPipeline(res.pipelines[PL_DENOISE0]);
+  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+  // Estimate variance
+  passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
+  passEncoder.setPipeline(res.pipelines[PL_DENOISE1]);
+  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+  // Filtered variance
+  passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
+  passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
   passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
   passEncoder.end();
@@ -775,6 +788,7 @@ async function main()
     createPipeline(PL_CONTROL2, await (await fetch("control.wgsl")).text(), "m2");
     createPipeline(PL_DENOISE0, await (await fetch("denoise.wgsl")).text(), "m0");
     createPipeline(PL_DENOISE1, await (await fetch("denoise.wgsl")).text(), "m1");
+    createPipeline(PL_DENOISE2, await (await fetch("denoise.wgsl")).text(), "m2");
     createPipeline(PL_BLIT, await (await fetch("blit.wgsl")).text(), "vm", "m");
   } else {
     createPipeline(PL_GENERATE, SM_GENERATE, "m");
@@ -786,6 +800,7 @@ async function main()
     createPipeline(PL_CONTROL2, SM_CONTROL, "m2");
     createPipeline(PL_DENOISE0, SM_DENOISE, "m0");
     createPipeline(PL_DENOISE1, SM_DENOISE, "m1");
+    createPipeline(PL_DENOISE2, SM_DENOISE, "m2");
     createPipeline(PL_BLIT, SM_BLIT, "vm", "m");
   }
 
