@@ -20,14 +20,16 @@
 }*/
 
 const SHORT_MASK      = 0xffffu;
+const EPS             = 0.0001;
 const TEMPORAL_ALPHA  = 0.2;
 
-// TODO Adjust filters
+// TODO Size optimize via symmetry
+
 // Gaussian 3x3
 const KERNEL3x3 = array<array<f32, 3>, 3>(
-   array<f32, 3>(0.075, 0.124, 0.075),
-   array<f32, 3>(0.124, 0.204, 0.124),
-   array<f32, 3>(0.075, 0.124, 0.075)
+   array<f32, 3>(0.0625, 0.1250, 0.0625),
+   array<f32, 3>(0.1250, 0.2500, 0.1250),
+   array<f32, 3>(0.0625, 0.1250, 0.0625)
 );
 
 // Gaussian 5x5
@@ -236,7 +238,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let imom = accumMomOutBuf[ofs + gidx];
 
   if(dmom.z < 4.0) {
-    // Spatialily estimate the variance because history ("age") of accumulated moments is too short
+    // Spatially estimate the variance because history ("age") of accumulated moments is too short
     var sumMomDir = vec2f(0.0);
     var sumMomInd = vec2f(0.0);
     var cnt = 0u;
@@ -250,8 +252,8 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
 
         let qidx = w * u32(qy) + u32(qx);
 
-        sumMomDir += accumMomOutBuf[      gidx].xy;
-        sumMomInd += accumMomOutBuf[ofs + gidx].xy;
+        sumMomDir += accumMomOutBuf[      qidx].xy;
+        sumMomInd += accumMomOutBuf[ofs + qidx].xy;
         cnt++;
       }
     }
@@ -268,7 +270,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   }
 }
 
-// Calculated filtered variance
+// Filter accumulated variance
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m2(@builtin(global_invocation_id) globalId: vec3u)
 {
@@ -296,14 +298,130 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
       let qidx = w * u32(qy) + u32(qx);
 
       let weight = KERNEL3x3[i + 1][j + 1];
-      sumVarDir += weight * accumColVarOutBuf[      qidx].w;
-      sumVarInd += weight * accumColVarOutBuf[ofs + qidx].w;
+      sumVarDir += weight * accumColVarInBuf[      qidx].w;
+      sumVarInd += weight * accumColVarInBuf[ofs + qidx].w;
       sumWeight += weight;
     }
   }
 
   filteredVarianceBuf[      gidx] = sumVarDir / sumWeight;
   filteredVarianceBuf[ofs + gidx] = sumVarInd / sumWeight;
+}
+
+// Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
+// Schied et al: Spatiotemporal Variance-Guided Filtering
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
+fn m3(@builtin(global_invocation_id) globalId: vec3u)
+{
+  let frame = config[0];
+  let w = frame.x;
+  let h = (frame.y >> 8);
+  let gidx = w * globalId.y + globalId.x;
+  if(gidx >= w * h) {
+    return;
+  }
+
+  // Default sigmas as per SVGF paper
+  let sigmaLum = 4.0;
+  let sigmaNrm = 128.0;
+  let sigmaPos = 1.0; // depth
+
+  let ofs = w * h;
+
+  let pos = attrBuf[ofs + gidx];
+
+  if(bitcast<u32>(pos.w) >> 16 == SHORT_MASK) {
+    // No hit
+    accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
+    accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
+    return;
+  }
+
+  let nrm = attrBuf[gidx].xyz;
+
+  let colVarDir = accumColVarInBuf[      gidx];
+  let colVarInd = accumColVarInBuf[ofs + gidx];
+
+  let lev = frame.z;
+  let st = 1i << lev;
+
+  var sumColVarDir = vec4f(0);
+  var sumColVarInd = vec4f(0);
+
+  var sumWeightDir = 0.0;
+  var sumWeightInd = 0.0;
+  
+  var sumWeightDirSqr = 0.0;
+  var sumWeightIndSqr = 0.0;
+
+  // Run 
+  for(var j=-2; j<=2; j++) {
+    for(var i=-2; i<=2; i++) {
+      let qx = i32(globalId.x) + i * st;
+      let qy = i32(globalId.y) + j * st;
+
+      if(qx < 0 || qy < 0 || qx >= i32(w) || qy >= i32(h)) {
+        // Ignore outside of image
+        continue;
+      }
+
+      let qidx = w * u32(qy) + u32(qx);
+
+      let qpos = attrBuf[ofs + qidx];
+      if(bitcast<u32>(qpos.w) != bitcast<u32>(pos.w)) {
+        // Inst/mtl does not match
+        continue;
+      }
+
+      let qnrm = attrBuf[qidx].xyz;
+
+      let qcolVarDir = accumColVarInBuf[      qidx];
+      let qcolVarInd = accumColVarInBuf[ofs + qidx];
+
+      // Depth edge stopping function as per SVGF paper
+      let distPosSqr = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz);
+      let weightPos = exp(-distPosSqr / sigmaPos) + EPS;
+
+      // Nrm edge stopping function as per SVGF paper
+      let weightNrm = pow(max(0.0, dot(nrm, qnrm)), sigmaNrm) + EPS;
+
+      // Luminance edge stopping function as per SVGF with 3x3 gaussian filtered variance
+      let filtVarDir = filteredVarianceBuf[gidx];
+      let filtVarInd = filteredVarianceBuf[ofs + gidx];
+      
+      let lumDenomDir = sqrt(max(0.0, filtVarDir)) * sigmaLum + EPS;
+      let lumDenomInd = sqrt(max(0.0, filtVarInd)) * sigmaLum + EPS;
+      
+      let weightLumDir = exp(-abs(luminance(colVarDir.xyz) - luminance(qcolVarDir.xyz)) / lumDenomDir) + EPS;
+      let weightLumInd = exp(-abs(luminance(colVarInd.xyz) - luminance(qcolVarInd.xyz)) / lumDenomInd) + EPS;
+
+      // Filter value multiplied by edge stopping weights
+      let weightDir = weightPos * weightNrm * weightLumDir * KERNEL5x5[i + 2][j + 2];
+      let weightInd = weightPos * weightNrm * weightLumInd * KERNEL5x5[i + 2][j + 2];
+      
+      let weightDirSqr = weightDir * weightDir;
+      let weightIndSqr = weightInd * weightInd;
+
+      // Apply filter to accumulated direct/indirect color and variance
+      sumColVarDir += vec4f(qcolVarDir.xyz * weightDir, qcolVarDir.w * weightDirSqr);
+      sumColVarInd += vec4f(qcolVarInd.xyz * weightInd, qcolVarInd.w * weightIndSqr);
+
+      sumWeightDir += weightDir;
+      sumWeightInd += weightInd;
+
+      sumWeightDirSqr += weightDirSqr;
+      sumWeightIndSqr += weightIndSqr;
+    }
+  }
+  
+  let colDir = select(colVarDir.xyz, sumColVarDir.xyz / sumWeightDir, sumWeightDir > EPS);
+  let colInd = select(colVarInd.xyz, sumColVarInd.xyz / sumWeightInd, sumWeightInd > EPS);
+  
+  let varDir = select(colVarDir.w, sumColVarDir.w / sumWeightDirSqr, sumWeightDirSqr > EPS);
+  let varInd = select(colVarInd.w, sumColVarInd.w / sumWeightIndSqr, sumWeightIndSqr > EPS);
+
+  accumColVarOutBuf[      gidx] = vec4f(colDir, varDir);
+  accumColVarOutBuf[ofs + gidx] = vec4f(colInd, varInd);
 }
 
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering

@@ -17,6 +17,7 @@ uint32_t  active_cam = 0;
 bool      orbit_cam = false;
 
 extern void toggle_converge();
+extern void toggle_filter();
 
   __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
@@ -72,6 +73,9 @@ void key_down(unsigned char key, float move_vel)
       break;
    case ' ':
       toggle_converge();
+      break;
+   case 'f':
+      toggle_filter();
       break;
   }
 

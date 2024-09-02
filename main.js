@@ -67,10 +67,12 @@ const PL_SHADOW       =  3;
 const PL_CONTROL0     =  4;
 const PL_CONTROL1     =  5;
 const PL_CONTROL2     =  6;
-const PL_DENOISE0     =  7;
-const PL_DENOISE1     =  8;
-const PL_DENOISE2     =  9;
-const PL_BLIT         = 10;
+const PL_CONTROL3     =  7;
+const PL_DENOISE0     =  8;
+const PL_DENOISE1     =  9;
+const PL_DENOISE2     = 10;
+const PL_DENOISE3     = 11;
+const PL_BLIT         = 12;
 
 const BG_GENERATE     =  0;
 const BG_INTERSECT0   =  1;
@@ -92,6 +94,7 @@ let wa, res = {};
 let frames = 0;
 let samples = 0;
 let converge = false;
+let filter = true;
 
 function handleMouseMoveEvent(e)
 {
@@ -148,7 +151,8 @@ function Wasm(module)
     gpu_create_res: (c, m, i, t, n, l, b) => createGpuResources(c, m, i, t, n, l, b),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
     reset_samples: () => { samples = 0; },
-    toggle_converge: () => { converge = !converge; }
+    toggle_converge: () => { converge = !converge; },
+    toggle_filter: () => { filter = !filter; },
   };
 
   this.instantiate = async function()
@@ -435,6 +439,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   res.pipelineLayouts[PL_CONTROL0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_CONTROL1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_CONTROL2] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_CONTROL3] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Denoise
   bindGroupLayout = device.createBindGroupLayout({
@@ -487,6 +492,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   res.pipelineLayouts[PL_DENOISE0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_DENOISE1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_DENOISE2] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_DENOISE3] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Blit
   bindGroupLayout = device.createBindGroupLayout({
@@ -502,9 +508,9 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_MOM0] } }, // DEBUG
+      { binding: 1, resource: { buffer: res.buf[BUF_MOM1] } }, // DEBUG
       { binding: 2, resource: { buffer: res.buf[BUF_VAR] } }, // DEBUG
-      { binding: 3, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ACC1] } },
     ]
   });
 
@@ -512,9 +518,9 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_MOM1] } }, // DEBUG
+      { binding: 1, resource: { buffer: res.buf[BUF_MOM0] } }, // DEBUG
       { binding: 2, resource: { buffer: res.buf[BUF_VAR] } }, // DEBUG
-      { binding: 3, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -659,24 +665,42 @@ async function render(time)
   passEncoder.setPipeline(res.pipelines[PL_DENOISE0]);
   passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
-  // Estimate variance
-  passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
-  passEncoder.setPipeline(res.pipelines[PL_DENOISE1]);
-  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+  if(filter) {
 
-  // Filtered variance
-  passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
-  passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
-  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+    // Estimate variance
+    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE1]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+    for(let i=0; i<5; i++) {
+   
+      // Toggle accumulation buffer
+      res.accumIdx = 1 - res.accumIdx;
+
+      // Filter variance
+      passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
+      passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+      // Apply edge-avoiding a-trous wavelet transform
+      passEncoder.setPipeline(res.pipelines[PL_DENOISE3]);
+      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+      // Increment filter iteration
+      passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
+      passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+      passEncoder.dispatchWorkgroups(1);
+    }
+  } else {
+    // Toggle accumulation buffer
+    res.accumIdx = 1 - res.accumIdx;
+  }
 
   passEncoder.end();
 
   // Remember cam and attribute buffer
   commandEncoder.copyBufferToBuffer(res.buf[BUF_CAM], 0, res.buf[BUF_LCAM], 0, 12 * 4);
   commandEncoder.copyBufferToBuffer(res.buf[BUF_ATTR], 0, res.buf[BUF_LATTR], 0, WIDTH * HEIGHT * 4 * 2 * 4);
-
-  // Toggle accumulation buffer
-  res.accumIdx = 1 - res.accumIdx;
 
   // Blit to canvas
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
@@ -786,9 +810,11 @@ async function main()
     createPipeline(PL_CONTROL0, await (await fetch("control.wgsl")).text(), "m0");
     createPipeline(PL_CONTROL1, await (await fetch("control.wgsl")).text(), "m1");
     createPipeline(PL_CONTROL2, await (await fetch("control.wgsl")).text(), "m2");
+    createPipeline(PL_CONTROL3, await (await fetch("control.wgsl")).text(), "m3");
     createPipeline(PL_DENOISE0, await (await fetch("denoise.wgsl")).text(), "m0");
     createPipeline(PL_DENOISE1, await (await fetch("denoise.wgsl")).text(), "m1");
     createPipeline(PL_DENOISE2, await (await fetch("denoise.wgsl")).text(), "m2");
+    createPipeline(PL_DENOISE3, await (await fetch("denoise.wgsl")).text(), "m3");
     createPipeline(PL_BLIT, await (await fetch("blit.wgsl")).text(), "vm", "m");
   } else {
     createPipeline(PL_GENERATE, SM_GENERATE, "m");
@@ -798,9 +824,11 @@ async function main()
     createPipeline(PL_CONTROL0, SM_CONTROL, "m0");
     createPipeline(PL_CONTROL1, SM_CONTROL, "m1");
     createPipeline(PL_CONTROL2, SM_CONTROL, "m2");
+    createPipeline(PL_CONTROL3, SM_CONTROL, "m3");
     createPipeline(PL_DENOISE0, SM_DENOISE, "m0");
     createPipeline(PL_DENOISE1, SM_DENOISE, "m1");
     createPipeline(PL_DENOISE2, SM_DENOISE, "m2");
+    createPipeline(PL_DENOISE3, SM_DENOISE, "m3");
     createPipeline(PL_BLIT, SM_BLIT, "vm", "m");
   }
 
