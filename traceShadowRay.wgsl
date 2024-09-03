@@ -371,8 +371,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let frame = config[0];
 
   let ofs = frame.x * (frame.y >> 8); // width * height
-  let ori = shadowRays[gidx];
-  let dir = shadowRays[ofs + gidx];
+  let ori = shadowRays[             gidx];
+  let dir = shadowRays[       ofs + gidx];
   let ctb = shadowRays[(ofs << 1) + gidx];
   if(!intersectTlasAnyHit(ori.xyz, dir.xyz, dir.w)) { // dir.w = distance
     colBuf[bitcast<u32>(ori.w)] += vec4f(ctb.xyz, 1.0);

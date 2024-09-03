@@ -4,7 +4,7 @@ const GLTF_BIN_PATH = "scenes/scene.bin";
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
 
-const WIDTH = 1280;
+const WIDTH = 1920;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 1;

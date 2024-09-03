@@ -43,9 +43,10 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 @fragment
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
-  let w = config[0].x;
-  let h = config[0].y >> 8;
-  let gidx = config[0].x * u32(pos.y) + u32(pos.x);
+  let frame = config[0];
+  let w = frame.x;
+  let h = frame.y >> 8;
+  let gidx = w * u32(pos.y) + u32(pos.x);
 
   // Color
   let dcol = accumColBuf[        gidx].xyz;

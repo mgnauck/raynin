@@ -105,14 +105,13 @@ fn sampleEye(eye: vec4f, right: vec4f, up: vec4f, r0: vec2f) -> vec3f
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
-
   let w = frame.x;
   let h = frame.y >> 8;
-
-  let gidx = w * globalId.y + globalId.x;
-  if(gidx >= w * h) {
+  if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }
+
+  let gidx = w * globalId.y + globalId.x;
 
   // Set seed based on pixel index, current frame (z) and sample num (w)
   seed = wangHash(gidx * 32467 + frame.z * 23 + frame.w * 6173);

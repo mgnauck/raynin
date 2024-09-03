@@ -75,8 +75,8 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
 
   let frame = config[0];
   
-  // Re-purpose z and w component to increment filter iterations
-  // Initially w (sample num) will alway be > 0, so this marks our iteration reset
+  // Re-purpose z and w component as counter of filter iterations
+  // Initially w (sample num) will alway be > 0, so this marks our first iteration
   let iter = select(frame.z + 1u, 0u, frame.w > 0);
   config[0] = vec4u(frame.x, frame.y, iter, 0u);
 } 

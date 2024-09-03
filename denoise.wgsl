@@ -20,28 +20,9 @@
 }*/
 
 const SHORT_MASK      = 0xffffu;
-const EPS             = 0.0001;
 const TEMPORAL_ALPHA  = 0.2;
-
-// TODO Size optimize via symmetry
-
-// Gaussian 3x3
-const KERNEL3x3 = array<array<f32, 3>, 3>(
-   array<f32, 3>(0.0625, 0.1250, 0.0625),
-   array<f32, 3>(0.1250, 0.2500, 0.1250),
-   array<f32, 3>(0.0625, 0.1250, 0.0625)
-);
-
-// Gaussian 5x5
-const KERNEL5x5 = array<array<f32, 5>, 5>(
-   array<f32, 5>(0.0030, 0.0133, 0.0219, 0.0133, 0.0030),
-   array<f32, 5>(0.0133, 0.0596, 0.0983, 0.0596, 0.0133),
-   array<f32, 5>(0.0219, 0.0983, 0.1621, 0.0983, 0.0219),
-   array<f32, 5>(0.0133, 0.0596, 0.0983, 0.0596, 0.0133),
-   array<f32, 5>(0.0030, 0.0133, 0.0219, 0.0133, 0.0030)
-);
-
-const WG_SIZE = vec3u(16, 16, 1);
+const EPS             = 0.0001;
+const WG_SIZE         = vec3u(16, 16, 1);
 
 // Attribute buf are 2x buf vec4f for nrm + pos
 //  nrm = xyz, w unusued
@@ -124,9 +105,8 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;
-  let h = (frame.y >> 8);
-  let gidx = w * globalId.y + globalId.x;
-  if(gidx >= w * h) {
+  let h = frame.y >> 8;
+  if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }
 
@@ -135,10 +115,20 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   // Check and redistribute consistency of back projection
 
   let ofs = w * h;
+  let gidx = w * globalId.y + globalId.x;
 
   // Color of direct and multi-bounce indirect illumination
   let dcol = colBuf[      gidx].xyz / f32(frame.w);
   let icol = colBuf[ofs + gidx].xyz / f32(frame.w);
+
+  /*
+  //////////
+  // No temporal reprojection/accumulation
+  accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
+  accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
+  return;
+  //////////
+  */
 
   let dlum = luminance(dcol);
   let ilum = luminance(icol);
@@ -225,14 +215,16 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;
-  let h = (frame.y >> 8);
-  let gidx = w * globalId.y + globalId.x;
-  if(gidx >= w * h) {
+  let h = frame.y >> 8;
+  if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }
 
   let ofs = w * h;
-  
+  let gidx = w * globalId.y + globalId.x;
+  let iglobId = vec2i(globalId.xy);
+  let ires = vec2i(i32(w), i32(h));
+
   // xy = moments, z = age, w = unused
   let dmom = accumMomOutBuf[      gidx];
   let imom = accumMomOutBuf[ofs + gidx];
@@ -244,13 +236,12 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     var cnt = 0u;
     for(var j=-1; j<=1; j++) {
       for(var i=-1; i<=1; i++) {
-        let qx = i32(globalId.x) + i;
-        let qy = i32(globalId.y) + j;
-        if(qx < 0 || qy < 0 || qx >= i32(w) || qy >= i32(h)) {
+        let q = iglobId + vec2i(i, j);
+        if(any(q < vec2i(0)) || any(q >= ires)) {
           continue;
         }
 
-        let qidx = w * u32(qy) + u32(qx);
+        let qidx = w * u32(q.y) + u32(q.x);
 
         sumMomDir += accumMomOutBuf[      qidx].xy;
         sumMomInd += accumMomOutBuf[ofs + qidx].xy;
@@ -276,28 +267,34 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;
-  let h = (frame.y >> 8);
-  let gidx = w * globalId.y + globalId.x;
-  if(gidx >= w * h) {
+  let h = frame.y >> 8;
+  if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }
 
   let ofs = w * h;
+  let gidx = w * globalId.y + globalId.x;
+  let iglobId = vec2i(globalId.xy);
+  let ires = vec2i(i32(w), i32(h));
+
+  let kernelWeights = array<array<f32, 2>, 2>(
+   array<f32, 2>(1.0 / 4.0, 1.0 / 8.0),
+   array<f32, 2>(1.0 / 8.0, 1.0 / 16.0)
+  );
 
   var sumVarDir = 0.0;
   var sumVarInd = 0.0;
   var sumWeight = 0.0;
   for(var j=-1; j<=1; j++) {
     for(var i=-1; i<=1; i++) {
-      let qx = i32(globalId.x) + i;
-      let qy = i32(globalId.y) + j;
-      if(qx < 0 || qy < 0 || qx >= i32(w) || qy >= i32(h)) {
+      let q = iglobId + vec2i(i, j);
+      if(any(q < vec2i(0)) || any(q >= ires)) {
         continue;
       }
 
-      let qidx = w * u32(qy) + u32(qx);
+      let qidx = w * u32(q.y) + u32(q.x);
 
-      let weight = KERNEL3x3[i + 1][j + 1];
+      let weight = kernelWeights[abs(i)][abs(j)];
       sumVarDir += weight * accumColVarInBuf[      qidx].w;
       sumVarInd += weight * accumColVarInBuf[ofs + qidx].w;
       sumWeight += weight;
@@ -315,89 +312,84 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;
-  let h = (frame.y >> 8);
-  let gidx = w * globalId.y + globalId.x;
-  if(gidx >= w * h) {
+  let h = frame.y >> 8;
+  if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }
 
-  // Default sigmas as per SVGF paper
-  let sigmaLum = 4.0;
-  let sigmaNrm = 128.0;
-  let sigmaPos = 1.0; // depth
-
   let ofs = w * h;
+  let gidx = w * globalId.y + globalId.x;
 
   let pos = attrBuf[ofs + gidx];
 
   if(bitcast<u32>(pos.w) >> 16 == SHORT_MASK) {
-    // No hit
+    // No mtl, no hit
     accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
     accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
     return;
   }
+
+  let iglobId = vec2i(globalId.xy);
+  let ires = vec2i(i32(w), i32(h));
 
   let nrm = attrBuf[gidx].xyz;
 
   let colVarDir = accumColVarInBuf[      gidx];
   let colVarInd = accumColVarInBuf[ofs + gidx];
 
-  let lev = frame.z;
-  let st = 1i << lev;
+  // Stepsize of filter increases with each iteration
+  let stepSize = 1i << frame.z;
 
-  var sumColVarDir = vec4f(0);
-  var sumColVarInd = vec4f(0);
+  // Default sigmas as per SVGF paper
+  let sigmaLum = 4.0;
+  let sigmaNrm = 128.0;
+  let sigmaPos = 1.0; // depth, TODO Read in paper about scaling this
 
-  var sumWeightDir = 0.0;
-  var sumWeightInd = 0.0;
+  var sumColVarDir = colVarDir;
+  var sumColVarInd = colVarInd;
+
+  var sumWeightDir = 1.0;
+  var sumWeightInd = 1.0;
   
-  var sumWeightDirSqr = 0.0;
-  var sumWeightIndSqr = 0.0;
+  var sumWeightDirSqr = 1.0;
+  var sumWeightIndSqr = 1.0;
 
-  // Run 
+  // Weights for 5x5 gaussian
+  let kernelWeights = array<f32, 3>(1.0, 2.0 / 3.0, 1.0 / 6.0);
+
   for(var j=-2; j<=2; j++) {
     for(var i=-2; i<=2; i++) {
-      let qx = i32(globalId.x) + i * st;
-      let qy = i32(globalId.y) + j * st;
-
-      if(qx < 0 || qy < 0 || qx >= i32(w) || qy >= i32(h)) {
-        // Ignore outside of image
+      let q = iglobId + vec2i(i, j) * stepSize;
+      if(any(q < vec2i(0)) || any(q >= ires) || all(vec2i(i, j) == vec2i(0))) {
+        // Out of bounds or already accounted center pixel
         continue;
       }
 
-      let qidx = w * u32(qy) + u32(qx);
-
-      let qpos = attrBuf[ofs + qidx];
-      if(bitcast<u32>(qpos.w) != bitcast<u32>(pos.w)) {
-        // Inst/mtl does not match
-        continue;
-      }
+      let qidx = w * u32(q.y) + u32(q.x);
 
       // Depth edge stopping function as per SVGF paper
+      let qpos = attrBuf[ofs + qidx];
       let distPosSqr = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz);
-      let weightPos = exp(-distPosSqr / sigmaPos) + EPS;
-
-      let qnrm = attrBuf[qidx].xyz;
+      let weightPos = exp(-distPosSqr / sigmaPos);
 
       // Nrm edge stopping function as per SVGF paper
-      let weightNrm = pow(max(0.0, dot(nrm, qnrm)), sigmaNrm) + EPS;
+      let qnrm = attrBuf[qidx].xyz;
+      let weightNrm = pow(max(0.0, dot(nrm, qnrm)), sigmaNrm);
 
       // Luminance edge stopping function as per SVGF with 3x3 gaussian filtered variance
-      let filtVarDir = filteredVarianceBuf[      qidx];
-      let filtVarInd = filteredVarianceBuf[ofs + qidx];
-      
-      let lumDenomDir = sqrt(max(0.0, filtVarDir)) * sigmaLum + EPS;
-      let lumDenomInd = sqrt(max(0.0, filtVarInd)) * sigmaLum + EPS;
+      let lumDenomDir = sqrt(max(0.0, EPS + filteredVarianceBuf[      qidx])) * sigmaLum;
+      let lumDenomInd = sqrt(max(0.0, EPS + filteredVarianceBuf[ofs + qidx])) * sigmaLum;
 
       let qcolVarDir = accumColVarInBuf[      qidx];
       let qcolVarInd = accumColVarInBuf[ofs + qidx];
 
-      let weightLumDir = exp(-abs(luminance(colVarDir.xyz) - luminance(qcolVarDir.xyz)) / lumDenomDir) + EPS;
-      let weightLumInd = exp(-abs(luminance(colVarInd.xyz) - luminance(qcolVarInd.xyz)) / lumDenomInd) + EPS;
+      let weightLumDir = exp(-abs(luminance(colVarDir.xyz) - luminance(qcolVarDir.xyz)) / lumDenomDir);
+      let weightLumInd = exp(-abs(luminance(colVarInd.xyz) - luminance(qcolVarInd.xyz)) / lumDenomInd);
 
-      // Filter value multiplied by edge stopping weights
-      let weightDir = weightPos * weightNrm * weightLumDir * KERNEL5x5[i + 2][j + 2];
-      let weightInd = weightPos * weightNrm * weightLumInd * KERNEL5x5[i + 2][j + 2];
+      // Filter weighted by product of edge stopping functions
+      let k = kernelWeights[abs(i)] * kernelWeights[abs(j)];
+      let weightDir = weightPos * weightNrm * weightLumDir * k;
+      let weightInd = weightPos * weightNrm * weightLumInd * k;
       
       let weightDirSqr = weightDir * weightDir;
       let weightIndSqr = weightInd * weightInd;
@@ -423,79 +415,3 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
   accumColVarOutBuf[      gidx] = vec4f(colDir, varDir);
   accumColVarOutBuf[ofs + gidx] = vec4f(colInd, varInd);
 }
-
-// Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
-/*@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m(@builtin(global_invocation_id) globalId: vec3u)
-{
-  let frame = config[0];
-  let w = frame.x;
-  let h = (frame.y >> 8);
-  let gidx = w * globalId.y + globalId.x;
-  if(gidx >= w * h) {
-    return;
-  }
-
-  let lev = frame.z;
-  let st = 1i << lev;
-
-  let sigmaNrm = 0.8;
-  let sigmaPos = 1.2;
-  let sigmaAcc = 512.0;
-
-  // Fetch data at current pixel p
-  let pos4 = posBuf[gidx];
-  let instId = bitcast<u32>(pos4.w);
-  if(instId == SHORT_MASK) {
-    accumColVarOutBuf[gidx] = accumColVarInBuf[gidx]; // Was no hit
-    return;
-  }
-
-  let nrm = nrmBuf[gidx].xyz;
-  let pos = pos4.xyz;
-  let acc = accumColVarInBuf[gidx].xyz;
-
-  var sum = vec3f(0.0);
-  var weightSum = 0.0;
-  for(var j=-2; j<=2; j++) {
-    for(var i=-2; i<=2; i++) {
-      let qx = i32(globalId.x) + i * st;
-      let qy = i32(globalId.y) + j * st;
-
-      // Ignore outside of image
-      if(qx < 0 || qy < 0 || qx >= i32(w) || qy >= i32(h)) {
-        continue;
-      }
-
-      let qidx = w * u32(qy) + u32(qx);
-
-      // Wrong object
-      let qpos4 = posBuf[qidx];
-      if(bitcast<u32>(qpos4.w) != instId) {
-        continue;
-      }
-
-      // Fetch data at pixel q
-      let qnrm = nrmBuf[qidx].xyz;
-      let qpos = qpos4.xyz;
-      let qacc = accumColVarInBuf[qidx].xyz;
-
-      // Calc weights for edge avoidance
-      let distAccSqr = dot(acc - qacc, acc - qacc);
-      let weightAcc = min(exp(-distAccSqr / sigmaAcc), 1.0);
-
-      let distNrmSqr = dot(nrm - qnrm, nrm - qnrm);
-      let weightNrm = min(exp(-distNrmSqr / sigmaNrm), 1.0);
-
-      let distPosSqr = dot(pos - qpos, pos - qpos);
-      let weightPos = min(exp(-distPosSqr / sigmaPos), 1.0);
-
-      //let weight = KERNEL[i + 2][j + 2]; // Just atrous wavelet w/o edge avoidance
-      let weight = weightAcc * weightNrm * weightPos * KERNEL[i + 2][j + 2];
-      sum += qacc * weight;
-      weightSum += weight;
-    }
-  }
-
-  accumColVarOutBuf[gidx] = select(vec4f(accumColVarInBuf[gidx].xyz, 1.0), vec4f(sum / weightSum, 1.0), weightSum != 0.0);
-}*/
