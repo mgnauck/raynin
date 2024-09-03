@@ -237,7 +237,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let dmom = accumMomOutBuf[      gidx];
   let imom = accumMomOutBuf[ofs + gidx];
 
-  if(dmom.z < 4.0) {
+  if(dmom.z < 3.9) {
     // Spatially estimate the variance because history ("age") of accumulated moments is too short
     var sumMomDir = vec2f(0.0);
     var sumMomInd = vec2f(0.0);
@@ -373,25 +373,25 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
         continue;
       }
 
-      let qnrm = attrBuf[qidx].xyz;
-
-      let qcolVarDir = accumColVarInBuf[      qidx];
-      let qcolVarInd = accumColVarInBuf[ofs + qidx];
-
       // Depth edge stopping function as per SVGF paper
       let distPosSqr = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz);
       let weightPos = exp(-distPosSqr / sigmaPos) + EPS;
+
+      let qnrm = attrBuf[qidx].xyz;
 
       // Nrm edge stopping function as per SVGF paper
       let weightNrm = pow(max(0.0, dot(nrm, qnrm)), sigmaNrm) + EPS;
 
       // Luminance edge stopping function as per SVGF with 3x3 gaussian filtered variance
-      let filtVarDir = filteredVarianceBuf[gidx];
-      let filtVarInd = filteredVarianceBuf[ofs + gidx];
+      let filtVarDir = filteredVarianceBuf[      qidx];
+      let filtVarInd = filteredVarianceBuf[ofs + qidx];
       
       let lumDenomDir = sqrt(max(0.0, filtVarDir)) * sigmaLum + EPS;
       let lumDenomInd = sqrt(max(0.0, filtVarInd)) * sigmaLum + EPS;
-      
+
+      let qcolVarDir = accumColVarInBuf[      qidx];
+      let qcolVarInd = accumColVarInBuf[ofs + qidx];
+
       let weightLumDir = exp(-abs(luminance(colVarDir.xyz) - luminance(qcolVarDir.xyz)) / lumDenomDir) + EPS;
       let weightLumInd = exp(-abs(luminance(colVarInd.xyz) - luminance(qcolVarInd.xyz)) / lumDenomInd) + EPS;
 

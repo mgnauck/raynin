@@ -677,6 +677,11 @@ async function render(time)
       // Toggle accumulation buffer
       res.accumIdx = 1 - res.accumIdx;
 
+      // Init / increment filter iteration
+      passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
+      passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+      passEncoder.dispatchWorkgroups(1);
+
       // Filter variance
       passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
       passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
@@ -685,15 +690,7 @@ async function render(time)
       // Apply edge-avoiding a-trous wavelet transform
       passEncoder.setPipeline(res.pipelines[PL_DENOISE3]);
       passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-      // Increment filter iteration
-      passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
-      passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
-      passEncoder.dispatchWorkgroups(1);
     }
-  } else {
-    // Toggle accumulation buffer
-    res.accumIdx = 1 - res.accumIdx;
   }
 
   passEncoder.end();
@@ -714,6 +711,9 @@ async function render(time)
   passEncoder.end();
 
   device.queue.submit([commandEncoder.finish()]);
+
+  // Toggle for next frame
+  res.accumIdx = 1 - res.accumIdx;
 
   // Update scene and renderer for next frame
   wa.update((time - start) / 1000, converge);
