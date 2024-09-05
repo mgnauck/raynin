@@ -122,12 +122,10 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   let icol = colBuf[ofs + gidx].xyz / f32(frame.w);
 
   /*
-  //////////
   // No temporal reprojection/accumulation
   accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
   accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
   return;
-  //////////
   */
 
   let dlum = luminance(dcol);
