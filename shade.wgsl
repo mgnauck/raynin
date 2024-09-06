@@ -606,6 +606,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Increase roughness with each bounce to combat fireflies
   //mtl.roughness = min(1.0, mtl.roughness + f32(pidx & 0xff) * mtl.roughness * 0.75);
+  //mtl.roughness = select(1.0, mtl.roughness, (pidx & 0xff) == 0u);
 
   seed = bitcast<u32>(ori.w);
   let r0 = rand4();

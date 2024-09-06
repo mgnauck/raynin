@@ -21,6 +21,9 @@
 
 const SHORT_MASK      = 0xffffu;
 const TEMPORAL_ALPHA  = 0.2;
+const SIG_LUM         = 4.0;
+const SIG_NRM         = 128.0;
+const SIG_POS         = 1.0; // Depth
 const EPS             = 0.0001;
 const WG_SIZE         = vec3u(16, 16, 1);
 
@@ -50,8 +53,8 @@ const WG_SIZE         = vec3u(16, 16, 1);
 
 fn luminance(col: vec3f) -> f32
 {
-  return dot(col, vec3f(0.299, 0.587, 0.114));
   //return dot(col, vec3f(0.2126, 0.7152, 0.0722));
+  return dot(col, vec3f(0.299, 0.587, 0.114)); // Perceived
 }
 
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
@@ -107,10 +110,6 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }
-
-  // TODO
-  // Sample reprojected color values using a small filter
-  // Check and redistribute consistency of back projection
 
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
@@ -321,31 +320,21 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   // Step size of filter increases with each iteration
   let stepSize = 1i << frame.z;
 
-  // Default sigmas as per SVGF paper
-  let sigmaLum = 4.0 - f32(frame.z);
-  let sigmaNrm = 128.0;
-  let sigmaPos = 1.0;
-
   let nrm = attrBuf[gidx].xyz;
 
   let colVarDir = accumColVarInBuf[      gidx];
   let colVarInd = accumColVarInBuf[ofs + gidx];
 
-  let lumColVarDir = luminance(colVarDir.xyz);
-  let lumColVarInd = luminance(colVarInd.xyz);
+  let lumColDir = luminance(colVarDir.xyz);
+  let lumColInd = luminance(colVarInd.xyz);
 
-  let lumDenom = sigmaLum * sqrt(max(vec2f(0.0), filterVariance(p, res))) + EPS;
+  let lumVarDen = SIG_LUM * sqrt(max(vec2f(0.0), vec2f(1e-10) + filterVariance(p, res)));
 
   var sumColVarDir = colVarDir;
   var sumColVarInd = colVarInd;
+  var sumWeight = vec2f(1.0);
 
-  var sumWeightDir = 1.0;
-  var sumWeightInd = 1.0;
-  
-  var sumWeightDirSqr = 1.0;
-  var sumWeightIndSqr = 1.0;
-
-  // Weights for 5x5 gaussian
+  // 5x5 gaussian
   let kernelWeights = array<f32, 3>(1.0, 2.0 / 3.0, 1.0 / 6.0);
 
   for(var j=-2; j<=2; j++) {
@@ -358,48 +347,34 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 
       let qidx = w * u32(q.y) + u32(q.x);
 
-      // Depth edge stopping function as per SVGF paper
+      // Nrm edge stopping function
+      let weightNrm = pow(max(0.0, dot(nrm, attrBuf[qidx].xyz)), SIG_NRM);
+      //let weightNrm = 1.0;
+
+      // Depth edge stopping function
       let qpos = attrBuf[ofs + qidx];
-      let distPosSqr = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz);
-      let weightPos = exp(-distPosSqr / sigmaPos);
+      let weightPos = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz) / SIG_POS;
 
-      // Nrm edge stopping function as per SVGF paper
-      let qnrm = attrBuf[qidx].xyz;
-      let weightNrm = pow(max(0.0, dot(nrm, qnrm)), sigmaNrm);
-
-      // Luminance edge stopping function as per SVGF with 3x3 gaussian filtered variance
+      // Luminance edge stopping function
       let qcolVarDir = accumColVarInBuf[      qidx];
       let qcolVarInd = accumColVarInBuf[ofs + qidx];
 
-      let weightLumDir = exp(-abs(lumColVarDir - luminance(qcolVarDir.xyz)) / lumDenom.x);
-      let weightLumInd = exp(-abs(lumColVarInd - luminance(qcolVarInd.xyz)) / lumDenom.y);
+      let weightLumDir = abs(lumColDir - luminance(qcolVarDir.xyz)) / lumVarDen.x;
+      let weightLumInd = abs(lumColInd - luminance(qcolVarInd.xyz)) / lumVarDen.y;
 
-      // Filter weighted by product of edge stopping functions
-      let k = kernelWeights[abs(i)] * kernelWeights[abs(j)];
-      let weightDir = weightPos * weightNrm * weightLumDir * k;
-      let weightInd = weightPos * weightNrm * weightLumInd * k;
-      
-      let weightDirSqr = weightDir * weightDir;
-      let weightIndSqr = weightInd * weightInd;
+      let wDir = weightNrm * exp(-weightLumDir - weightPos);
+      let wInd = weightNrm * exp(-weightLumInd - weightPos);
+
+      // Filter value is weighted by edge stopping functions
+      let w = kernelWeights[abs(i)] * kernelWeights[abs(j)] * vec2f(wDir, wInd);
 
       // Apply filter to accumulated direct/indirect color and variance
-      sumColVarDir += vec4f(qcolVarDir.xyz * weightDir, qcolVarDir.w * weightDirSqr);
-      sumColVarInd += vec4f(qcolVarInd.xyz * weightInd, qcolVarInd.w * weightIndSqr);
-
-      sumWeightDir += weightDir;
-      sumWeightInd += weightInd;
-
-      sumWeightDirSqr += weightDirSqr;
-      sumWeightIndSqr += weightIndSqr;
+      sumColVarDir += qcolVarDir * vec4f(w.xxx, w.x * w.x);
+      sumColVarInd += qcolVarInd * vec4f(w.yyy, w.y * w.y);
+      sumWeight += w;
     }
   }
   
-  let colDir = select(colVarDir.xyz, sumColVarDir.xyz / sumWeightDir, sumWeightDir > EPS);
-  let colInd = select(colVarInd.xyz, sumColVarInd.xyz / sumWeightInd, sumWeightInd > EPS);
-  
-  let varDir = select(colVarDir.w, sumColVarDir.w / sumWeightDirSqr, sumWeightDirSqr > EPS);
-  let varInd = select(colVarInd.w, sumColVarInd.w / sumWeightIndSqr, sumWeightIndSqr > EPS);
-
-  accumColVarOutBuf[      gidx] = vec4f(colDir, varDir);
-  accumColVarOutBuf[ofs + gidx] = vec4f(colInd, varInd);
+  accumColVarOutBuf[      gidx] = select(colVarDir, sumColVarDir / vec4f(sumWeight.xxx, sumWeight.x * sumWeight.x), sumWeight.x > EPS);
+  accumColVarOutBuf[ofs + gidx] = select(colVarInd, sumColVarInd / vec4f(sumWeight.yyy, sumWeight.y * sumWeight.y), sumWeight.y > EPS);
 }
