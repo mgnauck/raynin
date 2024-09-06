@@ -34,8 +34,6 @@ const WG_SIZE         = vec3u(16, 16, 1);
 //  xy = first and second moment direct illum, z = age
 //  xy = first and second moment indirect illum, z = age
 //
-// Filtered variance buf is 2x buf f32 for direct and indirect
-//
 // Accum coli/variance buf are 2x buf vec4f:
 //  xyz = direct illum col, w = direct illum variance
 //  xyz = indirect illum col, w = indirect illum variance
@@ -47,13 +45,13 @@ const WG_SIZE         = vec3u(16, 16, 1);
 @group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
 @group(0) @binding(5) var<storage, read> accumMomInBuf: array<vec4f>;
 @group(0) @binding(6) var<storage, read_write> accumMomOutBuf: array<vec4f>;
-@group(0) @binding(7) var<storage, read_write> filteredVarianceBuf: array<f32>;
-@group(0) @binding(8) var<storage, read> accumColVarInBuf: array<vec4f>;
-@group(0) @binding(9) var<storage, read_write> accumColVarOutBuf: array<vec4f>;
+@group(0) @binding(7) var<storage, read> accumColVarInBuf: array<vec4f>;
+@group(0) @binding(8) var<storage, read_write> accumColVarOutBuf: array<vec4f>;
 
 fn luminance(col: vec3f) -> f32
 {
-  return dot(col, vec3f(0.2126, 0.7152, 0.0722));
+  return dot(col, vec3f(0.299, 0.587, 0.114));
+  //return dot(col, vec3f(0.2126, 0.7152, 0.0722));
 }
 
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
@@ -220,22 +218,23 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
 
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
-  let iglobId = vec2i(globalId.xy);
-  let ires = vec2i(i32(w), i32(h));
+
+  let p = vec2i(globalId.xy);
+  let res = vec2i(i32(w), i32(h));
 
   // xy = moments, z = age, w = unused
   let dmom = accumMomOutBuf[      gidx];
   let imom = accumMomOutBuf[ofs + gidx];
 
-  if(dmom.z < 3.9) {
+  if(dmom.z < 4.0) {
     // Spatially estimate the variance because history ("age") of accumulated moments is too short
     var sumMomDir = vec2f(0.0);
     var sumMomInd = vec2f(0.0);
     var cnt = 0u;
     for(var j=-1; j<=1; j++) {
       for(var i=-1; i<=1; i++) {
-        let q = iglobId + vec2i(i, j);
-        if(any(q < vec2i(0)) || any(q >= ires)) {
+        let q = p + vec2i(i, j);
+        if(any(q < vec2i(0)) || any(q >= res)) {
           continue;
         }
 
@@ -253,60 +252,49 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     accumColVarOutBuf[      gidx].w = sumMomDir.y - sumMomDir.x * sumMomDir.x;
     accumColVarOutBuf[ofs + gidx].w = sumMomInd.y - sumMomInd.x * sumMomInd.x;
   } else {
-    // Estimate temporal variance from integrated moments
+    // Temporal variance from integrated moments
     accumColVarOutBuf[      gidx].w = dmom.y - dmom.x * dmom.x;
     accumColVarOutBuf[ofs + gidx].w = imom.y - imom.x * imom.x;
   }
 }
 
-// Filter accumulated variance
-@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m2(@builtin(global_invocation_id) globalId: vec3u)
+fn filterVariance(p: vec2i, res: vec2i) -> vec2f
 {
-  let frame = config[0];
-  let w = frame.x;
-  let h = frame.y >> 8;
-  if(any(globalId.xy >= vec2u(w, h))) {
-    return;
-  }
-
-  let ofs = w * h;
-  let gidx = w * globalId.y + globalId.x;
-  let iglobId = vec2i(globalId.xy);
-  let ires = vec2i(i32(w), i32(h));
-
+  // 3x3 gaussian
   let kernelWeights = array<array<f32, 2>, 2>(
    array<f32, 2>(1.0 / 4.0, 1.0 / 8.0),
    array<f32, 2>(1.0 / 8.0, 1.0 / 16.0)
   );
 
-  var sumVarDir = 0.0;
-  var sumVarInd = 0.0;
+  let ofs = u32(res.x * res.y);
+
+  var sumVar = vec2f(0.0);
   var sumWeight = 0.0;
+
   for(var j=-1; j<=1; j++) {
     for(var i=-1; i<=1; i++) {
-      let q = iglobId + vec2i(i, j);
-      if(any(q < vec2i(0)) || any(q >= ires)) {
+      let q = p + vec2i(i, j);
+
+      // Disabled because we will not use the out of bounds variance values
+      /*if(any(q < vec2i(0)) || any(q >= res)) {
         continue;
-      }
+      }*/
 
-      let qidx = w * u32(q.y) + u32(q.x);
+      let qidx = u32(res.x * q.y + q.x);
 
-      let weight = kernelWeights[abs(i)][abs(j)];
-      sumVarDir += weight * accumColVarInBuf[      qidx].w;
-      sumVarInd += weight * accumColVarInBuf[ofs + qidx].w;
-      sumWeight += weight;
+      let w = kernelWeights[abs(i)][abs(j)];
+      sumVar += w * vec2f(accumColVarInBuf[qidx].w, accumColVarInBuf[ofs + qidx].w);
+      sumWeight += w;
     }
   }
 
-  filteredVarianceBuf[      gidx] = sumVarDir / sumWeight;
-  filteredVarianceBuf[ofs + gidx] = sumVarInd / sumWeight;
+  return sumVar / sumWeight;
 }
 
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
 // Schied et al: Spatiotemporal Variance-Guided Filtering
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m3(@builtin(global_invocation_id) globalId: vec3u)
+fn m2(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;
@@ -327,21 +315,26 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
-  let iglobId = vec2i(globalId.xy);
-  let ires = vec2i(i32(w), i32(h));
+  let p = vec2i(globalId.xy);
+  let res = vec2i(i32(w), i32(h));
+
+  // Step size of filter increases with each iteration
+  let stepSize = 1i << frame.z;
+
+  // Default sigmas as per SVGF paper
+  let sigmaLum = 4.0 - f32(frame.z);
+  let sigmaNrm = 128.0;
+  let sigmaPos = 1.0;
 
   let nrm = attrBuf[gidx].xyz;
 
   let colVarDir = accumColVarInBuf[      gidx];
   let colVarInd = accumColVarInBuf[ofs + gidx];
 
-  // Stepsize of filter increases with each iteration
-  let stepSize = 1i << frame.z;
+  let lumColVarDir = luminance(colVarDir.xyz);
+  let lumColVarInd = luminance(colVarInd.xyz);
 
-  // Default sigmas as per SVGF paper
-  let sigmaLum = 4.0;
-  let sigmaNrm = 128.0;
-  let sigmaPos = 1.0; // depth, TODO Read in paper about scaling this
+  let lumDenom = sigmaLum * sqrt(max(vec2f(0.0), filterVariance(p, res))) + EPS;
 
   var sumColVarDir = colVarDir;
   var sumColVarInd = colVarInd;
@@ -357,8 +350,8 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
 
   for(var j=-2; j<=2; j++) {
     for(var i=-2; i<=2; i++) {
-      let q = iglobId + vec2i(i, j) * stepSize;
-      if(any(q < vec2i(0)) || any(q >= ires) || all(vec2i(i, j) == vec2i(0))) {
+      let q = p + vec2i(i, j) * stepSize;
+      if(any(q < vec2i(0)) || any(q >= res) || all(vec2i(i, j) == vec2i(0))) {
         // Out of bounds or already accounted center pixel
         continue;
       }
@@ -375,14 +368,11 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
       let weightNrm = pow(max(0.0, dot(nrm, qnrm)), sigmaNrm);
 
       // Luminance edge stopping function as per SVGF with 3x3 gaussian filtered variance
-      let lumDenomDir = sqrt(max(0.0, EPS + filteredVarianceBuf[      qidx])) * sigmaLum;
-      let lumDenomInd = sqrt(max(0.0, EPS + filteredVarianceBuf[ofs + qidx])) * sigmaLum;
-
       let qcolVarDir = accumColVarInBuf[      qidx];
       let qcolVarInd = accumColVarInBuf[ofs + qidx];
 
-      let weightLumDir = exp(-abs(luminance(colVarDir.xyz) - luminance(qcolVarDir.xyz)) / lumDenomDir);
-      let weightLumInd = exp(-abs(luminance(colVarInd.xyz) - luminance(qcolVarInd.xyz)) / lumDenomInd);
+      let weightLumDir = exp(-abs(lumColVarDir - luminance(qcolVarDir.xyz)) / lumDenom.x);
+      let weightLumInd = exp(-abs(lumColVarInd - luminance(qcolVarInd.xyz)) / lumDenom.y);
 
       // Filter weighted by product of edge stopping functions
       let k = kernelWeights[abs(i)] * kernelWeights[abs(j)];
