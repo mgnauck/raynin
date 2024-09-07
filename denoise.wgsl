@@ -33,11 +33,13 @@ const WG_SIZE         = vec3u(16, 16, 1);
 //
 // Color buffer are 2x buf vec4f for direct and indirect illum col
 //
-// Accum moments buf are 2x buf vec4f for direct and indirect
-//  xy = first and second moment direct illum, z = age
-//  xy = first and second moment indirect illum, z = age
+// Accum moments buf
+//  xy = first and second moment direct illum
+//  zw = first and second moment indirect illum
 //
-// Accum coli/variance buf are 2x buf vec4f:
+// Accum history buf is f32 with age
+//
+// Accum col/variance buf are 2x buf vec4f:
 //  xyz = direct illum col, w = direct illum variance
 //  xyz = indirect illum col, w = indirect illum variance
 
@@ -48,8 +50,10 @@ const WG_SIZE         = vec3u(16, 16, 1);
 @group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
 @group(0) @binding(5) var<storage, read> accumMomInBuf: array<vec4f>;
 @group(0) @binding(6) var<storage, read_write> accumMomOutBuf: array<vec4f>;
-@group(0) @binding(7) var<storage, read> accumColVarInBuf: array<vec4f>;
-@group(0) @binding(8) var<storage, read_write> accumColVarOutBuf: array<vec4f>;
+@group(0) @binding(7) var<storage, read> accumHisInBuf: array<f32>;
+@group(0) @binding(8) var<storage, read_write> accumHisOutBuf: array<f32>;
+@group(0) @binding(9) var<storage, read> accumColVarInBuf: array<vec4f>;
+@group(0) @binding(10) var<storage, read_write> accumColVarOutBuf: array<vec4f>;
 
 fn luminance(col: vec3f) -> f32
 {
@@ -94,8 +98,7 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   let d2y = dot(botNrm, toPos);
   let y = d1y / (d1y + d2y);
 
-  // Find screen space pos via calculated x/y ratios
-  // (Can be out of bounds)
+  // Find screen space pos via calculated x/y ratios (can be out of bounds)
   return vec2i(i32(res.x * x), i32(res.y * y));
 }
 
@@ -114,43 +117,17 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
 
-  // Color of direct and multi-bounce indirect illumination
-  let dcol = colBuf[      gidx].xyz / f32(frame.w);
-  let icol = colBuf[ofs + gidx].xyz / f32(frame.w);
-
-  /*
-  // No temporal reprojection/accumulation
-  accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-  accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
-  return;
-  */
-
-  let dlum = luminance(dcol);
-  let ilum = luminance(icol);
-
   // Fetch last camera's up vec
   let lup = lastCamera[2];
 
-  if(all(lup.xyz == vec3f(0.0))) {
-    // Last up vec is not set, so it must be the first frame with no previous cam yet
-    accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
-    accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
-    accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
-    return;
-  }
+  // No proper up of last cam, then this must be first frame
+  var ignorePrevious = all(lup.xyz == vec3f(0.0));
 
   // Current world space hit pos with w = mtl id << 16 | inst id
   let pos = attrBuf[ofs + gidx];
 
-  // Check mtl id if this was a no hit or light hit
-  if((bitcast<u32>(pos.w) >> 16) == SHORT_MASK) {
-    accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
-    accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
-    accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
-    return;
-  }
+  // Check mtl id if this was a no hit
+  ignorePrevious |= (bitcast<u32>(pos.w) >> 16) == SHORT_MASK;
 
   // Fetch last camera's eye pos and right vec
   let leye = lastCamera[0]; // w = halfTanVertFov
@@ -160,9 +137,9 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   let spos = calcScreenSpacePos(pos.xyz, leye, lri, lup, vec2f(f32(w), f32(h)));
 
   // Check if previous screen space pos is out of bounds
-  var ignorePrevious = any(spos < vec2i(0i)) || any(spos >= vec2i(i32(w), i32(h)));
+  ignorePrevious |= any(spos < vec2i(0i)) || any(spos >= vec2i(i32(w), i32(h)));
 
-  // Index in last buffers
+  // Calc index into last buffers
   let lgidx = w * u32(spos.y) + u32(spos.x);
 
   // Read last pos with mtl/inst id in w
@@ -172,36 +149,32 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   ignorePrevious |= bitcast<u32>(pos.w) != bitcast<u32>(lpos.w);
 
   // Consider differences of current and last normal
-  let nrm = attrBuf[gidx];
-  let lnrm = lastAttrBuf[lgidx];
-  ignorePrevious |= abs(dot(nrm, lnrm)) < 0.1;
+  ignorePrevious |= abs(dot(attrBuf[gidx], lastAttrBuf[lgidx])) < 0.1;
 
-  if(ignorePrevious) {
-    accumColVarOutBuf[      gidx] = vec4f(dcol, 1.0); // Direct
-    accumColVarOutBuf[ofs + gidx] = vec4f(icol, 1.0); // Indirect
-    // Visualize uncorrelated areas
-    //accumColVarOutBuf[      gidx] = vec4f(1.0, dcol.xy, 1.0); // Direct
-    //accumColVarOutBuf[ofs + gidx] = vec4f(1.0, icol.xy, 1.0); // Indirect
-    accumMomOutBuf[      gidx] = vec4f(dlum, dlum * dlum, /* age */ 0.0, 0.0); // Direct
-    accumMomOutBuf[ofs + gidx] = vec4f(ilum, ilum * ilum, /* age */ 0.0, 0.0); // Indirect
-    return;
-  }
+  // Read and increase age but keep upper bound
+  let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrevious));
 
-  // Last direct + indirect color
-  let ldcol = accumColVarInBuf[      lgidx].xyz;
-  let licol = accumColVarInBuf[ofs + lgidx].xyz;
+  // Increase weight of new samples in case of insufficient history
+  let alpha = select(max(TEMPORAL_ALPHA, 1.0 / age), 1.0, ignorePrevious);
 
-  // Last direct + indirect moments
-  let ldmom = accumMomInBuf[      lgidx]; // z has age, w is unused
-  let limom = accumMomInBuf[ofs + lgidx];
+  // Read color of direct and indirect illumination
+  // (frame.w = 1 since we are doing fixed 1 SPP for now)
+  let dcol = colBuf[      gidx].xyz / f32(frame.w);
+  let icol = colBuf[ofs + gidx].xyz / f32(frame.w);
 
-  // Accumulate col by mixing current with past results
-  accumColVarOutBuf[      gidx] = vec4f(mix(ldcol, dcol, TEMPORAL_ALPHA), 1.0);
-  accumColVarOutBuf[ofs + gidx] = vec4f(mix(licol, icol, TEMPORAL_ALPHA), 1.0);
+  // Calc luminance of direct and indirect
+  let dlum = luminance(dcol);
+  let ilum = luminance(icol);
 
-  // Similaryly, accumulate per pixel 'luminance variance' using first and second raw moments of current sample col luminance
-  accumMomOutBuf[      gidx] = vec4f(mix(ldmom.xy, vec2f(dlum, dlum * dlum), TEMPORAL_ALPHA), ldmom.z + 1.0, 0.0); // Increase age in z
-  accumMomOutBuf[ofs + gidx] = vec4f(mix(limom.xy, vec2f(ilum, ilum * ilum), TEMPORAL_ALPHA), limom.z + 1.0, 0.0);
+  // Temporal integration using first and second raw moments of col luminance
+  accumMomOutBuf[gidx] = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha);
+
+  // Temporal integration of direct and indirect illumination
+  accumColVarOutBuf[      gidx] = vec4f(mix(accumColVarInBuf[      lgidx].xyz, dcol, alpha), 1.0);
+  accumColVarOutBuf[ofs + gidx] = vec4f(mix(accumColVarInBuf[ofs + lgidx].xyz, icol, alpha), 1.0);
+
+  // Track age (already increase)
+  accumHisOutBuf[gidx] = age;
 }
 
 // Per pixel luminance variance estimation from temporally accumulated moments buffer
@@ -221,39 +194,41 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let p = vec2i(globalId.xy);
   let res = vec2i(i32(w), i32(h));
 
-  // xy = moments, z = age, w = unused
-  let dmom = accumMomOutBuf[      gidx];
-  let imom = accumMomOutBuf[ofs + gidx];
+  // xy = moments direct illum, zw = moments indirect illum
+  let mom = accumMomOutBuf[gidx];
+  let age = accumHisOutBuf[gidx];
 
-  if(dmom.z < 4.0) {
-    // Spatially estimate the variance because history ("age") of accumulated moments is too short
-    var sumMomDir = vec2f(0.0);
-    var sumMomInd = vec2f(0.0);
-    var cnt = 0u;
+  if(age < 4.0) {
+
+    // Accumulated history is too short, filter moments and estimate variance
+    var sumMom = vec4f(0.0);
+    var sumWeight = 0.0;
+
     for(var j=-1; j<=1; j++) {
       for(var i=-1; i<=1; i++) {
+
         let q = p + vec2i(i, j);
         if(any(q < vec2i(0)) || any(q >= res)) {
           continue;
         }
 
-        let qidx = w * u32(q.y) + u32(q.x);
-
-        sumMomDir += accumMomOutBuf[      qidx].xy;
-        sumMomInd += accumMomOutBuf[ofs + qidx].xy;
-        cnt++;
+        sumMom += accumMomOutBuf[w * u32(q.y) + u32(q.x)];
+        sumWeight += 1.0;
       }
     }
 
-    sumMomDir /= f32(cnt);
-    sumMomInd /= f32(cnt);
+    sumMom /= max(sumWeight, EPS);
 
-    accumColVarOutBuf[      gidx].w = sumMomDir.y - sumMomDir.x * sumMomDir.x;
-    accumColVarOutBuf[ofs + gidx].w = sumMomInd.y - sumMomInd.x * sumMomInd.x;
+    // Calc boosted variance for first frames
+    let variance = (sumMom.yw - sumMom.xz * sumMom.xz) * 4.0 / age;
+
+    accumColVarOutBuf[      gidx].w = variance.x;
+    accumColVarOutBuf[ofs + gidx].w = variance.y;
+
   } else {
-    // Temporal variance from integrated moments
-    accumColVarOutBuf[      gidx].w = dmom.y - dmom.x * dmom.x;
-    accumColVarOutBuf[ofs + gidx].w = imom.y - imom.x * imom.x;
+    // History is enough, calc variance from moments directly
+    accumColVarOutBuf[      gidx].w = mom.y - mom.x * mom.x; // Direct
+    accumColVarOutBuf[ofs + gidx].w = mom.w - mom.z * mom.z; // Indirect
   }
 }
 
@@ -272,8 +247,8 @@ fn filterVariance(p: vec2i, res: vec2i) -> vec2f
 
   for(var j=-1; j<=1; j++) {
     for(var i=-1; i<=1; i++) {
-      let q = p + vec2i(i, j);
 
+      let q = p + vec2i(i, j);
       // Disabled because we will not use the out of bounds variance values
       /*if(any(q < vec2i(0)) || any(q >= res)) {
         continue;
@@ -339,6 +314,7 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 
   for(var j=-2; j<=2; j++) {
     for(var i=-2; i<=2; i++) {
+
       let q = p + vec2i(i, j) * stepSize;
       if(any(q < vec2i(0)) || any(q >= res) || all(vec2i(i, j) == vec2i(0))) {
         // Out of bounds or already accounted center pixel
