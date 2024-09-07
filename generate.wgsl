@@ -94,12 +94,13 @@ fn samplePixel(pixelPos: vec2f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f,
   return pixelSample;
 }
 
-fn sampleEye(eye: vec4f, right: vec4f, up: vec4f, r0: vec2f) -> vec3f
+/*fn sampleEye(eye: vec4f, right: vec4f, up: vec4f, r0: vec2f) -> vec3f
 {
+  // Jitter eye pos for DOF
   let focRadius = right.w * up.w; // focDist * halfTanFocAngle
   let diskSample = sampleDisk(r0);
   return eye.xyz + focRadius * (diskSample.x * right.xyz + diskSample.y * up.xyz);
-}
+}*/
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
@@ -124,7 +125,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let u = camera[2];
 
   // Create new primary ray
-  let ori = sampleEye(e, r, u, r0.xy);
+  //let ori = sampleEye(e, r, u, r0.xy);
+  let ori = e.xyz;
   let dir = normalize(samplePixel(vec2f(globalId.xy), e, r, u, vec2f(f32(w), f32(h)), r0.zw) - ori);
 
   // Initialize new path

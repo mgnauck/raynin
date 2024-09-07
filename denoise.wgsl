@@ -158,7 +158,7 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   let alpha = select(max(TEMPORAL_ALPHA, 1.0 / age), 1.0, ignorePrevious);
 
   // Read color of direct and indirect illumination
-  // (frame.w = 1 since we are doing fixed 1 SPP for now)
+  // (frame.w = 1 since we are doing fixed 1 SPP when applying the filter)
   let dcol = colBuf[      gidx].xyz / f32(frame.w);
   let icol = colBuf[ofs + gidx].xyz / f32(frame.w);
 
@@ -323,13 +323,13 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 
       let qidx = w * u32(q.y) + u32(q.x);
 
-      // Nrm edge stopping function
-      let weightNrm = pow(max(0.0, dot(nrm, attrBuf[qidx].xyz)), SIG_NRM);
-      //let weightNrm = 1.0;
-
       // Depth edge stopping function
       let qpos = attrBuf[ofs + qidx];
       let weightPos = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz) / SIG_POS;
+
+      // Nrm edge stopping function
+      let weightNrm = pow(max(0.0, dot(nrm, attrBuf[qidx].xyz)), SIG_NRM);
+      //let weightNrm = 1.0;
 
       // Luminance edge stopping function
       let qcolVarDir = accumColVarInBuf[      qidx];
