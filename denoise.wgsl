@@ -300,7 +300,7 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   let lumColDir = luminance(colVarDir.xyz);
   let lumColInd = luminance(colVarInd.xyz);
 
-  // Calc filtered variance and with this the luminance edge stopping function denominator
+  // Filter variance and calc the luminance edge stopping function denominator
   let lumVarDen = SIG_LUM * sqrt(max(vec2f(0.0), vec2f(1e-10) + filterVariance(p, res)));
 
   // Apply center value directly
