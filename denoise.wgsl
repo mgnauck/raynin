@@ -24,7 +24,7 @@ const TEMPORAL_ALPHA  = 0.2;
 const SIG_LUM         = 4.0;
 const SIG_NRM         = 128.0;
 const SIG_POS         = 1.0; // Depth
-const EPS             = 0.0001;
+const EPS             = 0.00001;
 const WG_SIZE         = vec3u(16, 16, 1);
 
 // Attribute buf are 2x buf vec4f for nrm + pos
@@ -162,22 +162,26 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   let dcol = colBuf[      gidx].xyz / f32(frame.w);
   let icol = colBuf[ofs + gidx].xyz / f32(frame.w);
 
-  // Calc luminance of direct and indirect
+  // Calc luminance of direct and indirect ill
   let dlum = luminance(dcol);
   let ilum = luminance(icol);
 
   // Temporal integration using first and second raw moments of col luminance
-  accumMomOutBuf[gidx] = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha);
+  let mom = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha);
+  accumMomOutBuf[gidx] = mom;
 
-  // Temporal integration of direct and indirect illumination
-  accumColVarOutBuf[      gidx] = vec4f(mix(accumColVarInBuf[      lgidx].xyz, dcol, alpha), 1.0);
-  accumColVarOutBuf[ofs + gidx] = vec4f(mix(accumColVarInBuf[ofs + lgidx].xyz, icol, alpha), 1.0);
+  // Estimate temporal variance from integrated moments
+  let variance = max(vec2f(0.0), mom.yw - mom.xz * mom.xz);
 
-  // Track age (already increase)
+  // Temporal integration of direct and indirect illumination and store variance
+  accumColVarOutBuf[      gidx] = vec4f(mix(accumColVarInBuf[      lgidx].xyz, dcol, alpha), variance.x);
+  accumColVarOutBuf[ofs + gidx] = vec4f(mix(accumColVarInBuf[ofs + lgidx].xyz, icol, alpha), variance.y);
+
+  // Track age (already incremented)
   accumHisOutBuf[gidx] = age;
 }
 
-// Per pixel luminance variance estimation from temporally accumulated moments buffer
+// Estimation of spatial (= not enough history data) per pixel luminance variance
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m1(@builtin(global_invocation_id) globalId: vec3u)
 {
@@ -194,21 +198,19 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let p = vec2i(globalId.xy);
   let res = vec2i(i32(w), i32(h));
 
-  // xy = moments direct illum, zw = moments indirect illum
-  let mom = accumMomOutBuf[gidx];
   let age = accumHisOutBuf[gidx];
-
   if(age < 4.0) {
 
     // Accumulated history is too short, filter moments and estimate variance
-    var sumMom = vec4f(0.0);
-    var sumWeight = 0.0;
+    // xy = moments direct illum, zw = moments indirect illum
+    var sumMom = accumMomOutBuf[gidx]; // Apply center directly
+    var sumWeight = 1.0;
 
     for(var j=-1; j<=1; j++) {
       for(var i=-1; i<=1; i++) {
 
         let q = p + vec2i(i, j);
-        if(any(q < vec2i(0)) || any(q >= res)) {
+        if(any(q < vec2i(0)) || any(q >= res) || all(vec2i(i, j) == vec2i(0))) {
           continue;
         }
 
@@ -219,16 +221,11 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
 
     sumMom /= max(sumWeight, EPS);
 
-    // Calc boosted variance for first frames
-    let variance = (sumMom.yw - sumMom.xz * sumMom.xz) * 4.0 / age;
+    // Calc boosted variance for first frames (until temporal kicks in)
+    let variance = max(vec2f(0.0), (sumMom.yw - sumMom.xz * sumMom.xz) * 4.0 / age);
 
     accumColVarOutBuf[      gidx].w = variance.x;
     accumColVarOutBuf[ofs + gidx].w = variance.y;
-
-  } else {
-    // History is enough, calc variance from moments directly
-    accumColVarOutBuf[      gidx].w = mom.y - mom.x * mom.x; // Direct
-    accumColVarOutBuf[ofs + gidx].w = mom.w - mom.z * mom.z; // Indirect
   }
 }
 
@@ -303,8 +300,10 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   let lumColDir = luminance(colVarDir.xyz);
   let lumColInd = luminance(colVarInd.xyz);
 
+  // Calc filtered variance and with this the luminance edge stopping function denominator
   let lumVarDen = SIG_LUM * sqrt(max(vec2f(0.0), vec2f(1e-10) + filterVariance(p, res)));
 
+  // Apply center value directly
   var sumColVarDir = colVarDir;
   var sumColVarInd = colVarInd;
   var sumWeight = vec2f(1.0);
@@ -338,19 +337,23 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
       let weightLumDir = abs(lumColDir - luminance(qcolVarDir.xyz)) / lumVarDen.x;
       let weightLumInd = abs(lumColInd - luminance(qcolVarInd.xyz)) / lumVarDen.y;
 
+      // Combined weight of edge stopping functions
       let wDir = weightNrm * exp(-weightLumDir - weightPos);
       let wInd = weightNrm * exp(-weightLumInd - weightPos);
 
-      // Filter value is weighted by edge stopping functions
+      // Filter value is weighted by edge stopping functions to avoid 'overblurring'
       let w = kernelWeights[abs(i)] * kernelWeights[abs(j)] * vec2f(wDir, wInd);
 
       // Apply filter to accumulated direct/indirect color and variance
       sumColVarDir += qcolVarDir * vec4f(w.xxx, w.x * w.x);
       sumColVarInd += qcolVarInd * vec4f(w.yyy, w.y * w.y);
+
       sumWeight += w;
     }
   }
   
+  //accumColVarOutBuf[      gidx] = sumColVarDir / vec4f(sumWeight.xxx, sumWeight.x * sumWeight.x);
+  //accumColVarOutBuf[ofs + gidx] = sumColVarInd / vec4f(sumWeight.yyy, sumWeight.y * sumWeight.y);
   accumColVarOutBuf[      gidx] = select(colVarDir, sumColVarDir / vec4f(sumWeight.xxx, sumWeight.x * sumWeight.x), sumWeight.x > EPS);
   accumColVarOutBuf[ofs + gidx] = select(colVarInd, sumColVarInd / vec4f(sumWeight.yyy, sumWeight.y * sumWeight.y), sumWeight.y > EPS);
 }

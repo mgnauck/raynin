@@ -710,7 +710,7 @@ function reprojectAndFilter(commandEncoder)
 
   // Remember cam and attribute buffer
   commandEncoder.copyBufferToBuffer(res.buf[BUF_CAM], 0, res.buf[BUF_LCAM], 0, 12 * 4);
-  commandEncoder.copyBufferToBuffer(res.buf[BUF_ATTR], 0, res.buf[BUF_LATTR], 0, WIDTH * HEIGHT * 4 * 2 * 4);
+  commandEncoder.copyBufferToBuffer(res.buf[BUF_ATTR], 0, res.buf[BUF_LATTR], 0, WIDTH * HEIGHT * 4 * 4 * 2);
 }
 
 function blit(commandEncoder)
