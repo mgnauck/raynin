@@ -4,17 +4,17 @@ OBJ=$(patsubst src/%.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=$(shell find ./ -maxdepth 1 -type f -name '*.wgsl')
 SHADER_MIN=$(patsubst ./%.wgsl,$(OUT_DIR)/%.min.wgsl,$(SHADER))
-SHADER_EXCLUDES=m,vm,m0,m1,m2
+SHADER_EXCLUDES=m,vm,m0,m1,m2,m3
 LOADER_JS=main
 OUT=index.html
 
 CC=clang
 LD=wasm-ld
 DBGFLAGS=-DNDEBUG
-CFLAGS=--target=wasm32 -mbulk-memory -std=c2x -nostdlib -Os -ffast-math -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable
+CFLAGS=--target=wasm32 -mbulk-memory -std=c2x -nostdlib -Os -ffast-math -msimd128 -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable
 #CFLAGS+=-DSILENT
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=67108864 -z stack-size=8388608
-WOPTFLAGS=-Oz --enable-bulk-memory
+WOPTFLAGS=-Oz --enable-bulk-memory --enable-simd
 
 .PHONY: clean
 
@@ -27,13 +27,13 @@ $(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(LOADER_JS).2.js
 $(OUT_DIR)/$(LOADER_JS).2.js: $(OUT_DIR)/$(WASM_OUT).base64.wasm $(OUT_DIR)/$(LOADER_JS).1.js $(SHADER_MIN)
 	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).base64.wasm $@
 
-$(OUT_DIR)/%.min.wgsl: ./%.wgsl
+$(OUT_DIR)/%.min.wgsl: ./%.wgsl $(OUT_DIR)/$(LOADER_JS).1.js
 	@mkdir -p `dirname $@`
 	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUT_DIR)/$(subst .,.min.,$<)
 	@echo "$(OUT_DIR)/$(subst .,.min.,$<):" `wc -c < $(OUT_DIR)/$(subst .,.min.,$<)` "bytes"
 	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $(OUT_DIR)/$(subst .,.min.,$<) $(OUT_DIR)/$(LOADER_JS).1.js
 
-$(OUT_DIR)/$(LOADER_JS).1.js: $(LOADER_JS).js
+$(OUT_DIR)/$(LOADER_JS).1.js: $(LOADER_JS).js $(SHADER)
 	@mkdir -p `dirname $@`
 	cp $< $(OUT_DIR)/$(LOADER_JS).1.js
 
