@@ -198,12 +198,15 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let p = vec2i(globalId.xy);
   let res = vec2i(i32(w), i32(h));
 
-  let age = accumHisOutBuf[gidx];
+  let colVarDir = accumColVarInBuf[      gidx];
+  let colVarInd = accumColVarInBuf[ofs + gidx];
+
+  let age = accumHisInBuf[gidx];
   if(age < 4.0) {
 
     // Accumulated history is too short, filter moments and estimate variance
     // xy = moments direct illum, zw = moments indirect illum
-    var sumMom = accumMomOutBuf[gidx]; // Apply center directly
+    var sumMom = accumMomInBuf[gidx]; // Apply center directly
     var sumWeight = 1.0;
 
     for(var j=-1; j<=1; j++) {
@@ -214,7 +217,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
           continue;
         }
 
-        sumMom += accumMomOutBuf[w * u32(q.y) + u32(q.x)];
+        sumMom += accumMomInBuf[w * u32(q.y) + u32(q.x)];
         sumWeight += 1.0;
       }
     }
@@ -224,8 +227,12 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     // Calc boosted variance for first frames (until temporal kicks in)
     let variance = max(vec2f(0.0), (sumMom.yw - sumMom.xz * sumMom.xz) * 4.0 / age);
 
-    accumColVarOutBuf[      gidx].w = variance.x;
-    accumColVarOutBuf[ofs + gidx].w = variance.y;
+    accumColVarOutBuf[      gidx] = vec4f(colVarDir.xyz, variance.x);
+    accumColVarOutBuf[ofs + gidx] = vec4f(colVarInd.xyz, variance.y);
+  } else {
+    // Pass through
+    accumColVarOutBuf[      gidx] = colVarDir;
+    accumColVarOutBuf[ofs + gidx] = colVarInd;
   }
 }
 

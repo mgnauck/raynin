@@ -87,8 +87,9 @@ const BG_DENOISE1     =  8;
 const BG_DENOISE2     =  9;
 const BG_DENOISE3     = 10;
 const BG_DENOISE4     = 11;
-const BG_BLIT0        = 12;
-const BG_BLIT1        = 13;
+const BG_DENOISE5     = 12;
+const BG_BLIT0        = 13;
+const BG_BLIT1        = 14;
 
 const WG_SIZE_X       = 16;
 const WG_SIZE_Y       = 16;
@@ -97,8 +98,8 @@ let canvas, context, device;
 let wa, res = {};
 let frames = 0;
 let samples = 0;
-let converge = false;
-let filter = false;
+let converge = true;
+let filter = true;
 
 function handleMouseMoveEvent(e)
 {
@@ -518,7 +519,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
       { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
       { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC0] } }, // in
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC1] } }, // in
       { binding: 10, resource: { buffer: res.buf[BUF_ACC2] } }, // out
     ]
   });
@@ -535,12 +536,29 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
       { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
       { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC1] } }, // in
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC0] } }, // in
       { binding: 10, resource: { buffer: res.buf[BUF_ACC2] } }, // out
     ]
   });
 
   res.bindGroups[BG_DENOISE4] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
+      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
+      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
+      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC2] } }, // in
+      { binding: 10, resource: { buffer: res.buf[BUF_ACC0] } }, // out
+    ]
+  });
+
+  res.bindGroups[BG_DENOISE5] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
@@ -573,7 +591,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -581,7 +599,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ACC1] } },
     ]
   });
 
@@ -683,27 +701,54 @@ function reprojectAndFilter(commandEncoder)
   if(filter) {
 
     // Estimate variance
-    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
+    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE1 - res.accumIdx]);
     passEncoder.setPipeline(res.pipelines[PL_DENOISE1]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
-    for(let i=0; i<5; i++) {
-   
-      // Toggle accumulation buffer
-      res.accumIdx = 1 - res.accumIdx;
+    // Five iterations of edge-avoiding a-trous wavelet transform
+    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
+    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+    passEncoder.dispatchWorkgroups(1);
 
-      // Init / increment filter iteration
-      passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
-      passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
-      passEncoder.dispatchWorkgroups(1);
+    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
-      // Apply edge-avoiding a-trous wavelet transform
-      // Before iteration 1 ping/pong between acc buf 0 and 1, after iteration 1 between 1 and 2
-      // (Acc buf 0 will be kept as is after iteration 1 and feed into the next frame for temporal accumulation)
-      passEncoder.setBindGroup(0, res.bindGroups[i < 2 ? BG_DENOISE1 + (1 - res.accumIdx) : BG_DENOISE3 + res.accumIdx]);
-      passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
-      passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-    }
+    // 1
+    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
+    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+    passEncoder.dispatchWorkgroups(1);
+
+    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE2 + res.accumIdx]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+    // 2
+    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
+    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+    passEncoder.dispatchWorkgroups(1);
+
+    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE4 + res.accumIdx]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+    // 3
+    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
+    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+    passEncoder.dispatchWorkgroups(1);
+
+    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE3 - res.accumIdx]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+    // 4
+    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
+    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
+    passEncoder.dispatchWorkgroups(1);
+
+    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE4 + res.accumIdx]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
   }
 
   passEncoder.end();
@@ -719,8 +764,7 @@ function blit(commandEncoder)
   
   passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
  
-  // If no filtering is active (just temporal reprojection), only ping/pong between acc buf 0 and 1
-  passEncoder.setBindGroup(0, res.bindGroups[!filter ? BG_BLIT0 + res.accumIdx : BG_BLIT0]);
+  passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT0 + res.accumIdx : BG_BLIT1 - res.accumIdx]);
   passEncoder.setPipeline(res.pipelines[PL_BLIT]);
   passEncoder.draw(4);
   
