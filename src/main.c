@@ -241,10 +241,11 @@ void update(float time, bool converge)
     cam *cam = scene_get_active_cam(s);
     vec3 gmin = vec3_min(s->tlas_nodes[0].lmin, s->tlas_nodes[0].rmin);
     vec3 gmax = vec3_max(s->tlas_nodes[0].lmax, s->tlas_nodes[0].rmax);
-    vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.4f);
+    //vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.4f);
+    vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.27f);
     //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
-    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 4.0f, e.z * cosf(time * 0.25f) };
-    cam_set(cam, pos, vec3_neg(pos));
+    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 20.0f, e.z * cosf(time * 0.25f) };
+    cam_set(cam, pos, vec3_add((vec3){0.0f, 24.0, 0.0f}, vec3_neg(pos)));
     scene_set_dirty(s, RT_CAM);
   }
 
