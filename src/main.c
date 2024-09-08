@@ -87,7 +87,7 @@ void mouse_move(int32_t dx, int32_t dy, float look_vel)
 {
   cam *cam = scene_get_active_cam(s);
 
-  float theta = min(max(acosf(-cam->fwd.y) + (float)dy * look_vel, 0.01f), 0.99f * PI);
+  float theta = min(max(acosf(-cam->fwd.y) + (float)dy * look_vel, 0.05f), 0.95f * PI);
   float phi = fmodf(atan2f(-cam->fwd.z, cam->fwd.x) + PI - (float)dx * look_vel, 2.0f * PI);
 
   cam_set_dir(cam, vec3_spherical(theta, phi));
