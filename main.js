@@ -364,49 +364,52 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     entries: [ 
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
-      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
   res.bindGroups[BG_SHADE0] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_MTL] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_INST] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_TNRM] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LTRI] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_HIT] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_PATH0] } }, // in
-      { binding: 6, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 7, resource: { buffer: res.buf[BUF_PATH1] } }, // out
-      { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 9, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 10, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_MTL] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_INST] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_TNRM] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_LTRI] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_HIT] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_PATH0] } }, // in
+      { binding: 7, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 8, resource: { buffer: res.buf[BUF_PATH1] } }, // out
+      { binding: 9, resource: { buffer: res.buf[BUF_SRAY] } },
+      { binding: 10, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 11, resource: { buffer: res.buf[BUF_COL] } },
     ]
   });
 
   res.bindGroups[BG_SHADE1] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_MTL] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_INST] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_TNRM] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LTRI] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_HIT] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_PATH1] } }, // in
-      { binding: 6, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 7, resource: { buffer: res.buf[BUF_PATH0] } }, // out
-      { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 9, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 10, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_MTL] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_INST] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_TNRM] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_LTRI] } },
+      { binding: 5, resource: { buffer: res.buf[BUF_HIT] } },
+      { binding: 6, resource: { buffer: res.buf[BUF_PATH1] } }, // in
+      { binding: 7, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 8, resource: { buffer: res.buf[BUF_PATH0] } }, // out
+      { binding: 9, resource: { buffer: res.buf[BUF_SRAY] } },
+      { binding: 10, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 11, resource: { buffer: res.buf[BUF_COL] } },
     ]
   });
 
@@ -461,119 +464,112 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   // Denoise
   bindGroupLayout = device.createBindGroupLayout({
     entries: [
-      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // Mom in
-      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // Mom out
-      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // His in
-      { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // His out
-      { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // Col/Var in
-      { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // Col/Var out
+      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // Mom in
+      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // Mom out
+      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // His in
+      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // His out
+      { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // Col/Var in
+      { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // Col/Var out
     ]
   });
 
   res.bindGroups[BG_DENOISE0] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // in
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // out
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // in
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // out
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC0] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC1] } }, // out
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_MOM0] } }, // in
+      { binding: 5, resource: { buffer: res.buf[BUF_MOM1] } }, // out
+      { binding: 6, resource: { buffer: res.buf[BUF_HIS0] } }, // in
+      { binding: 7, resource: { buffer: res.buf[BUF_HIS1] } }, // out
+      { binding: 8, resource: { buffer: res.buf[BUF_ACC0] } }, // in
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC1] } }, // out
     ]
   });
 
   res.bindGroups[BG_DENOISE1] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM1] } }, // in
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM0] } }, // out
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS1] } }, // in
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS0] } }, // out
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC1] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC0] } }, // out
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_MOM1] } }, // in
+      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // out
+      { binding: 6, resource: { buffer: res.buf[BUF_HIS1] } }, // in
+      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // out
+      { binding: 8, resource: { buffer: res.buf[BUF_ACC1] } }, // in
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC0] } }, // out
     ]
   });
 
   res.bindGroups[BG_DENOISE2] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC1] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC2] } }, // out
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
+      { binding: 5, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
+      { binding: 6, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
+      { binding: 7, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
+      { binding: 8, resource: { buffer: res.buf[BUF_ACC1] } }, // in
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC2] } }, // out
     ]
   });
 
   res.bindGroups[BG_DENOISE3] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC0] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC2] } }, // out
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
+      { binding: 5, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
+      { binding: 6, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
+      { binding: 7, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
+      { binding: 8, resource: { buffer: res.buf[BUF_ACC0] } }, // in
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC2] } }, // out
     ]
   });
 
   res.bindGroups[BG_DENOISE4] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC2] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC0] } }, // out
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
+      { binding: 5, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
+      { binding: 6, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
+      { binding: 7, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
+      { binding: 8, resource: { buffer: res.buf[BUF_ACC2] } }, // in
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC0] } }, // out
     ]
   });
 
   res.bindGroups[BG_DENOISE5] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC2] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC1] } }, // out
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ATTR] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_LATTR] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 4, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
+      { binding: 5, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
+      { binding: 6, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
+      { binding: 7, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
+      { binding: 8, resource: { buffer: res.buf[BUF_ACC2] } }, // in
+      { binding: 9, resource: { buffer: res.buf[BUF_ACC1] } }, // out
     ]
   });
 
@@ -658,7 +654,7 @@ function accumulateSample(commandEncoder)
     passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
     if(j == 0) {
-      // Render attribute buffer for primary rays
+      // Temporal reprojection and attribute buffer rendering (primary rays only)
       passEncoder.setBindGroup(0, res.bindGroups[BG_SHADE0 + bindGroupPathState]);
       passEncoder.setPipeline(res.pipelines[PL_SHADE0]);
       passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
@@ -702,7 +698,7 @@ function reprojectAndFilter(commandEncoder)
 {
   let passEncoder = commandEncoder.beginComputePass();
 
-  // Temporal reprojection/accumulation
+  // Temporal accumulation
   passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
   passEncoder.setPipeline(res.pipelines[PL_DENOISE0]);
   passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);

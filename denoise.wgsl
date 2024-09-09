@@ -1,13 +1,3 @@
-/*struct Camera
-{
-  eye:              vec3f,
-  halfTanVertFov:   f32,
-  right:            vec3f,
-  focDist:          f32,
-  up:               vec3f,
-  halfTanFocAngle:  f32,
-}*/
-
 /*struct Config
 {
   frameData:        vec4u,          // x = width
@@ -28,8 +18,8 @@ const EPS             = 0.00001;
 const WG_SIZE         = vec3u(16, 16, 1);
 
 // Attribute buf are 2x buf vec4f for nrm + pos
-//  nrm = xyz, w unusued
-//  pos = xyz, w = mtl id << 16 | inst id
+//  xy = octahedral encoded nrm, z = pixel pos index of last frame, w = unusued
+//  xyz = pos, w = mtl id << 16 | inst id
 //
 // Color buffer are 2x buf vec4f for direct and indirect illum col
 //
@@ -43,17 +33,16 @@ const WG_SIZE         = vec3u(16, 16, 1);
 //  xyz = direct illum col, w = direct illum variance
 //  xyz = indirect illum col, w = indirect illum variance
 
-@group(0) @binding(0) var<uniform> lastCamera: array<vec4f, 3>;
-@group(0) @binding(1) var<storage, read> config: array<vec4u, 4>;
-@group(0) @binding(2) var<storage, read> attrBuf: array<vec4f>;
-@group(0) @binding(3) var<storage, read> lastAttrBuf: array<vec4f>;
-@group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
-@group(0) @binding(5) var<storage, read> accumMomInBuf: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> accumMomOutBuf: array<vec4f>;
-@group(0) @binding(7) var<storage, read> accumHisInBuf: array<f32>;
-@group(0) @binding(8) var<storage, read_write> accumHisOutBuf: array<f32>;
-@group(0) @binding(9) var<storage, read> accumColVarInBuf: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> accumColVarOutBuf: array<vec4f>;
+@group(0) @binding(0) var<storage, read> config: array<vec4u, 4>;
+@group(0) @binding(1) var<storage, read> attrBuf: array<vec4f>;
+@group(0) @binding(2) var<storage, read> lastAttrBuf: array<vec4f>;
+@group(0) @binding(3) var<storage, read> colBuf: array<vec4f>;
+@group(0) @binding(4) var<storage, read> accumMomInBuf: array<vec4f>;
+@group(0) @binding(5) var<storage, read_write> accumMomOutBuf: array<vec4f>;
+@group(0) @binding(6) var<storage, read> accumHisInBuf: array<f32>;
+@group(0) @binding(7) var<storage, read_write> accumHisOutBuf: array<f32>;
+@group(0) @binding(8) var<storage, read> accumColVarInBuf: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> accumColVarOutBuf: array<vec4f>;
 
 fn luminance(col: vec3f) -> f32
 {
@@ -75,49 +64,21 @@ fn octToDir(oct: vec2f) -> vec3f
   return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
 }
 
-// Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
-fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
+fn ignorePrevious(lastPix: vec2i, res: vec2i, currPos: vec4f, lastPos: vec4f, currNrm: vec3f, lastNrm: vec3f) -> bool
 {
-  // View plane height and width
-  let vheight = 2.0 * eye.w * right.w; // 2 * halfTanVertFov * focDist
-  let vwidth = vheight * res.x / res.y;
+  // Check out of bounds
+  var ignorePrevious = any(lastPix < vec2i(0, 0)) || any(lastPix >= res);
 
-  // View plane right and down
-  let vright = vwidth * right.xyz;
-  let vdown = -vheight * up.xyz;
+   // Check if current and last material and instance ids match
+  ignorePrevious |= bitcast<u32>(currPos.w) != bitcast<u32>(lastPos.w);
 
-  let forward = cross(right.xyz, up.xyz);
+  // Consider differences of current and last normal
+  ignorePrevious |= abs(dot(currNrm, lastNrm)) < 0.1;
 
-  // Calc world space positions of view plane
-  let topLeft = eye.xyz - right.w * forward - 0.5 * (vright + vdown); // right.w = focDist
-  let botLeft = topLeft + vdown;
-  let topRight = topLeft + vright;
-  let botRight = topRight + vdown;
-
-  // Calc normals of frustum planes
-  let leftNrm = normalize(cross(botLeft - eye.xyz, topLeft - eye.xyz));
-  let rightNrm = normalize(cross(topRight - eye.xyz, botRight - eye.xyz));
-  let topNrm = normalize(cross(topLeft - eye.xyz, topRight - eye.xyz));
-  let botNrm = normalize(cross(botRight - eye.xyz, botLeft - eye.xyz));
-
-  let toPos = pos - eye.xyz;
-
-  // Project pos vec to calculate horizontal ratio
-  let d1x = dot(leftNrm, toPos);
-  let d2x = dot(rightNrm, toPos);
-  let x = d1x / (d1x + d2x);
-
-  // Project pos vec to calculate vertical ratio
-  let d1y = dot(topNrm, toPos);
-  let d2y = dot(botNrm, toPos);
-  let y = d1y / (d1y + d2y);
-
-  // Find screen space pos via calculated x/y ratios (can be out of bounds)
-  return vec2i(i32(res.x * x), i32(res.y * y));
+  return ignorePrevious; 
 }
 
-// Temporal reprojection and filtering of current pixel to past frame
-// Accumulate direct and indirect illumination and moments
+// Temporally accumulate illumination + moments and calc per pixel luminance variance
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
@@ -131,45 +92,35 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
 
-  // Fetch last camera's up vec
-  let lup = lastCamera[2];
-
-  // No proper up of last cam, then this must be first frame
-  var ignorePrevious = all(lup.xyz == vec3f(0.0));
-
   // Current world space hit pos with w = mtl id << 16 | inst id
   let pos = attrBuf[ofs + gidx];
 
-  // Check mtl id if this was a no hit
-  ignorePrevious |= (bitcast<u32>(pos.w) >> 16) == SHORT_MASK;
+  // Check via mtl id if this was a no hit
+  var ignorePrev = (bitcast<u32>(pos.w) >> 16) == SHORT_MASK;
 
-  // Fetch last camera's eye pos and right vec
-  let leye = lastCamera[0]; // w = halfTanVertFov
-  let lri = lastCamera[1];
+  // xy = normal, zw = motion vector
+  let nrmMotion = attrBuf[gidx];
 
-  // Calc where hit pos was in screen space during the last frame/camera
-  let spos = calcScreenSpacePos(pos.xyz, leye, lri, lup, vec2f(f32(w), f32(h)));
+  // Pixel pos in last frame
+  let lpix = vec2i(i32(nrmMotion.z * f32(w)), i32(nrmMotion.w * f32(h)));
 
-  // Check if previous screen space pos is out of bounds
-  ignorePrevious |= any(spos < vec2i(0i)) || any(spos >= vec2i(i32(w), i32(h)));
+  // Pixel index of last frame (made valid in case of out of bounds)
+  let lgidx = w * u32(lpix.y) + u32(lpix.x);
 
-  // Calc index into last buffers
-  let lgidx = w * u32(spos.y) + u32(spos.x);
-
-  // Read last pos with mtl/inst id in w
+  // Get last frame pos in xyz and w = mtl id << 16 | inst id
   let lpos = lastAttrBuf[ofs + lgidx];
 
-  // Check if current and last material and instance ids match
-  ignorePrevious |= bitcast<u32>(pos.w) != bitcast<u32>(lpos.w);
+  // Get current and last normal (octrahedral encoded)
+  let nrm = octToDir(nrmMotion.xy);
+  let lnrm = octToDir(lastAttrBuf[lgidx].xy);
 
-  // Consider differences of current and last normal
-  ignorePrevious |= abs(dot(octToDir(attrBuf[gidx].xy), octToDir(lastAttrBuf[lgidx].xy))) < 0.1;
+  ignorePrev |= ignorePrevious(lpix, vec2i(i32(w), i32(h)), pos, lpos, nrm, lnrm);
 
   // Read and increase age but keep upper bound
-  let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrevious));
+  let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrev));
 
   // Increase weight of new samples in case of insufficient history
-  let alpha = select(max(TEMPORAL_ALPHA, 1.0 / age), 1.0, ignorePrevious);
+  let alpha = select(max(TEMPORAL_ALPHA, 1.0 / age), 1.0, ignorePrev);
 
   // Read color of direct and indirect illumination
   // (frame.w = 1 since we are doing fixed 1 SPP when applying the filter)
@@ -195,7 +146,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   accumHisOutBuf[gidx] = age;
 }
 
-// Estimation of spatial (= not enough history data) per pixel luminance variance
+// Estimation of spatial (= not enough history data) luminance variance
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m1(@builtin(global_invocation_id) globalId: vec3u)
 {

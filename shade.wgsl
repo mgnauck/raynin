@@ -1,3 +1,13 @@
+/*struct Camera
+{
+  eye:              vec3f,
+  halfTanVertFov:   f32,
+  right:            vec3f,
+  focDist:          f32,
+  up:               vec3f,
+  halfTanFocAngle:  f32,
+}*/
+
 struct Config
 {
   frameData:        vec4u,          // x = width
@@ -86,17 +96,18 @@ const INV_PI              = 1.0 / PI;
 
 const WG_SIZE             = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
-@group(0) @binding(2) var<storage, read> triNrms: array<vec4f>;
-@group(0) @binding(3) var<storage, read> ltris: array<vec4f>;
-@group(0) @binding(4) var<storage, read> hits: array<vec4f>;
-@group(0) @binding(5) var<storage, read> pathStatesIn: array<vec4f>;
-@group(0) @binding(6) var<storage, read_write> config: Config;
-@group(0) @binding(7) var<storage, read_write> pathStatesOut: array<vec4f>;
-@group(0) @binding(8) var<storage, read_write> shadowRays: array<vec4f>;
-@group(0) @binding(9) var<storage, read_write> attrBuf: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> colBuf: array<vec4f>;
+@group(0) @binding(0) var<uniform> lastCamera: array<vec4f, 3>;
+@group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
+@group(0) @binding(2) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
+@group(0) @binding(3) var<storage, read> triNrms: array<vec4f>;
+@group(0) @binding(4) var<storage, read> ltris: array<vec4f>;
+@group(0) @binding(5) var<storage, read> hits: array<vec4f>;
+@group(0) @binding(6) var<storage, read> pathStatesIn: array<vec4f>;
+@group(0) @binding(7) var<storage, read_write> config: Config;
+@group(0) @binding(8) var<storage, read_write> pathStatesOut: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> shadowRays: array<vec4f>;
+@group(0) @binding(10) var<storage, read_write> attrBuf: array<vec4f>;
+@group(0) @binding(11) var<storage, read_write> colBuf: array<vec4f>;
 
 // State of rng seed
 var<private> seed: u32;
@@ -552,6 +563,46 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   return mtlInstId;
 }
 
+// Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
+fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2f
+{
+  // View plane height and width
+  let vheight = 2.0 * eye.w * right.w; // 2 * halfTanVertFov * focDist
+  let vwidth = vheight * res.x / res.y;
+
+  // View plane right and down
+  let vright = vwidth * right.xyz;
+  let vdown = -vheight * up.xyz;
+
+  let forward = cross(right.xyz, up.xyz);
+
+  // Calc world space positions of view plane
+  let topLeft = eye.xyz - right.w * forward - 0.5 * (vright + vdown); // right.w = focDist
+  let botLeft = topLeft + vdown;
+  let topRight = topLeft + vright;
+  let botRight = topRight + vdown;
+
+  // Calc normals of frustum planes
+  let leftNrm = normalize(cross(botLeft - eye.xyz, topLeft - eye.xyz));
+  let rightNrm = normalize(cross(topRight - eye.xyz, botRight - eye.xyz));
+  let topNrm = normalize(cross(topLeft - eye.xyz, topRight - eye.xyz));
+  let botNrm = normalize(cross(botRight - eye.xyz, botLeft - eye.xyz));
+
+  let toPos = pos - eye.xyz;
+
+  // Project pos vec to calculate horizontal ratio
+  let d1x = dot(leftNrm, toPos);
+  let d2x = dot(rightNrm, toPos);
+
+  // Project pos vec to calculate vertical ratio
+  let d1y = dot(topNrm, toPos);
+  let d2y = dot(botNrm, toPos);
+
+  // Return motion vector
+  return vec2f(d1x / (d1x + d2x), d1y / (d1y + d2y));
+}
+
+// Reproject current position to last frame and render attribute buffer
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
@@ -562,16 +613,19 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let frame = config.frameData;
-  let h = frame.y;
-  let ofs = frame.x * (h >> 8);
+  let w = frame.x;
+  let h = frame.y >> 8;
+  let ofs = w * h;
   let hit = hits[gidx];
   let ori = pathStatesIn[ofs + gidx];
   let dir = pathStatesIn[(ofs << 1) + gidx];
   let pidx = bitcast<u32>(dir.w);
 
+  let res = vec2f(f32(w), f32(h));
+
   if(hit.x == INF) {
-    // No hit
-    attrBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, 1.0);
+    // No hit means zero nrm/motion/pos
+    attrBuf[pidx >> 8] = vec4f(0.0, 0.0, 2.0 * res);
     let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
     attrBuf[ofs + (pidx >> 8)] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
     return;
@@ -583,7 +637,16 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var mtl: Mtl;
   let mtlInstId = finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
 
-  attrBuf[pidx >> 8] = vec4f(dirToOct(nrm), 0.0, 0.0);
+  // Get last camera values
+  let lup = lastCamera[2];
+
+  // Calc where hit pos was in screen space during the last frame/camera
+  let motion = select(
+    calcScreenSpacePos(pos, lastCamera[0], lastCamera[1], lup, res),
+    2.0 * res, // Out of bounds
+    all(lup.xyz == vec3f(0.0))); // Check if last cam is valid
+
+  attrBuf[pidx >> 8] = vec4f(dirToOct(nrm), motion);
   attrBuf[ofs + (pidx >> 8)] = vec4f(pos, bitcast<f32>(mtlInstId));
 }
 

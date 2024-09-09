@@ -106,7 +106,7 @@ void init_scene_riow(scene *s)
   scene_init(s, MESH_CNT, MTL_CNT, 1, INST_CNT);
 
   cam *c = scene_get_active_cam(s);
-  *c = (cam){ .vert_fov = 20.0f, .foc_dist = 11.0f, .foc_angle = 0.5f };
+  *c = (cam){ .vert_fov = 20.0f, .foc_dist = 11.0f, .foc_angle = 0.0f };
   cam_set(c, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
 
   uint16_t mtl_id = 0;
