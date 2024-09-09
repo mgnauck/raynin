@@ -98,7 +98,7 @@ let canvas, context, device;
 let wa, res = {};
 let frames = 0;
 let samples = 0;
-let converge = true;
+let converge = false;
 let filter = true;
 
 function handleMouseMoveEvent(e)

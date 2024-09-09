@@ -500,6 +500,21 @@ fn calcTriNormal(bary: vec2f, n0: vec3f, n1: vec3f, n2: vec3f, m: mat4x4f) -> ve
   return normalize((vec4f(nrm, 0.0) * transpose(m)).xyz);
 }
 
+// https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/
+/*fn dirToOct(dir: vec3f) -> u32
+{
+  let p = dir.xy * (1.0 / dot(abs(dir), vec3f(1.0)));
+  let e = select((1.0 - abs(p.yx)) * (step(vec2f(0.0), p) * 2.0 - vec2f(1.0)), p, dir.z > 0.0);
+  return (bitcast<u32>(quantizeToF16(e.y)) << 16) + (bitcast<u32>(quantizeToF16(e.x)));
+}*/
+
+fn dirToOct(dir: vec3f) -> vec2f
+{
+  let v = dir.xy * (1.0 / dot(abs(dir), vec3f(1.0)));
+  let e = select((1.0 - abs(v.yx)) * (step(vec2f(0.0), v) * 2.0 - vec2f(1.0)), v, dir.z > 0.0);
+  return e;
+}
+
 fn finalizeHit(bufOfs: u32, pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
 {
   // hit = vec4f(t, u, v, (tri id << 16) | inst id & 0xffff)
@@ -535,7 +550,7 @@ fn finalizeHit(bufOfs: u32, pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: 
 
   // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
   if((pidx & 0xff) == 0) {
-    attrBuf[pidx >> 8] = vec4f(*nrm, 1.0);
+    attrBuf[pidx >> 8] = vec4f(dirToOct(*nrm), 0.0, 0.0);
     // Tag light hit as no hit
     //attrBuf[bufOfs + (pidx >> 8)] = vec4f(*pos, bitcast<f32>((select(mtlId, SHORT_MASK, (*mtl).emissive > 0.0) << 16) | (instId & SHORT_MASK)));
     attrBuf[bufOfs + (pidx >> 8)] = vec4f(*pos, bitcast<f32>((mtlId << 16) | (instId & SHORT_MASK)));

@@ -61,6 +61,20 @@ fn luminance(col: vec3f) -> f32
   return dot(col, vec3f(0.299, 0.587, 0.114)); // Perceived
 }
 
+// https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/
+/*fn octToDir(oct: u32) -> vec3f
+{
+  let e = vec2f(bitcast<f32>(oct & 0xffff), bitcast<f32>(oct >> 16));
+  let v = vec3f(e, 1.0 - abs(e.x) - abs(e.y));
+  return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
+}*/
+
+fn octToDir(oct: vec2f) -> vec3f
+{
+  let v = vec3f(oct, 1.0 - abs(oct.x) - abs(oct.y));
+  return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
+}
+
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
 fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
 {
@@ -149,7 +163,7 @@ fn m0(@builtin(global_invocation_id) globalId: vec3u)
   ignorePrevious |= bitcast<u32>(pos.w) != bitcast<u32>(lpos.w);
 
   // Consider differences of current and last normal
-  ignorePrevious |= abs(dot(attrBuf[gidx], lastAttrBuf[lgidx])) < 0.1;
+  ignorePrevious |= abs(dot(octToDir(attrBuf[gidx].xy), octToDir(lastAttrBuf[lgidx].xy))) < 0.1;
 
   // Read and increase age but keep upper bound
   let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrevious));
@@ -299,7 +313,7 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   // Step size of filter increases with each iteration
   let stepSize = 1i << frame.z;
 
-  let nrm = attrBuf[gidx].xyz;
+  let nrm = octToDir(attrBuf[gidx].xy);
 
   let colVarDir = accumColVarInBuf[      gidx];
   let colVarInd = accumColVarInBuf[ofs + gidx];
@@ -334,7 +348,7 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
       let weightPos = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz) / SIG_POS;
 
       // Nrm edge stopping function
-      let weightNrm = pow(max(0.0, dot(nrm, attrBuf[qidx].xyz)), SIG_NRM);
+      let weightNrm = pow(max(0.0, dot(nrm, octToDir(attrBuf[qidx].xy))), SIG_NRM);
       //let weightNrm = 1.0;
 
       // Luminance edge stopping function
