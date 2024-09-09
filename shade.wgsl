@@ -515,7 +515,7 @@ fn dirToOct(dir: vec3f) -> vec2f
   return e;
 }
 
-fn finalizeHit(bufOfs: u32, pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>)
+fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>) -> u32
 {
   // hit = vec4f(t, u, v, (tri id << 16) | inst id & 0xffff)
   let instOfs = (bitcast<u32>(hit.w) & SHORT_MASK) << 2;
@@ -529,7 +529,7 @@ fn finalizeHit(bufOfs: u32, pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: 
   // Inst id + inst data
   let data = instances[instOfs + 3];
 
-  let instId = bitcast<u32>(data.x); // mtl id << 16 | inst id
+  let mtlInstId = bitcast<u32>(data.x); // mtl id << 16 | inst id
   let instData = bitcast<u32>(data.y); // mtl override bit << 31 | tri buf ofs
 
   let ofs = instData & INST_DATA_MASK;
@@ -539,7 +539,7 @@ fn finalizeHit(bufOfs: u32, pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: 
   let n2 = triNrms[triOfs + 2];
 
   // Either use the material id from the triangle or the material override from the instance
-  let mtlId = select(bitcast<u32>(n0.w) & SHORT_MASK, instId >> 16, (instData & MTL_OVERRIDE_BIT) > 0);
+  let mtlId = select(bitcast<u32>(n0.w) & SHORT_MASK, mtlInstId >> 16, (instData & MTL_OVERRIDE_BIT) > 0);
   *mtl = materials[mtlId];
   *pos = ori + hit.x * dir;
   *nrm = calcTriNormal(hit.yz, n0.xyz, n1.xyz, n2.xyz, m);
@@ -548,17 +548,47 @@ fn finalizeHit(bufOfs: u32, pidx: u32, ori: vec3f, dir: vec3f, hit: vec4f, pos: 
   // Flip normal if backside, except if we hit a ltri or refractive mtl
   *nrm *= select(-1.0, 1.0, dot(-dir, *nrm) > 0 || (*mtl).emissive > 0.0 || (*mtl).refractive > 0.0);
 
-  // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
-  if((pidx & 0xff) == 0) {
-    attrBuf[pidx >> 8] = vec4f(dirToOct(*nrm), 0.0, 0.0);
-    // Tag light hit as no hit
-    //attrBuf[bufOfs + (pidx >> 8)] = vec4f(*pos, bitcast<f32>((select(mtlId, SHORT_MASK, (*mtl).emissive > 0.0) << 16) | (instId & SHORT_MASK)));
-    attrBuf[bufOfs + (pidx >> 8)] = vec4f(*pos, bitcast<f32>((mtlId << 16) | (instId & SHORT_MASK)));
-  }
+  // Consumed by function that renders the attribute buffer for primary rays
+  return mtlInstId;
 }
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
+{
+  let pathStateGrid = config.pathStateGrid;
+  let gidx = pathStateGrid.x * WG_SIZE.x * globalId.y + globalId.x;
+  if(gidx >= pathStateGrid.w) { // path cnt
+    return;
+  }
+
+  let frame = config.frameData;
+  let h = frame.y;
+  let ofs = frame.x * (h >> 8);
+  let hit = hits[gidx];
+  let ori = pathStatesIn[ofs + gidx];
+  let dir = pathStatesIn[(ofs << 1) + gidx];
+  let pidx = bitcast<u32>(dir.w);
+
+  if(hit.x == INF) {
+    // No hit
+    attrBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, 1.0);
+    let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
+    attrBuf[ofs + (pidx >> 8)] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
+    return;
+  }
+
+  var pos: vec3f;
+  var nrm: vec3f;
+  var ltriId: u32;
+  var mtl: Mtl;
+  let mtlInstId = finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
+
+  attrBuf[pidx >> 8] = vec4f(dirToOct(nrm), 0.0, 0.0);
+  attrBuf[ofs + (pidx >> 8)] = vec4f(pos, bitcast<f32>(mtlInstId));
+}
+
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
+fn m1(@builtin(global_invocation_id) globalId: vec3u)
 {
   let pathStateGrid = config.pathStateGrid;
   let gidx = pathStateGrid.x * WG_SIZE.x * globalId.y + globalId.x;
@@ -581,12 +611,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // No hit, terminate path
   if(hit.x == INF) {
-    // TODO Denoiser: Move out of here into separate g-buffer rendering shader?
-    if((pidx & 0xff) == 0) {
-      attrBuf[pidx >> 8] = vec4f(0.0, 0.0, 0.0, 1.0);
-      let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
-      attrBuf[ofs + (pidx >> 8)] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
-    }
     colBuf[cidx] += vec4f(throughput * config.bgColor.xyz, 1.0);
     return;
   }
@@ -595,7 +619,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var nrm: vec3f;
   var ltriId: u32;
   var mtl: Mtl;
-  finalizeHit(ofs, pidx, ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
+  finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
 
   // Hit light via material direction
   if(mtl.emissive > 0.0) {

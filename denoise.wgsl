@@ -119,7 +119,7 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
 // Temporal reprojection and filtering of current pixel to past frame
 // Accumulate direct and indirect illumination and moments
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m0(@builtin(global_invocation_id) globalId: vec3u)
+fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;

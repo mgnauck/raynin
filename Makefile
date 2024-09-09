@@ -4,7 +4,7 @@ OBJ=$(patsubst src/%.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=$(shell find ./ -maxdepth 1 -type f -name '*.wgsl')
 SHADER_MIN=$(patsubst ./%.wgsl,$(OUT_DIR)/%.min.wgsl,$(SHADER))
-SHADER_EXCLUDES=m,vm,m0,m1,m2,m3
+SHADER_EXCLUDES=vm,m,m1,m2,m3
 LOADER_JS=main
 OUT=index.html
 

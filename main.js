@@ -64,16 +64,17 @@ const BUF_GRID        = 23;
 
 const PL_GENERATE     =  0;
 const PL_INTERSECT    =  1;
-const PL_SHADE        =  2;
-const PL_SHADOW       =  3;
-const PL_CONTROL0     =  4;
-const PL_CONTROL1     =  5;
-const PL_CONTROL2     =  6;
-const PL_CONTROL3     =  7;
-const PL_DENOISE0     =  8;
-const PL_DENOISE1     =  9;
-const PL_DENOISE2     = 10;
-const PL_BLIT         = 11;
+const PL_SHADE0       =  2;
+const PL_SHADE1       =  3;
+const PL_SHADOW       =  4;
+const PL_CONTROL0     =  5;
+const PL_CONTROL1     =  6;
+const PL_CONTROL2     =  7;
+const PL_CONTROL3     =  8;
+const PL_DENOISE0     =  9;
+const PL_DENOISE1     = 10;
+const PL_DENOISE2     = 11;
+const PL_BLIT         = 12;
 
 const BG_GENERATE     =  0;
 const BG_INTERSECT0   =  1;
@@ -409,7 +410,8 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     ]
   });
 
-  res.pipelineLayouts[PL_SHADE] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_SHADE0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_SHADE1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Shadow
   bindGroupLayout = device.createBindGroupLayout({
@@ -655,9 +657,16 @@ function accumulateSample(commandEncoder)
     passEncoder.setPipeline(res.pipelines[PL_INTERSECT]);
     passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
+    if(j == 0) {
+      // Render attribute buffer for primary rays
+      passEncoder.setBindGroup(0, res.bindGroups[BG_SHADE0 + bindGroupPathState]);
+      passEncoder.setPipeline(res.pipelines[PL_SHADE0]);
+      passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
+    }
+
     // Shade
     passEncoder.setBindGroup(0, res.bindGroups[BG_SHADE0 + bindGroupPathState]);
-    passEncoder.setPipeline(res.pipelines[PL_SHADE]);
+    passEncoder.setPipeline(res.pipelines[PL_SHADE1]);
     passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
     // Update frame data and workgroup grid dimensions
@@ -919,26 +928,28 @@ async function main()
   if(SM_BLIT.includes("END_blit_wgsl")) {
     createPipeline(PL_GENERATE, await (await fetch("generate.wgsl")).text(), "m");
     createPipeline(PL_INTERSECT, await (await fetch("intersect.wgsl")).text(), "m");
-    createPipeline(PL_SHADE, await (await fetch("shade.wgsl")).text(), "m");
+    createPipeline(PL_SHADE0, await (await fetch("shade.wgsl")).text(), "m");
+    createPipeline(PL_SHADE1, await (await fetch("shade.wgsl")).text(), "m1");
     createPipeline(PL_SHADOW, await (await fetch("traceShadowRay.wgsl")).text(), "m");
-    createPipeline(PL_CONTROL0, await (await fetch("control.wgsl")).text(), "m0");
+    createPipeline(PL_CONTROL0, await (await fetch("control.wgsl")).text(), "m");
     createPipeline(PL_CONTROL1, await (await fetch("control.wgsl")).text(), "m1");
     createPipeline(PL_CONTROL2, await (await fetch("control.wgsl")).text(), "m2");
     createPipeline(PL_CONTROL3, await (await fetch("control.wgsl")).text(), "m3");
-    createPipeline(PL_DENOISE0, await (await fetch("denoise.wgsl")).text(), "m0");
+    createPipeline(PL_DENOISE0, await (await fetch("denoise.wgsl")).text(), "m");
     createPipeline(PL_DENOISE1, await (await fetch("denoise.wgsl")).text(), "m1");
     createPipeline(PL_DENOISE2, await (await fetch("denoise.wgsl")).text(), "m2");
     createPipeline(PL_BLIT, await (await fetch("blit.wgsl")).text(), "vm", "m");
   } else {
     createPipeline(PL_GENERATE, SM_GENERATE, "m");
     createPipeline(PL_INTERSECT, SM_INTERSECT, "m");
-    createPipeline(PL_SHADE, SM_SHADE, "m");
+    createPipeline(PL_SHADE0, SM_SHADE, "m");
+    createPipeline(PL_SHADE1, SM_SHADE, "m1");
     createPipeline(PL_SHADOW, SM_SHADOW, "m");
-    createPipeline(PL_CONTROL0, SM_CONTROL, "m0");
+    createPipeline(PL_CONTROL0, SM_CONTROL, "m");
     createPipeline(PL_CONTROL1, SM_CONTROL, "m1");
     createPipeline(PL_CONTROL2, SM_CONTROL, "m2");
     createPipeline(PL_CONTROL3, SM_CONTROL, "m3");
-    createPipeline(PL_DENOISE0, SM_DENOISE, "m0");
+    createPipeline(PL_DENOISE0, SM_DENOISE, "m");
     createPipeline(PL_DENOISE1, SM_DENOISE, "m1");
     createPipeline(PL_DENOISE2, SM_DENOISE, "m2");
     createPipeline(PL_BLIT, SM_BLIT, "vm", "m");

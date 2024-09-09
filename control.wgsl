@@ -14,7 +14,7 @@ const WG_SIZE = vec3u(16, 16, 1);
 @group(0) @binding(0) var<storage, read_write> config: array<vec4u, 4>;
 
 @compute @workgroup_size(1)
-fn m0(@builtin(global_invocation_id) globalId: vec3u)
+fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   if(globalId.x != 0) {
     return;
