@@ -51,18 +51,18 @@ fn luminance(col: vec3f) -> f32
 }
 
 // https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/
-/*fn octToDir(oct: u32) -> vec3f
-{
-  let e = vec2f(bitcast<f32>(oct & 0xffff), bitcast<f32>(oct >> 16));
-  let v = vec3f(e, 1.0 - abs(e.x) - abs(e.y));
-  return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
-}*/
-
 fn octToDir(oct: vec2f) -> vec3f
 {
   let v = vec3f(oct, 1.0 - abs(oct.x) - abs(oct.y));
   return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
 }
+
+/*fn octToDirQuant(oct: u32) -> vec3f
+{
+  let e = vec2f(bitcast<f32>(oct & 0xffff), bitcast<f32>(oct >> 16));
+  let v = vec3f(e, 1.0 - abs(e.x) - abs(e.y));
+  return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
+}*/
 
 // Temporally accumulate illumination + moments and calc per pixel luminance variance
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
@@ -132,12 +132,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
 fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec3f, nrm: vec3f, lumColDir: f32, lumColInd: f32, qcolVarDir: vec3f, qcolVarInd: vec3f, sigLumDir: f32, sigLumInd: f32) -> vec2f
 {
-  // Depth edge stopping function
-  let qpos = attrBuf[ofs + idx];
-  let weightPos = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz) / SIG_POS;
-
   // Nrm edge stopping function
   let weightNrm = pow(max(0.0, dot(nrm, octToDir(attrBuf[idx].xy))), SIG_NRM);
+
+  // Depth edge stopping function
+  let qpos = attrBuf[ofs + idx];
+  //let weightPos = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz) / SIG_POS;
+  let weightPos = abs(dot(pos.xyz - qpos.xyz, nrm)) / SIG_POS; // Plane distance
 
   // Luminance edge stopping function
   let weightLumDir = abs(lumColDir - luminance(qcolVarDir)) / sigLumDir;

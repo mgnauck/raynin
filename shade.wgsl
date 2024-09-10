@@ -512,19 +512,19 @@ fn calcTriNormal(bary: vec2f, n0: vec3f, n1: vec3f, n2: vec3f, m: mat4x4f) -> ve
 }
 
 // https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/
-/*fn dirToOct(dir: vec3f) -> u32
-{
-  let p = dir.xy * (1.0 / dot(abs(dir), vec3f(1.0)));
-  let e = select((1.0 - abs(p.yx)) * (step(vec2f(0.0), p) * 2.0 - vec2f(1.0)), p, dir.z > 0.0);
-  return (bitcast<u32>(quantizeToF16(e.y)) << 16) + (bitcast<u32>(quantizeToF16(e.x)));
-}*/
-
 fn dirToOct(dir: vec3f) -> vec2f
 {
   let v = dir.xy * (1.0 / dot(abs(dir), vec3f(1.0)));
   let e = select((1.0 - abs(v.yx)) * (step(vec2f(0.0), v) * 2.0 - vec2f(1.0)), v, dir.z > 0.0);
   return e;
 }
+
+/*fn dirToOct(dir: vec3f) -> u32
+{
+  let p = dir.xy * (1.0 / dot(abs(dir), vec3f(1.0)));
+  let e = select((1.0 - abs(p.yx)) * (step(vec2f(0.0), p) * 2.0 - vec2f(1.0)), p, dir.z > 0.0);
+  return (bitcast<u32>(quantizeToF16(e.y)) << 16) + (bitcast<u32>(quantizeToF16(e.x)));
+}*/
 
 fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>) -> u32
 {
