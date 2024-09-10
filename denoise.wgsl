@@ -64,20 +64,6 @@ fn octToDir(oct: vec2f) -> vec3f
   return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
 }
 
-fn ignorePrevious(lastPix: vec2i, res: vec2i, currPos: vec4f, lastPos: vec4f, currNrm: vec3f, lastNrm: vec3f) -> bool
-{
-  // Check out of bounds
-  var ignorePrevious = any(lastPix < vec2i(0, 0)) || any(lastPix >= res);
-
-   // Check if current and last material and instance ids match
-  ignorePrevious |= bitcast<u32>(currPos.w) != bitcast<u32>(lastPos.w);
-
-  // Consider differences of current and last normal
-  ignorePrevious |= abs(dot(currNrm, lastNrm)) < 0.1;
-
-  return ignorePrevious; 
-}
-
 // Temporally accumulate illumination + moments and calc per pixel luminance variance
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
@@ -98,23 +84,21 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Check via mtl id if this was a no hit
   var ignorePrev = (bitcast<u32>(pos.w) >> 16) == SHORT_MASK;
 
-  // xy = normal, zw = motion vector
+  // xy = normal, z = index of pixel position in last frame
   let nrmMotion = attrBuf[gidx];
 
-  // Pixel pos in last frame
-  let lpix = vec2i(i32(nrmMotion.z * f32(w)), i32(nrmMotion.w * f32(h)));
+  // Pixel index of last frame (in case of out of bounds this was set to w * h)
+  let lgidx = bitcast<u32>(nrmMotion.z);
+  ignorePrev |= lgidx >= w * h;
 
-  // Pixel index of last frame (made valid in case of out of bounds)
-  let lgidx = w * u32(lpix.y) + u32(lpix.x);
-
-  // Get last frame pos in xyz and w = mtl id << 16 | inst id
+   // Check if current and last material and instance ids match
   let lpos = lastAttrBuf[ofs + lgidx];
+  ignorePrev |= bitcast<u32>(pos.w) != bitcast<u32>(lpos.w);
 
-  // Get current and last normal (octrahedral encoded)
+  // Consider differences of current and last normal (octahedral encoded)
   let nrm = octToDir(nrmMotion.xy);
   let lnrm = octToDir(lastAttrBuf[lgidx].xy);
-
-  ignorePrev |= ignorePrevious(lpix, vec2i(i32(w), i32(h)), pos, lpos, nrm, lnrm);
+  ignorePrev |= abs(dot(nrm, lnrm)) < 0.1;
 
   // Read and increase age but keep upper bound
   let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrev));

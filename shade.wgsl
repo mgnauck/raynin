@@ -564,7 +564,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 }
 
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
-fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2f
+fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
 {
   // View plane height and width
   let vheight = 2.0 * eye.w * right.w; // 2 * halfTanVertFov * focDist
@@ -598,8 +598,7 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   let d1y = dot(topNrm, toPos);
   let d2y = dot(botNrm, toPos);
 
-  // Return motion vector
-  return vec2f(d1x / (d1x + d2x), d1y / (d1y + d2y));
+  return vec2i(i32(res.x * d1x / (d1x + d2x)), i32(res.y * d1y / (d1y + d2y)));
 }
 
 // Reproject current position to last frame and render attribute buffer
@@ -621,11 +620,11 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let dir = pathStatesIn[(ofs << 1) + gidx];
   let pidx = bitcast<u32>(dir.w);
 
-  let res = vec2f(f32(w), f32(h));
+  let res = vec2i(i32(w), i32(h));
 
   if(hit.x == INF) {
     // No hit means zero nrm/motion/pos
-    attrBuf[pidx >> 8] = vec4f(0.0, 0.0, 2.0 * res);
+    attrBuf[pidx >> 8] = vec4f(0.0, 0.0, bitcast<f32>(w * h), 0.0);
     let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
     attrBuf[ofs + (pidx >> 8)] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
     return;
@@ -641,12 +640,17 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let lup = lastCamera[2];
 
   // Calc where hit pos was in screen space during the last frame/camera
-  let motion = select(
-    calcScreenSpacePos(pos, lastCamera[0], lastCamera[1], lup, res),
-    2.0 * res, // Out of bounds
+  let last = select(
+    calcScreenSpacePos(pos, lastCamera[0], lastCamera[1], lup, vec2f(f32(w), f32(h))),
+    res, // Out of bounds
     all(lup.xyz == vec3f(0.0))); // Check if last cam is valid
 
-  attrBuf[pidx >> 8] = vec4f(dirToOct(nrm), motion);
+  let lastIdx = select(
+    w * u32(last.y) + u32(last.x),
+    w * h,
+    any(last < vec2i(0i)) || any(last >= res));
+
+  attrBuf[pidx >> 8] = vec4f(dirToOct(nrm), bitcast<f32>(lastIdx), 0.0);
   attrBuf[ofs + (pidx >> 8)] = vec4f(pos, bitcast<f32>(mtlInstId));
 }
 
