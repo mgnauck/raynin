@@ -146,7 +146,27 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   accumHisOutBuf[gidx] = age;
 }
 
-// Estimation of spatial (= not enough history data) luminance variance
+fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec3f, nrm: vec3f, lumColDir: f32, lumColInd: f32, qcolVarDir: vec3f, qcolVarInd: vec3f, sigLumDir: f32, sigLumInd: f32) -> vec2f
+{
+  // Depth edge stopping function
+  let qpos = attrBuf[ofs + idx];
+  let weightPos = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz) / SIG_POS;
+
+  // Nrm edge stopping function
+  let weightNrm = pow(max(0.0, dot(nrm, octToDir(attrBuf[idx].xy))), SIG_NRM);
+
+  // Luminance edge stopping function
+  let weightLumDir = abs(lumColDir - luminance(qcolVarDir)) / sigLumDir;
+  let weightLumInd = abs(lumColInd - luminance(qcolVarInd)) / sigLumInd;
+
+  // Combined weight of edge stopping functions
+  let wDir = weightNrm * exp(-weightLumDir - weightPos);
+  let wInd = weightNrm * exp(-weightLumInd - weightPos);
+
+  return vec2f(wDir, wInd);
+}
+
+// Estimation of spatial luminance variance (when history is not enough)
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m1(@builtin(global_invocation_id) globalId: vec3u)
 {
@@ -160,19 +180,38 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
 
-  let p = vec2i(globalId.xy);
-  let res = vec2i(i32(w), i32(h));
-
-  let colVarDir = accumColVarInBuf[      gidx];
-  let colVarInd = accumColVarInBuf[ofs + gidx];
-
   let age = accumHisInBuf[gidx];
   if(age < 4.0) {
 
-    // Accumulated history is too short, filter moments and estimate variance
+    // Accumulated history is too short, filter illumination/moments and estimate variance
+    let p = vec2i(globalId.xy);
+    let res = vec2i(i32(w), i32(h));
+
+    let pos = attrBuf[ofs + gidx];
+
+    if((bitcast<u32>(pos.w) >> 16) == SHORT_MASK) {
+      // No mtl, no hit
+      accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
+      accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
+      return;
+    }
+
+    let nrm = octToDir(attrBuf[gidx].xy);
+
+    let colVarDir = accumColVarInBuf[      gidx];
+    let colVarInd = accumColVarInBuf[ofs + gidx];
+
     // xy = moments direct illum, zw = moments indirect illum
-    var sumMom = accumMomInBuf[gidx]; // Apply center directly
-    var sumWeight = 1.0;
+    let mom = accumMomInBuf[gidx];
+
+    let lumColDir = luminance(colVarDir.xyz);
+    let lumColInd = luminance(colVarInd.xyz);
+
+    // Apply center value directly
+    var sumColVarDir  = colVarDir.xyz;
+    var sumColVarInd  = colVarInd.xyz;
+    var sumMom        = mom; 
+    var sumWeight     = vec2f(1.0);
 
     for(var j=-1; j<=1; j++) {
       for(var i=-1; i<=1; i++) {
@@ -182,22 +221,39 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
           continue;
         }
 
-        sumMom += accumMomInBuf[w * u32(q.y) + u32(q.x)];
-        sumWeight += 1.0;
+        let qidx = w * u32(q.y) + u32(q.x);
+
+        let qcolVarDir = accumColVarInBuf[      qidx].xyz;
+        let qcolVarInd = accumColVarInBuf[ofs + qidx].xyz;
+
+        let weight = calcEdgeStoppingWeights(
+          ofs, qidx, pos.xyz, nrm, lumColDir, lumColInd, qcolVarDir, qcolVarInd, SIG_LUM, SIG_LUM);
+
+        sumColVarDir += qcolVarDir * weight.xxx;
+        sumColVarInd += qcolVarInd * weight.yyy;
+          
+        sumMom += accumMomInBuf[qidx] * vec4f(weight.xx, weight.yy);
+
+        sumWeight += weight;
       }
     }
 
-    sumMom /= max(sumWeight, EPS);
-
+    sumColVarDir = select(colVarDir.xyz, sumColVarDir / sumWeight.x, sumWeight.x > EPS);
+    sumColVarInd = select(colVarInd.xyz, sumColVarInd / sumWeight.y, sumWeight.y > EPS);
+    
+    //sumWeight = max(sumWeight, vec2f(EPS));
+    sumMom /= vec4f(sumWeight.xx, sumWeight.yy);
+    
     // Calc boosted variance for first frames (until temporal kicks in)
-    let variance = max(vec2f(0.0), (sumMom.yw - sumMom.xz * sumMom.xz) * 4.0 / age);
+    let variance = vec2f(sumMom.yw - sumMom.xz * sumMom.xz) * 4.0 / age;
 
-    accumColVarOutBuf[      gidx] = vec4f(colVarDir.xyz, variance.x);
-    accumColVarOutBuf[ofs + gidx] = vec4f(colVarInd.xyz, variance.y);
+    accumColVarOutBuf[      gidx] = vec4f(sumColVarDir, variance.x);
+    accumColVarOutBuf[ofs + gidx] = vec4f(sumColVarInd, variance.y);
+
   } else {
-    // Pass through
-    accumColVarOutBuf[      gidx] = colVarDir;
-    accumColVarOutBuf[ofs + gidx] = colVarInd;
+    // History is enough, pass through
+    accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
+    accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
   }
 }
 
@@ -216,18 +272,12 @@ fn filterVariance(p: vec2i, res: vec2i) -> vec2f
 
   for(var j=-1; j<=1; j++) {
     for(var i=-1; i<=1; i++) {
-
       let q = p + vec2i(i, j);
-      // Disabled because we will not use the out of bounds variance values
-      /*if(any(q < vec2i(0)) || any(q >= res)) {
-        continue;
-      }*/
-
       let qidx = u32(res.x * q.y + q.x);
 
-      let w = kernelWeights[abs(i)][abs(j)];
-      sumVar += w * vec2f(accumColVarInBuf[qidx].w, accumColVarInBuf[ofs + qidx].w);
-      sumWeight += w;
+      let weight = kernelWeights[abs(i)][abs(j)];
+      sumVar += weight * vec2f(accumColVarInBuf[qidx].w, accumColVarInBuf[ofs + qidx].w);
+      sumWeight += weight;
     }
   }
 
@@ -288,44 +338,27 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 
       let q = p + vec2i(i, j) * stepSize;
       if(any(q < vec2i(0)) || any(q >= res) || all(vec2i(i, j) == vec2i(0))) {
-        // Out of bounds or already accounted center pixel
+        // Out of bounds or already accounted for center pixel
         continue;
       }
 
       let qidx = w * u32(q.y) + u32(q.x);
 
-      // Depth edge stopping function
-      let qpos = attrBuf[ofs + qidx];
-      let weightPos = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz) / SIG_POS;
-
-      // Nrm edge stopping function
-      let weightNrm = pow(max(0.0, dot(nrm, octToDir(attrBuf[qidx].xy))), SIG_NRM);
-      //let weightNrm = 1.0;
-
-      // Luminance edge stopping function
       let qcolVarDir = accumColVarInBuf[      qidx];
       let qcolVarInd = accumColVarInBuf[ofs + qidx];
 
-      let weightLumDir = abs(lumColDir - luminance(qcolVarDir.xyz)) / lumVarDen.x;
-      let weightLumInd = abs(lumColInd - luminance(qcolVarInd.xyz)) / lumVarDen.y;
-
-      // Combined weight of edge stopping functions
-      let wDir = weightNrm * exp(-weightLumDir - weightPos);
-      let wInd = weightNrm * exp(-weightLumInd - weightPos);
-
-      // Filter value is weighted by edge stopping functions to avoid 'overblurring'
-      let w = kernelWeights[abs(i)] * kernelWeights[abs(j)] * vec2f(wDir, wInd);
+      // Gaussian influenced by edge stopping weights
+      let weight = kernelWeights[abs(i)] * kernelWeights[abs(j)] * calcEdgeStoppingWeights(
+        ofs, qidx, pos.xyz, nrm, lumColDir, lumColInd, qcolVarDir.xyz, qcolVarInd.xyz, lumVarDen.x, lumVarDen.y);
 
       // Apply filter to accumulated direct/indirect color and variance
-      sumColVarDir += qcolVarDir * vec4f(w.xxx, w.x * w.x);
-      sumColVarInd += qcolVarInd * vec4f(w.yyy, w.y * w.y);
+      sumColVarDir += qcolVarDir * vec4f(weight.xxx, weight.x * weight.x);
+      sumColVarInd += qcolVarInd * vec4f(weight.yyy, weight.y * weight.y);
 
-      sumWeight += w;
+      sumWeight += weight;
     }
   }
   
-  //accumColVarOutBuf[      gidx] = sumColVarDir / vec4f(sumWeight.xxx, sumWeight.x * sumWeight.x);
-  //accumColVarOutBuf[ofs + gidx] = sumColVarInd / vec4f(sumWeight.yyy, sumWeight.y * sumWeight.y);
   accumColVarOutBuf[      gidx] = select(colVarDir, sumColVarDir / vec4f(sumWeight.xxx, sumWeight.x * sumWeight.x), sumWeight.x > EPS);
   accumColVarOutBuf[ofs + gidx] = select(colVarInd, sumColVarInd / vec4f(sumWeight.yyy, sumWeight.y * sumWeight.y), sumWeight.y > EPS);
 }
