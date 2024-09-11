@@ -214,8 +214,8 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
         let weight = calcEdgeStoppingWeights(
           ofs, qidx, pos.xyz, nrm, lumColDir, lumColInd, qcolVarDir, qcolVarInd, SIG_LUM, SIG_LUM);
 
-        sumColVarDir += qcolVarDir * weight.xxx;
-        sumColVarInd += qcolVarInd * weight.yyy;
+        sumColVarDir += qcolVarDir * weight.x;
+        sumColVarInd += qcolVarInd * weight.y;
           
         sumMom += accumMomInBuf[qidx] * vec4f(weight.xx, weight.yy);
 
