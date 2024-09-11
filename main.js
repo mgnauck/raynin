@@ -91,6 +91,7 @@ const BG_DENOISE4     = 11;
 const BG_DENOISE5     = 12;
 const BG_BLIT0        = 13;
 const BG_BLIT1        = 14;
+const BG_BLIT2        = 15;
 
 const WG_SIZE_X       = 16;
 const WG_SIZE_Y       = 16;
@@ -601,6 +602,14 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     ]
   });
 
+  res.bindGroups[BG_BLIT2] = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_ACC2] } },
+    ]
+  });
+
   res.pipelineLayouts[PL_BLIT] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Render pass descriptor
@@ -710,7 +719,8 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.setPipeline(res.pipelines[PL_DENOISE1]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
-    // Five iterations of edge-avoiding a-trous wavelet transform
+    // Edge-avoiding a-trous wavelet transform iterations
+    // 0
     passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
     passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
     passEncoder.dispatchWorkgroups(1);
@@ -746,6 +756,7 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
+    /*
     // 4
     passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
     passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
@@ -754,6 +765,7 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE4 + res.accumIdx]);
     passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+    */
   }
 
   passEncoder.end();
@@ -769,7 +781,8 @@ function blit(commandEncoder)
   
   passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
  
-  passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT0 + res.accumIdx : BG_BLIT1 - res.accumIdx]);
+  //passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT0 + res.accumIdx : BG_BLIT1 - res.accumIdx]); // 3 or 5 filter iterations
+  passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT2 : BG_BLIT1 - res.accumIdx]); // 2 or 4 filter iterations
   passEncoder.setPipeline(res.pipelines[PL_BLIT]);
   passEncoder.draw(4);
   

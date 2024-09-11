@@ -10,7 +10,7 @@
 }*/
 
 const SHORT_MASK      = 0xffffu;
-const TEMPORAL_ALPHA  = 0.2;
+const ALPHA           = vec3f(0.05, 0.1, 0.2); // Alpha for dir/ind col and moments
 const SIG_LUM         = 4.0;
 const SIG_NRM         = 128.0;
 const SIG_POS         = 1.0; // Depth
@@ -85,10 +85,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var ignorePrev = (bitcast<u32>(pos.w) >> 16) == SHORT_MASK;
 
   // xy = normal, z = index of pixel position in last frame
-  let nrmMotion = attrBuf[gidx];
+  let nrmLastIdx = attrBuf[gidx];
 
   // Pixel index of last frame (in case of out of bounds this was set to w * h)
-  let lgidx = bitcast<u32>(nrmMotion.z);
+  let lgidx = bitcast<u32>(nrmLastIdx.z);
   ignorePrev |= lgidx >= w * h;
 
    // Check if current and last material and instance ids match
@@ -96,7 +96,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   ignorePrev |= bitcast<u32>(pos.w) != bitcast<u32>(lpos.w);
 
   // Consider differences of current and last normal (octahedral encoded)
-  let nrm = octToDir(nrmMotion.xy);
+  let nrm = octToDir(nrmLastIdx.xy);
   let lnrm = octToDir(lastAttrBuf[lgidx].xy);
   ignorePrev |= abs(dot(nrm, lnrm)) < 0.1;
 
@@ -104,7 +104,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrev));
 
   // Increase weight of new samples in case of insufficient history
-  let alpha = select(max(TEMPORAL_ALPHA, 1.0 / age), 1.0, ignorePrev);
+  let alpha = select(max(ALPHA, vec3f(1.0 / age)), vec3f(1.0), ignorePrev);
 
   // Read color of direct and indirect illumination
   // (frame.w = 1 since we are doing fixed 1 SPP when applying the filter)
@@ -116,15 +116,15 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let ilum = luminance(icol);
 
   // Temporal integration using first and second raw moments of col luminance
-  let mom = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha);
+  let mom = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha.z);
   accumMomOutBuf[gidx] = mom;
 
   // Estimate temporal variance from integrated moments
   let variance = max(vec2f(0.0), mom.yw - mom.xz * mom.xz);
 
   // Temporal integration of direct and indirect illumination and store variance
-  accumColVarOutBuf[      gidx] = vec4f(mix(accumColVarInBuf[      lgidx].xyz, dcol, alpha), variance.x);
-  accumColVarOutBuf[ofs + gidx] = vec4f(mix(accumColVarInBuf[ofs + lgidx].xyz, icol, alpha), variance.y);
+  accumColVarOutBuf[      gidx] = vec4f(mix(accumColVarInBuf[      lgidx].xyz, dcol, alpha.x), variance.x);
+  accumColVarOutBuf[ofs + gidx] = vec4f(mix(accumColVarInBuf[ofs + lgidx].xyz, icol, alpha.y), variance.y);
 
   // Track age (already incremented)
   accumHisOutBuf[gidx] = age;
@@ -165,21 +165,14 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
 
+  let pos = attrBuf[ofs + gidx];
+
   let age = accumHisInBuf[gidx];
-  if(age < 4.0) {
+  if(age < 4.0 && (bitcast<u32>(pos.w) >> 16) != SHORT_MASK) {
 
     // Accumulated history is too short, filter illumination/moments and estimate variance
     let p = vec2i(globalId.xy);
     let res = vec2i(i32(w), i32(h));
-
-    let pos = attrBuf[ofs + gidx];
-
-    if((bitcast<u32>(pos.w) >> 16) == SHORT_MASK) {
-      // No mtl, no hit
-      accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
-      accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
-      return;
-    }
 
     let nrm = octToDir(attrBuf[gidx].xy);
 
@@ -236,7 +229,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     accumColVarOutBuf[ofs + gidx] = vec4f(sumColVarInd, variance.y);
 
   } else {
-    // History is enough, pass through
+    // History is enough or no hit, pass through
     accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
     accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
   }
@@ -259,7 +252,6 @@ fn filterVariance(p: vec2i, res: vec2i) -> vec2f
     for(var i=-1; i<=1; i++) {
       let q = p + vec2i(i, j);
       let qidx = u32(res.x * q.y + q.x);
-
       let weight = kernelWeights[abs(i)][abs(j)];
       sumVar += weight * vec2f(accumColVarInBuf[qidx].w, accumColVarInBuf[ofs + qidx].w);
       sumWeight += weight;
