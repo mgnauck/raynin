@@ -117,7 +117,11 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Temporal integration using first and second raw moments of col luminance
   let mom = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha.z);
-  accumMomOutBuf[gidx] = mom;
+  if(age <= 4.0) {
+    accumMomOutBuf[gidx] = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum, ilum, ilum), 1.0 / age);
+  } else {
+    accumMomOutBuf[gidx] = mom;
+  }
 
   // Estimate temporal variance from integrated moments
   let variance = max(vec2f(0.0), mom.yw - mom.xz * mom.xz);
@@ -130,7 +134,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   accumHisOutBuf[gidx] = age;
 }
 
-fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec3f, nrm: vec3f, lumColDir: f32, lumColInd: f32, qcolVarDir: vec3f, qcolVarInd: vec3f, sigLumDir: f32, sigLumInd: f32) -> vec2f
+fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec4f, nrm: vec3f, lumColDir: f32, lumColInd: f32, lumColDirQ: f32, lumColIndQ: f32, sigLumDir: f32, sigLumInd: f32) -> vec2f
 {
   // Nrm edge stopping function
   let weightNrm = pow(max(0.0, dot(nrm, octToDir(attrBuf[idx].xy))), SIG_NRM);
@@ -141,12 +145,15 @@ fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec3f, nrm: vec3f, lumColDir
   let weightPos = abs(dot(pos.xyz - qpos.xyz, nrm)) / SIG_POS; // Plane distance
 
   // Luminance edge stopping function
-  let weightLumDir = abs(lumColDir - luminance(qcolVarDir)) / sigLumDir;
-  let weightLumInd = abs(lumColInd - luminance(qcolVarInd)) / sigLumInd;
+  let weightLumDir = abs(lumColDir - lumColDirQ) / sigLumDir;
+  let weightLumInd = abs(lumColInd - lumColIndQ) / sigLumInd;
+
+  // Mtl / inst id matches
+  let mtlInstWeight = select(0.0, 1.0, qpos.w == pos.w);
 
   // Combined weight of edge stopping functions
-  let wDir = weightNrm * exp(-weightLumDir - weightPos);
-  let wInd = weightNrm * exp(-weightLumInd - weightPos);
+  let wDir = weightNrm * exp(-weightLumDir - weightPos) * mtlInstWeight;
+  let wInd = weightNrm * exp(-weightLumInd - weightPos) * mtlInstWeight;
 
   return vec2f(wDir, wInd);
 }
@@ -204,13 +211,16 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
         let qcolVarDir = accumColVarInBuf[      qidx].xyz;
         let qcolVarInd = accumColVarInBuf[ofs + qidx].xyz;
 
+        let qmom = accumMomInBuf[qidx];
+
         let weight = calcEdgeStoppingWeights(
-          ofs, qidx, pos.xyz, nrm, lumColDir, lumColInd, qcolVarDir, qcolVarInd, SIG_LUM, SIG_LUM);
+          //ofs, qidx, pos, nrm, lumColDir, lumColInd, luminance(qcolVarDir), luminance(qcolVarInd), SIG_LUM, SIG_LUM);
+          ofs, qidx, pos, nrm, lumColDir, lumColInd, qmom.x, qmom.z, SIG_LUM, SIG_LUM);
 
         sumColVarDir += qcolVarDir * weight.x;
         sumColVarInd += qcolVarInd * weight.y;
           
-        sumMom += accumMomInBuf[qidx] * vec4f(weight.xx, weight.yy);
+        sumMom += qmom * vec4f(weight.xx, weight.yy);
 
         sumWeight += weight;
       }
@@ -223,7 +233,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     sumMom /= vec4f(sumWeight.xx, sumWeight.yy);
     
     // Calc boosted variance for first frames (until temporal kicks in)
-    let variance = vec2f(sumMom.yw - sumMom.xz * sumMom.xz) * 4.0 / age;
+    let variance = max(vec2f(0.0), vec2f(sumMom.yw - sumMom.xz * sumMom.xz)) * 4.0 / age;
 
     accumColVarOutBuf[      gidx] = vec4f(sumColVarDir, variance.x);
     accumColVarOutBuf[ofs + gidx] = vec4f(sumColVarInd, variance.y);
@@ -326,7 +336,7 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 
       // Gaussian influenced by edge stopping weights
       let weight = kernelWeights[abs(i)] * kernelWeights[abs(j)] * calcEdgeStoppingWeights(
-        ofs, qidx, pos.xyz, nrm, lumColDir, lumColInd, qcolVarDir.xyz, qcolVarInd.xyz, lumVarDen.x, lumVarDen.y);
+        ofs, qidx, pos, nrm, lumColDir, lumColInd, luminance(qcolVarDir.xyz), luminance(qcolVarInd.xyz), lumVarDen.x, lumVarDen.y);
 
       // Apply filter to accumulated direct/indirect color and variance
       sumColVarDir += qcolVarDir * vec4f(weight.xxx, weight.x * weight.x);
