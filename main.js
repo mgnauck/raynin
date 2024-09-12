@@ -74,7 +74,8 @@ const PL_CONTROL3     =  8;
 const PL_DENOISE0     =  9;
 const PL_DENOISE1     = 10;
 const PL_DENOISE2     = 11;
-const PL_BLIT         = 12;
+const PL_BLIT0        = 12;
+const PL_BLIT1        = 13;
 
 const BG_GENERATE     =  0;
 const BG_INTERSECT0   =  1;
@@ -101,7 +102,8 @@ let wa, res = {};
 let frames = 0;
 let samples = 0;
 let converge = false;
-let filter = true;
+let filter = false;
+let reproj = filter | false;
 
 function handleMouseMoveEvent(e)
 {
@@ -159,7 +161,8 @@ function Wasm(module)
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
     reset_samples: () => { samples = 0; },
     toggle_converge: () => { converge = !converge; },
-    toggle_filter: () => { filter = !filter; samples = 0; res.accumIdx = 0; },
+    toggle_filter: () => { filter = !filter; if(filter) reproj = true; samples = 0; res.accumIdx = 0; },
+    toggle_reprojection: () => { reproj = !reproj; if(!reproj) filter = false; samples = 0; res.accumIdx = 0; }
   };
 
   this.instantiate = async function()
@@ -583,6 +586,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
+      { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
     ]
   });
 
@@ -590,7 +594,8 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
@@ -598,7 +603,8 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_ACC1] } },
     ]
   });
 
@@ -606,11 +612,13 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     layout: bindGroupLayout,
     entries: [
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_ACC2] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_ACC2] } },
     ]
   });
 
-  res.pipelineLayouts[PL_BLIT] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_BLIT0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_BLIT1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Render pass descriptor
 
@@ -780,10 +788,15 @@ function blit(commandEncoder)
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
   
   passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
- 
-  //passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT0 + res.accumIdx : BG_BLIT1 - res.accumIdx]); // 3 or 5 filter iterations
-  passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT2 : BG_BLIT1 - res.accumIdx]); // 2 or 4 filter iterations
-  passEncoder.setPipeline(res.pipelines[PL_BLIT]);
+
+  if(reproj) {
+    //passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT0 + res.accumIdx : BG_BLIT1 - res.accumIdx]); // 3 or 5 filter iterations
+    passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT2 : BG_BLIT1 - res.accumIdx]); // 2 or 4 filter iterations
+    passEncoder.setPipeline(res.pipelines[PL_BLIT0]);
+  } else {
+    passEncoder.setBindGroup(0, res.bindGroups[PL_BLIT1]);
+    passEncoder.setPipeline(res.pipelines[PL_BLIT1]);
+  }
   passEncoder.draw(4);
   
   passEncoder.end();
@@ -837,7 +850,8 @@ async function render(time)
   }
 
   // SVGF
-  reprojectAndFilter(commandEncoder);
+  if(reproj || filter)
+    reprojectAndFilter(commandEncoder);
 
   // Blit to canvas
   blit(commandEncoder);
@@ -947,7 +961,8 @@ async function main()
     createPipeline(PL_DENOISE0, await (await fetch("denoise.wgsl")).text(), "m");
     createPipeline(PL_DENOISE1, await (await fetch("denoise.wgsl")).text(), "m1");
     createPipeline(PL_DENOISE2, await (await fetch("denoise.wgsl")).text(), "m2");
-    createPipeline(PL_BLIT, await (await fetch("blit.wgsl")).text(), "vm", "m");
+    createPipeline(PL_BLIT0, await (await fetch("blit.wgsl")).text(), "vm", "m");
+    createPipeline(PL_BLIT1, await (await fetch("blit.wgsl")).text(), "vm", "m1");
   } else {
     createPipeline(PL_GENERATE, SM_GENERATE, "m");
     createPipeline(PL_INTERSECT, SM_INTERSECT, "m");
@@ -961,7 +976,8 @@ async function main()
     createPipeline(PL_DENOISE0, SM_DENOISE, "m");
     createPipeline(PL_DENOISE1, SM_DENOISE, "m1");
     createPipeline(PL_DENOISE2, SM_DENOISE, "m2");
-    createPipeline(PL_BLIT, SM_BLIT, "vm", "m");
+    createPipeline(PL_BLIT0, SM_BLIT, "vm", "m");
+    createPipeline(PL_BLIT1, SM_BLIT, "vm", "m1");
   }
 
   // Start
