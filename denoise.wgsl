@@ -336,9 +336,11 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 
       // Gaussian influenced by edge stopping weights
       let weight = kernelWeights[abs(i)] * kernelWeights[abs(j)] * calcEdgeStoppingWeights(
-        ofs, qidx, pos, nrm, lumColDir, lumColInd, luminance(qcolVarDir.xyz), luminance(qcolVarInd.xyz), lumVarDen.x, lumVarDen.y);
+        ofs, qidx, pos, nrm, lumColDir, lumColInd,
+        luminance(qcolVarDir.xyz), luminance(qcolVarInd.xyz), lumVarDen.x, lumVarDen.y);
 
       // Apply filter to accumulated direct/indirect color and variance
+      // as per section 4.3 of the paper (squared for variance)
       sumColVarDir += qcolVarDir * vec4f(weight.xxx, weight.x * weight.x);
       sumColVarInd += qcolVarInd * vec4f(weight.yyy, weight.y * weight.y);
 
