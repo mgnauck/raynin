@@ -1,7 +1,7 @@
 /*struct Config
 {
   frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path cnt

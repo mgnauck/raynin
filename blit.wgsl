@@ -1,7 +1,7 @@
 /*struct Config
 {
   frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
@@ -39,6 +39,7 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
   return vec4f(pos[vertexIndex], 0.0, 1.0);
 }
 
+// Accumulated direct and indirect illumination
 @fragment
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
@@ -51,6 +52,7 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
   return vec4f(pow(dcol + icol, vec3f(0.4545)), 1.0);
 }
 
+// No reprojection/no filter, just pass through from direct/indirect illumination buffer
 @fragment
 fn m1(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {

@@ -11,7 +11,7 @@
 /*struct Config
 {
   frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
@@ -26,7 +26,7 @@
   ori:              vec3f,
   seed:             u32,
   dir:              vec3f,
-  pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
+  pidx:             u32             // Pixel idx in bits 8-31, flags in bits 4-7, bounce num in bits 0-3
 }*/
 
 // General constants
@@ -133,5 +133,5 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Do not initialize throughput/pdf, will do in shade.wgsl for primary ray
   let ofs = w * h;
   pathStates[       ofs + gidx] = vec4f(ori, bitcast<f32>(seed));
-  pathStates[(ofs << 1) + gidx] = vec4f(dir, bitcast<f32>(gidx << 8)); // Bounce num is implicitly 0
+  pathStates[(ofs << 1) + gidx] = vec4f(dir, bitcast<f32>(gidx << 8)); // Flags and bounce num are implicitly 0
 }

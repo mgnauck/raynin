@@ -1,7 +1,7 @@
 /*struct Config
 {
   frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
@@ -47,7 +47,7 @@
   ori:              vec3f,
   seed:             u32,
   dir:              vec3f,
-  pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
+  pidx:             u32             // Pixel idx in bits 8-31, flags in bits 4-7, bounce num in bits 0-3
 }*/
 
 // Scene data handling

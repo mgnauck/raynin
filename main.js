@@ -8,7 +8,7 @@ const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 1;
-const MAX_BOUNCES = 5;
+const MAX_BOUNCES = 5; // Max is 15 (encoded in bits 0-3 in frame data)
 
 const CAM_LOOK_VELOCITY = 0.005;
 const CAM_MOVE_VELOCITY = 0.1;
@@ -64,18 +64,17 @@ const BUF_GRID        = 23;
 
 const PL_GENERATE     =  0;
 const PL_INTERSECT    =  1;
-const PL_SHADE0       =  2;
-const PL_SHADE1       =  3;
-const PL_SHADOW       =  4;
-const PL_CONTROL0     =  5;
-const PL_CONTROL1     =  6;
-const PL_CONTROL2     =  7;
-const PL_CONTROL3     =  8;
-const PL_DENOISE0     =  9;
-const PL_DENOISE1     = 10;
-const PL_DENOISE2     = 11;
-const PL_BLIT0        = 12;
-const PL_BLIT1        = 13;
+const PL_SHADE        =  2;
+const PL_SHADOW       =  3;
+const PL_CONTROL0     =  4;
+const PL_CONTROL1     =  5;
+const PL_CONTROL2     =  6;
+const PL_CONTROL3     =  7;
+const PL_DENOISE0     =  8;
+const PL_DENOISE1     =  9;
+const PL_DENOISE2     = 10;
+const PL_BLIT0        = 11;
+const PL_BLIT1        = 12;
 
 const BG_GENERATE     =  0;
 const BG_INTERSECT0   =  1;
@@ -417,8 +416,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     ]
   });
 
-  res.pipelineLayouts[PL_SHADE0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
-  res.pipelineLayouts[PL_SHADE1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_SHADE] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Shadow
   bindGroupLayout = device.createBindGroupLayout({
@@ -670,16 +668,9 @@ function accumulateSample(commandEncoder)
     passEncoder.setPipeline(res.pipelines[PL_INTERSECT]);
     passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
-    if(j == 0) {
-      // Temporal reprojection and attribute buffer rendering (primary rays only)
-      passEncoder.setBindGroup(0, res.bindGroups[BG_SHADE0 + bindGroupPathState]);
-      passEncoder.setPipeline(res.pipelines[PL_SHADE0]);
-      passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
-    }
-
     // Shade
     passEncoder.setBindGroup(0, res.bindGroups[BG_SHADE0 + bindGroupPathState]);
-    passEncoder.setPipeline(res.pipelines[PL_SHADE1]);
+    passEncoder.setPipeline(res.pipelines[PL_SHADE]);
     passEncoder.dispatchWorkgroupsIndirect(res.buf[BUF_GRID], 0);
 
     // Update frame data and workgroup grid dimensions
@@ -794,7 +785,7 @@ function blit(commandEncoder)
     passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT2 : BG_BLIT1 - res.accumIdx]); // 2 or 4 filter iterations
     passEncoder.setPipeline(res.pipelines[PL_BLIT0]);
   } else {
-    passEncoder.setBindGroup(0, res.bindGroups[PL_BLIT1]);
+    passEncoder.setBindGroup(0, res.bindGroups[BG_BLIT0]);
     passEncoder.setPipeline(res.pipelines[PL_BLIT1]);
   }
   passEncoder.draw(4);
@@ -830,7 +821,7 @@ async function render(time)
   device.queue.writeBuffer(res.buf[BUF_CFG], 0,
     new Uint32Array([
       // Frame data
-      WIDTH, (HEIGHT << 8) | (MAX_BOUNCES & 0xff), frames, samples,
+      WIDTH, (HEIGHT << 8) | (MAX_BOUNCES & 0xf), frames, samples,
       // Path state grid dimensions + w = path cnt
       Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1, WIDTH * HEIGHT,
       // Shadow ray buffer grid dimensions + w = shadow ray cnt
@@ -951,8 +942,7 @@ async function main()
   if(SM_BLIT.includes("END_blit_wgsl")) {
     createPipeline(PL_GENERATE, await (await fetch("generate.wgsl")).text(), "m");
     createPipeline(PL_INTERSECT, await (await fetch("intersect.wgsl")).text(), "m");
-    createPipeline(PL_SHADE0, await (await fetch("shade.wgsl")).text(), "m");
-    createPipeline(PL_SHADE1, await (await fetch("shade.wgsl")).text(), "m1");
+    createPipeline(PL_SHADE, await (await fetch("shade.wgsl")).text(), "m");
     createPipeline(PL_SHADOW, await (await fetch("traceShadowRay.wgsl")).text(), "m");
     createPipeline(PL_CONTROL0, await (await fetch("control.wgsl")).text(), "m");
     createPipeline(PL_CONTROL1, await (await fetch("control.wgsl")).text(), "m1");
@@ -966,8 +956,7 @@ async function main()
   } else {
     createPipeline(PL_GENERATE, SM_GENERATE, "m");
     createPipeline(PL_INTERSECT, SM_INTERSECT, "m");
-    createPipeline(PL_SHADE0, SM_SHADE, "m");
-    createPipeline(PL_SHADE1, SM_SHADE, "m1");
+    createPipeline(PL_SHADE, SM_SHADE, "m");
     createPipeline(PL_SHADOW, SM_SHADOW, "m");
     createPipeline(PL_CONTROL0, SM_CONTROL, "m");
     createPipeline(PL_CONTROL1, SM_CONTROL, "m1");

@@ -11,7 +11,7 @@
 struct Config
 {
   frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 0-7 max bounces
+                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path cnt
@@ -79,13 +79,18 @@ struct Mtl
   ori:              vec3f,
   seed:             u32,
   dir:              vec3f,
-  pidx:             u32             // Pixel idx in bits 8-31, bounce num in bits 0-7
+  pidx:             u32             // Pixel idx in bits 8-31, flags in bits 4-8, bounce num in bits 0-3
 }*/
 
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
 const MTL_OVERRIDE_BIT    = 0x80000000u; // Bit 32
 const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
+
+// Mtl flags
+const SPECULAR            = 1u; // Current mtl is specular
+const DIFFUSE_BOUNCE      = 2u; // Had a diffuse bounce
+const SPECULAR_BOUNCE     = 4u; // Had a specular bounce
 
 // General constants
 const EPS                 = 0.001;
@@ -601,43 +606,12 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   return vec2i(i32(res.x * d1x / (d1x + d2x)), i32(res.y * d1y / (d1y + d2y)));
 }
 
-// Reproject current position to last frame and render attribute buffer
-@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m(@builtin(global_invocation_id) globalId: vec3u)
+fn reprojectAndWriteAttr(pos: vec3f, nrm: vec3f, mtlInstId: u32, flags: u32, pidx: u32, w: u32, h: u32)
 {
-  let pathStateGrid = config.pathStateGrid;
-  let gidx = pathStateGrid.x * WG_SIZE.x * globalId.y + globalId.x;
-  if(gidx >= pathStateGrid.w) { // path cnt
-    return;
-  }
-
-  let frame = config.frameData;
-  let w = frame.x;
-  let h = frame.y >> 8;
-  let ofs = w * h;
-  let hit = hits[gidx];
-  let ori = pathStatesIn[ofs + gidx];
-  let dir = pathStatesIn[(ofs << 1) + gidx];
-  let pidx = bitcast<u32>(dir.w);
-
-  let res = vec2i(i32(w), i32(h));
-
-  if(hit.x == INF) {
-    // No hit means zero nrm/motion/pos
-    attrBuf[pidx >> 8] = vec4f(0.0, 0.0, bitcast<f32>(w * h), 0.0);
-    let noHit = SHORT_MASK << 16; // Tint wants this as extra variable otherwise this is NAN?
-    attrBuf[ofs + (pidx >> 8)] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
-    return;
-  }
-
-  var pos: vec3f;
-  var nrm: vec3f;
-  var ltriId: u32;
-  var mtl: Mtl;
-  let mtlInstId = finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
-
   // Get last camera values
   let lup = lastCamera[2];
+
+  let res = vec2i(i32(w), i32(h));
 
   // Calc where hit pos was in screen space during the last frame/camera
   let last = select(
@@ -650,12 +624,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     w * h,
     any(last < vec2i(0i)) || any(last >= res));
 
-  attrBuf[pidx >> 8] = vec4f(dirToOct(nrm), bitcast<f32>(lastIdx), 0.0);
-  attrBuf[ofs + (pidx >> 8)] = vec4f(pos, bitcast<f32>(mtlInstId));
+  attrBuf[pidx] = vec4f(dirToOct(nrm), bitcast<f32>(lastIdx), bitcast<f32>(flags));
+  attrBuf[(w * h) + pidx] = vec4f(pos, bitcast<f32>(mtlInstId));
 }
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m1(@builtin(global_invocation_id) globalId: vec3u)
+fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let pathStateGrid = config.pathStateGrid;
   let gidx = pathStateGrid.x * WG_SIZE.x * globalId.y + globalId.x;
@@ -664,21 +638,40 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let frame = config.frameData;
-  let h = frame.y;
-  let ofs = frame.x * (h >> 8);
+  let w = frame.x;
+  let hMaxBounces = frame.y;
+  let h = hMaxBounces >> 8;
+  let ofs = w * h;
   let hit = hits[gidx];
   let ori = pathStatesIn[ofs + gidx];
   let dir = pathStatesIn[(ofs << 1) + gidx];
   let pidx = bitcast<u32>(dir.w);
-  let throughput4 = select(pathStatesIn[gidx], vec4f(1.0), (pidx & 0xff) == 0); // Avoid mem access on bounce 0
+  let throughput4 = select(pathStatesIn[gidx], vec4f(1.0), (pidx & 0xf) == 0); // Avoid mem access on bounce 0
   var throughput = throughput4.xyz;
+  var flags = (pidx >> 4) & 0xf;
 
   // For bounce 0 we index into direct col buf, further bounces into indirect col buf
-  let cidx = min(pidx & 0xff, 1u) * ofs + (pidx >> 8);
+  let cidx = min(pidx & 0xf, 1u) * ofs + (pidx >> 8);
+
+  // Mark for reprojection and attribute buffer writing if we are on the first sample and had no diffuse bounce before.
+  // That means we will record the attribute buffer for the filter once we are on the first diffuse hit, which might be in case
+  // the first hit is diffuse straight away or if we had one or more specular bounces so far.
+  let writeAttr = (/* sample num */ frame.w == 0) && (flags & DIFFUSE_BOUNCE) == 0;
+
+  // Reset attributes on first sample and bounce
+  /*if((pidx & 0xf) == 0 && writeAttr) {
+    let noHit = SHORT_MASK << 16;
+    attrBuf[      pidx] = vec4f(0.0, 0.0, bitcast<f32>(w * h), 0.0);
+    attrBuf[ofs + pidx] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
+  }*/
 
   // No hit, terminate path
   if(hit.x == INF) {
     colBuf[cidx] += vec4f(throughput * config.bgColor.xyz, 1.0);
+    if(writeAttr) {
+      // No hit, path terminates, write attributes with values that do not hurt the filter (if not yet written)
+      reprojectAndWriteAttr(ori.xyz + 9999.0 * dir.xyz, -dir.xyz, SHORT_MASK << 16, flags, pidx >> 8, w, h);
+    }
     return;
   }
 
@@ -686,14 +679,14 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   var nrm: vec3f;
   var ltriId: u32;
   var mtl: Mtl;
-  finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
+  let mtlInstId = finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
 
   // Hit light via material direction
   if(mtl.emissive > 0.0) {
     // Lights emit from front side only
     if(dot(-dir.xyz, nrm) > 0) {
       // Bounces > 0
-      if((pidx & 0xff) > 0) {
+      if((pidx & 0xf) > 0) {
         // Secondary ray hit light, apply MIS
         let ldir = pos - ori.xyz;
         let ldistInv = inverseSqrt(dot(ldir, ldir));
@@ -706,13 +699,25 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
         colBuf[cidx] += vec4f(throughput * mtl.col.xyz, 1.0);
       }
     }
+    // Path terminates, write attributes if we did not do before
+    if(writeAttr) {
+      reprojectAndWriteAttr(pos, nrm, mtlInstId, flags, pidx >> 8, w, h);
+    }
     // Terminate ray after light hit (lights do not reflect)
     return;
   }
 
   // Increase roughness with each bounce to combat fireflies
-  //mtl.roughness = min(1.0, mtl.roughness + f32(pidx & 0xff) * mtl.roughness * 0.75);
-  //mtl.roughness = select(1.0, mtl.roughness, (pidx & 0xff) == 0u);
+  //mtl.roughness = min(1.0, mtl.roughness + f32(pidx & 0xf) * mtl.roughness * 0.75);
+  //mtl.roughness = select(1.0, mtl.roughness, (pidx & 0xf) == 0u);
+
+  // Flag as "pure specular" if mtl parameters suggest, or delete the flag
+  flags = select(flags & ~SPECULAR, flags | SPECULAR, mtl.roughness < 0.05 || (mtl.roughness < 0.1 && mtl.metallic > 0.9));
+
+  // First hit and not a specular mtl, write attributes
+  if(writeAttr && (flags & SPECULAR) == 0) {
+    reprojectAndWriteAttr(pos, nrm, mtlInstId, flags, pidx >> 8, w, h);
+  }
 
   seed = bitcast<u32>(ori.w);
   let r0 = rand4();
@@ -720,8 +725,11 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   // Russian roulette
   // Terminate with prob inverse to throughput
   let p = min(0.95, maxComp3(throughput));
-  if(r0.w > p) { // (pidx & 0xff) > 0
-    // Terminate path due to russian roulette
+  if(r0.w > p) { // (pidx & 0xf) > 0
+    // Path terminates due to russian roulette, write attributes if we did not do before
+    if(writeAttr) {
+      reprojectAndWriteAttr(pos, nrm, mtlInstId, flags, pidx >> 8, w, h);
+    }
     return;
   }
   // Account for bias introduced by path termination
@@ -735,7 +743,8 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   var emission: vec3f;
   var lpdf: f32;
   //if(sampleLTrisUniform(rand4().xyz, pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
-  if(sampleLTrisRIS(pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
+  if(// TODO: (flags & SPECULAR) == 0 &&
+    sampleLTrisRIS(pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
     var fres: vec3f;
@@ -748,9 +757,18 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     shadowRays[       ofs + sidx] = vec4f(ldir, 1.0 / ldistInv - 2.0 * EPS);
     shadowRays[(ofs << 1) + sidx] = vec4f(throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf, 0.0);
   }
+ 
+  // One diffuse bounce is enough
+  if((flags & DIFFUSE_BOUNCE) == 1) {
+    return;
+  }
 
-  // Reached max bounces (encoded in lower 8 bits of height), terminate path
-  if((pidx & 0xff) == (h & 0xff) - 1) {
+  // Reached max bounces (encoded in lower 4 bits of height)
+  if((pidx & 0xf) == (hMaxBounces & 0xf) - 1) {
+    // Path terminates, write attributes if we did not do before
+    if(writeAttr) {
+      reprojectAndWriteAttr(pos, nrm, mtlInstId, flags, pidx >> 8, w, h);
+    }
     return;
   }
 
@@ -770,7 +788,12 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let gidxNext = atomicAdd(&config.extRayCnt, 1u);
 
   // Init next path segment 
-  pathStatesOut[             gidxNext] = vec4f(throughput, pdf);
-  pathStatesOut[       ofs + gidxNext] = vec4f(pos, bitcast<f32>(seed));
-  pathStatesOut[(ofs << 1) + gidxNext] = vec4f(wi, bitcast<f32>(pidx + 1)); // Keep pixel index but increase bounce num in lowest 8 bits
+  pathStatesOut[      gidxNext] = vec4f(throughput, pdf);
+  pathStatesOut[ofs + gidxNext] = vec4f(pos, bitcast<f32>(seed));
+
+  // Flag bounce as specular
+  flags = select(flags | DIFFUSE_BOUNCE, flags | SPECULAR_BOUNCE, (flags & SPECULAR) == 1);
+
+  // Keep pixel index, set flags in bits 4-7, increase bounce num in bits 0-3
+  pathStatesOut[(ofs << 1) + gidxNext] = vec4f(wi, bitcast<f32>((pidx & 0xffffff00) | (flags << 4) | ((pidx & 0xf) + 1)));
 }
