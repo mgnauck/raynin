@@ -20,6 +20,7 @@
 }*/
 
 const SHORT_MASK      = 0xffffu;
+const SPECULAR_BOUNCE = 4u; // Had a specular bounce
 const ALPHA           = vec3f(0.05, 0.1, 0.2); // Alpha for dir/ind col and moments
 const SIG_LUM         = 4.0;
 const SIG_NRM         = 128.0;
@@ -28,8 +29,8 @@ const EPS             = 0.00001;
 const WG_SIZE         = vec3u(16, 16, 1);
 
 // Attribute buf are 2x buf vec4f for nrm + pos
-//  xy = octahedral encoded nrm, z = pixel pos index of last frame, w = unusued
-//  xyz = pos, w = mtl id << 16 | inst id
+//  nrm buf: xy = octahedral encoded nrm, z = mtl id << 16 | inst id, w = pixel pos index of last frame
+//  pos buf: xyz = pos, w = flags
 //
 // Color buffer are 2x buf vec4f for direct and indirect illum col
 //
@@ -128,8 +129,8 @@ fn reproject(pos: vec3f, w: u32, h: u32) -> u32
 
   return select(
     w * u32(last.y) + u32(last.x),
-    w * h,
-    any(last < vec2i(0i)) || any(last >= res));
+    w * h, // Out of bounds
+    any(last < vec2i(0i)) || any(last >= res)); // Check if within viewport
 }
 
 // Calc screen space pos/idx in last frame via reprojection
@@ -146,9 +147,22 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
 
-  // Reproject current pos to last frame and calc pixel index
+  // Position in xyz and material flags in w
+  let pos = attrBuf[ofs + gidx];
+
+  // Calc current pixel index in last frame
   // In case pixel index is out of bounds, it will be set to w*h
-  attrBuf[gidx].w = bitcast<f32>(reproject(attrBuf[ofs + gidx].xyz, w, h));
+  var lidx: u32;
+  if((bitcast<u32>(pos.w) & SPECULAR_BOUNCE) == 0) {
+    // Saw no specular bounce, simply reproject to last frame
+    lidx = reproject(pos.xyz, w, h);
+  } else {
+    // Search for the pixel
+    lidx = gidx;
+  }
+
+  // Write pixel index in last frame to nrm.w
+  attrBuf[gidx].w = bitcast<f32>(lidx);
 }
 
 // Temporally accumulate illumination + moments and calc per pixel luminance variance
@@ -165,27 +179,22 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
 
-  // Current world space hit pos with w = mtl id << 16 | inst id
-  let pos = attrBuf[ofs + gidx];
+  // xy = encoded normal, z = mtl id << 16 | inst id, w = pixel index in last frame (reprojected)
+  let nrm4 = attrBuf[gidx];
 
   // Check via mtl id if this was a no hit
-  var ignorePrev = (bitcast<u32>(pos.w) >> 16) == SHORT_MASK;
-
-  // xy = normal, z = flags, w = pixel index in last frame (reprojected)
-  let nrmFlagsLidx = attrBuf[gidx];
+  var ignorePrev = (bitcast<u32>(nrm4.z) >> 16) == SHORT_MASK;
 
   // Get pixel index in last frame (in case of out of bounds this was set to w * h)
-  let lgidx = bitcast<u32>(nrmFlagsLidx.w);
+  let lgidx = bitcast<u32>(nrm4.w);
   ignorePrev |= lgidx == w * h;
 
    // Check if current and last material and instance ids match
-  let lpos = lastAttrBuf[ofs + lgidx];
-  ignorePrev |= bitcast<u32>(pos.w) != bitcast<u32>(lpos.w);
+  let lnrm4 = lastAttrBuf[lgidx];
+  ignorePrev |= bitcast<u32>(nrm4.z) != bitcast<u32>(lnrm4.z);
 
-  // Consider differences of current and last normal (octahedral encoded)
-  let nrm = octToDir(nrmFlagsLidx.xy);
-  let lnrm = octToDir(lastAttrBuf[lgidx].xy);
-  ignorePrev |= abs(dot(nrm, lnrm)) < 0.1;
+  // Consider differences of current and last normal
+  ignorePrev |= abs(dot(octToDir(nrm4.xy), octToDir(lnrm4.xy))) < 0.1;
 
   // Read and increase age but keep upper bound
   let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrev));
@@ -221,26 +230,23 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   accumHisOutBuf[gidx] = age;
 }
 
-fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec4f, nrm: vec3f, lumColDir: f32, lumColInd: f32, lumColDirQ: f32, lumColIndQ: f32, sigLumDir: f32, sigLumInd: f32) -> vec2f
+fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec3f, nrm: vec3f, qnrm: vec3f, lumColDir: f32, lumColInd: f32, lumColDirQ: f32, lumColIndQ: f32, sigLumDir: f32, sigLumInd: f32) -> vec2f
 {
   // Nrm edge stopping function
-  let weightNrm = pow(max(0.0, dot(nrm, octToDir(attrBuf[idx].xy))), SIG_NRM);
+  let weightNrm = pow(max(0.0, dot(nrm, qnrm)), SIG_NRM);
 
   // Depth edge stopping function
-  let qpos = attrBuf[ofs + idx];
-  //let weightPos = dot(pos.xyz - qpos.xyz, pos.xyz - qpos.xyz) / SIG_POS;
-  let weightPos = abs(dot(pos.xyz - qpos.xyz, nrm)) / SIG_POS; // Plane distance
+  let qpos = attrBuf[ofs + idx].xyz;
+  //let weightPos = dot(pos - qpos, pos.xyz - qpos.xyz) / SIG_POS;
+  let weightPos = abs(dot(pos - qpos, nrm)) / SIG_POS; // Plane distance
 
   // Luminance edge stopping function
   let weightLumDir = abs(lumColDir - lumColDirQ) / sigLumDir;
   let weightLumInd = abs(lumColInd - lumColIndQ) / sigLumInd;
 
-  // Mtl / inst id matches
-  let mtlInstWeight = select(0.0, 1.0, qpos.w == pos.w);
-
   // Combined weight of edge stopping functions
-  let wDir = weightNrm * exp(-weightLumDir - weightPos) * mtlInstWeight;
-  let wInd = weightNrm * exp(-weightLumInd - weightPos) * mtlInstWeight;
+  let wDir = weightNrm * exp(-weightLumDir - weightPos);
+  let wInd = weightNrm * exp(-weightLumInd - weightPos);
 
   return vec2f(wDir, wInd);
 }
@@ -259,16 +265,18 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
 
-  let pos = attrBuf[ofs + gidx];
+  // xy = encoded nrm, z = mtl/inst id, w = last idx
+  let nrm4 = attrBuf[gidx];
 
   let age = accumHisInBuf[gidx];
-  if(age < 4.0 && (bitcast<u32>(pos.w) >> 16) != SHORT_MASK) {
+  if(age < 4.0 && (bitcast<u32>(nrm4.z) >> 16) != SHORT_MASK) {
 
     // Accumulated history is too short, filter illumination/moments and estimate variance
     let p = vec2i(globalId.xy);
     let res = vec2i(i32(w), i32(h));
 
-    let nrm = octToDir(attrBuf[gidx].xy);
+    let pos = attrBuf[ofs + gidx].xyz;
+    let nrm = octToDir(nrm4.xy);
 
     let colVarDir = accumColVarInBuf[      gidx];
     let colVarInd = accumColVarInBuf[ofs + gidx];
@@ -295,14 +303,17 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 
         let qidx = w * u32(q.y) + u32(q.x);
 
+        // xy = encoded nrm, z = mtl/inst id, w = last idx
+        let qnrm4 = attrBuf[qidx];
+
         let qcolVarDir = accumColVarInBuf[      qidx].xyz;
         let qcolVarInd = accumColVarInBuf[ofs + qidx].xyz;
 
         let qmom = accumMomInBuf[qidx];
 
-        let weight = calcEdgeStoppingWeights(
-          //ofs, qidx, pos, nrm, lumColDir, lumColInd, luminance(qcolVarDir), luminance(qcolVarInd), SIG_LUM, SIG_LUM);
-          ofs, qidx, pos, nrm, lumColDir, lumColInd, qmom.x, qmom.z, SIG_LUM, SIG_LUM);
+        let weight = select(0.0, 1.0, qnrm4.z == nrm4.z) * calcEdgeStoppingWeights(
+          //ofs, qidx, pos, nrm, octToDir(qnrm4.xy), lumColDir, lumColInd, luminance(qcolVarDir), luminance(qcolVarInd), SIG_LUM, SIG_LUM);
+          ofs, qidx, pos, nrm, octToDir(qnrm4.xy), lumColDir, lumColInd, qmom.x, qmom.z, SIG_LUM, SIG_LUM);
 
         sumColVarDir += qcolVarDir * weight.x;
         sumColVarInd += qcolVarInd * weight.y;
@@ -373,9 +384,10 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
   let ofs = w * h;
   let gidx = w * globalId.y + globalId.x;
 
-  let pos = attrBuf[ofs + gidx];
+  // xy = encoded nrm, z = mtl/inst id, w = last idx
+  let nrm4 = attrBuf[gidx];
 
-  if(bitcast<u32>(pos.w) >> 16 == SHORT_MASK) {
+  if(bitcast<u32>(nrm4.z) >> 16 == SHORT_MASK) {
     // No mtl, no hit
     accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
     accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
@@ -388,7 +400,8 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
   // Step size of filter increases with each iteration
   let stepSize = 1i << frame.z;
 
-  let nrm = octToDir(attrBuf[gidx].xy);
+  let pos = attrBuf[ofs + gidx].xyz;
+  let nrm = octToDir(nrm4.xy);
 
   let colVarDir = accumColVarInBuf[      gidx];
   let colVarInd = accumColVarInBuf[ofs + gidx];
@@ -418,13 +431,16 @@ fn m3(@builtin(global_invocation_id) globalId: vec3u)
 
       let qidx = w * u32(q.y) + u32(q.x);
 
+      // xy = encoded nrm, z = mtl/inst id, w = last idx
+      let qnrm4 = attrBuf[qidx];
+
       let qcolVarDir = accumColVarInBuf[      qidx];
       let qcolVarInd = accumColVarInBuf[ofs + qidx];
 
       // Gaussian influenced by edge stopping weights
-      let weight = kernelWeights[abs(i)] * kernelWeights[abs(j)] * calcEdgeStoppingWeights(
-        ofs, qidx, pos, nrm, lumColDir, lumColInd,
-        luminance(qcolVarDir.xyz), luminance(qcolVarInd.xyz), lumVarDen.x, lumVarDen.y);
+      let weight = select(0.0, 1.0, qnrm4.z == nrm4.z) * kernelWeights[abs(i)] * kernelWeights[abs(j)] *
+        calcEdgeStoppingWeights(ofs, qidx, pos, nrm, octToDir(qnrm4.xy), lumColDir, lumColInd,
+          luminance(qcolVarDir.xyz), luminance(qcolVarInd.xyz), lumVarDen.x, lumVarDen.y);
 
       // Apply filter to accumulated direct/indirect color and variance
       // as per section 4.3 of the paper (squared for variance)

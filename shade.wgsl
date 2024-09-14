@@ -561,8 +561,8 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 fn writeAttributes(pos: vec3f, nrm: vec3f, mtlInstId: u32, flags: u32, pidx: u32, ofs: u32)
 {
   // Write nrm, pos, flags and mtl/inst id to our attributes buffer for consumption by SVGF
-  attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(flags), 0.0 /* Will be idx in prev frame */);
-  attrBuf[ofs + pidx] = vec4f(pos, bitcast<f32>(mtlInstId));
+  attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(mtlInstId), 0.0 /* Will be idx in prev frame */);
+  attrBuf[ofs + pidx] = vec4f(pos, bitcast<f32>(flags));
 }
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
@@ -659,7 +659,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   seed = bitcast<u32>(ori.w);
   let r0 = rand4();
 
-  // TODO Should we drop RR due to one diffuse bounce limit?
   // Russian roulette
   // Terminate with prob inverse to throughput
   let p = min(0.95, maxComp3(throughput));
