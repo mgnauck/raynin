@@ -45,7 +45,7 @@ const WG_SIZE         = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> lastCamera: array<vec4f, 3>;
 @group(0) @binding(1) var<storage, read> config: array<vec4u, 4>;
-@group(0) @binding(2) var<storage, read> attrBuf: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> attrBuf: array<vec4f>;
 @group(0) @binding(3) var<storage, read> lastAttrBuf: array<vec4f>;
 @group(0) @binding(4) var<storage, read> colBuf: array<vec4f>;
 @group(0) @binding(5) var<storage, read> accumMomInBuf: array<vec4f>;
@@ -132,9 +132,28 @@ fn reproject(pos: vec3f, w: u32, h: u32) -> u32
     any(last < vec2i(0i)) || any(last >= res));
 }
 
-// Temporally accumulate illumination + moments and calc per pixel luminance variance
+// Calc screen space pos/idx in last frame via reprojection
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
+{
+  let frame = config[0];
+  let w = frame.x;
+  let h = frame.y >> 8;
+  if(any(globalId.xy >= vec2u(w, h))) {
+    return;
+  }
+
+  let ofs = w * h;
+  let gidx = w * globalId.y + globalId.x;
+
+  // Reproject current pos to last frame and calc pixel index
+  // In case pixel index is out of bounds, it will be set to w*h
+  attrBuf[gidx].w = bitcast<f32>(reproject(attrBuf[ofs + gidx].xyz, w, h));
+}
+
+// Temporally accumulate illumination + moments and calc per pixel luminance variance
+@compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
+fn m1(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;
@@ -152,19 +171,19 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Check via mtl id if this was a no hit
   var ignorePrev = (bitcast<u32>(pos.w) >> 16) == SHORT_MASK;
 
-  // xy = normal, z = flags 
-  let nrmFlags = attrBuf[gidx];
+  // xy = normal, z = flags, w = pixel index in last frame (reprojected)
+  let nrmFlagsLidx = attrBuf[gidx];
 
-  // Calc pixel index in last frame (in case of out of bounds this was set to w * h)
-  let lgidx = reproject(pos.xyz, w, h);
-  ignorePrev |= lgidx >= w * h;
+  // Get pixel index in last frame (in case of out of bounds this was set to w * h)
+  let lgidx = bitcast<u32>(nrmFlagsLidx.w);
+  ignorePrev |= lgidx == w * h;
 
    // Check if current and last material and instance ids match
   let lpos = lastAttrBuf[ofs + lgidx];
   ignorePrev |= bitcast<u32>(pos.w) != bitcast<u32>(lpos.w);
 
   // Consider differences of current and last normal (octahedral encoded)
-  let nrm = octToDir(nrmFlags.xy);
+  let nrm = octToDir(nrmFlagsLidx.xy);
   let lnrm = octToDir(lastAttrBuf[lgidx].xy);
   ignorePrev |= abs(dot(nrm, lnrm)) < 0.1;
 
@@ -228,7 +247,7 @@ fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec4f, nrm: vec3f, lumColDir
 
 // Estimation of spatial luminance variance (when history is not enough)
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m1(@builtin(global_invocation_id) globalId: vec3u)
+fn m2(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;
@@ -342,7 +361,7 @@ fn filterVariance(p: vec2i, res: vec2i) -> vec2f
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
 // Schied et al: Spatiotemporal Variance-Guided Filtering
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
-fn m2(@builtin(global_invocation_id) globalId: vec3u)
+fn m3(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
   let w = frame.x;

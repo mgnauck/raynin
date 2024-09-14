@@ -73,8 +73,9 @@ const PL_CONTROL3     =  7;
 const PL_DENOISE0     =  8;
 const PL_DENOISE1     =  9;
 const PL_DENOISE2     = 10;
-const PL_BLIT0        = 11;
-const PL_BLIT1        = 12;
+const PL_DENOISE3     = 11;
+const PL_BLIT0        = 12;
+const PL_BLIT1        = 13;
 
 const BG_GENERATE     =  0;
 const BG_INTERSECT0   =  1;
@@ -465,7 +466,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     entries: [
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // Mom in
@@ -582,6 +583,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   res.pipelineLayouts[PL_DENOISE0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_DENOISE1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_DENOISE2] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_DENOISE3] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Blit
   bindGroupLayout = device.createBindGroupLayout({
@@ -710,16 +712,21 @@ function reprojectAndFilter(commandEncoder)
 {
   let passEncoder = commandEncoder.beginComputePass();
 
-  // Temporal accumulation
+  // Reprojection
   passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
   passEncoder.setPipeline(res.pipelines[PL_DENOISE0]);
+  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+
+  // Temporal accumulation
+  passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
+  passEncoder.setPipeline(res.pipelines[PL_DENOISE1]);
   passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
   if(filter) {
 
     // Estimate variance
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE1 - res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE1]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
     // Edge-avoiding a-trous wavelet transform iterations
@@ -729,7 +736,7 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.dispatchWorkgroups(1);
 
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE3]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
     // 1
@@ -738,7 +745,7 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.dispatchWorkgroups(1);
 
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE2 + res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE3]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
     // 2
@@ -747,7 +754,7 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.dispatchWorkgroups(1);
 
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE4 + res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE3]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
     // 3
@@ -756,7 +763,7 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.dispatchWorkgroups(1);
 
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE3 - res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE3]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
     /*
@@ -766,7 +773,7 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.dispatchWorkgroups(1);
 
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE4 + res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
+    passEncoder.setPipeline(res.pipelines[PL_DENOISE3]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
     */
   }
@@ -955,6 +962,7 @@ async function main()
     createPipeline(PL_DENOISE0, await (await fetch("denoise.wgsl")).text(), "m");
     createPipeline(PL_DENOISE1, await (await fetch("denoise.wgsl")).text(), "m1");
     createPipeline(PL_DENOISE2, await (await fetch("denoise.wgsl")).text(), "m2");
+    createPipeline(PL_DENOISE3, await (await fetch("denoise.wgsl")).text(), "m3");
     createPipeline(PL_BLIT0, await (await fetch("blit.wgsl")).text(), "vm", "m");
     createPipeline(PL_BLIT1, await (await fetch("blit.wgsl")).text(), "vm", "m1");
   } else {
@@ -969,6 +977,7 @@ async function main()
     createPipeline(PL_DENOISE0, SM_DENOISE, "m");
     createPipeline(PL_DENOISE1, SM_DENOISE, "m1");
     createPipeline(PL_DENOISE2, SM_DENOISE, "m2");
+    createPipeline(PL_DENOISE3, SM_DENOISE, "m3");
     createPipeline(PL_BLIT0, SM_BLIT, "vm", "m");
     createPipeline(PL_BLIT1, SM_BLIT, "vm", "m1");
   }
