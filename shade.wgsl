@@ -1,13 +1,3 @@
-/*struct Camera
-{
-  eye:              vec3f,
-  halfTanVertFov:   f32,
-  right:            vec3f,
-  focDist:          f32,
-  up:               vec3f,
-  halfTanFocAngle:  f32,
-}*/
-
 struct Config
 {
   frameData:        vec4u,          // x = width
@@ -101,18 +91,17 @@ const INV_PI              = 1.0 / PI;
 
 const WG_SIZE             = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> lastCamera: array<vec4f, 3>;
-@group(0) @binding(1) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(2) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
-@group(0) @binding(3) var<storage, read> triNrms: array<vec4f>;
-@group(0) @binding(4) var<storage, read> ltris: array<vec4f>;
-@group(0) @binding(5) var<storage, read> hits: array<vec4f>;
-@group(0) @binding(6) var<storage, read> pathStatesIn: array<vec4f>;
-@group(0) @binding(7) var<storage, read_write> config: Config;
-@group(0) @binding(8) var<storage, read_write> pathStatesOut: array<vec4f>;
-@group(0) @binding(9) var<storage, read_write> shadowRays: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> attrBuf: array<vec4f>;
-@group(0) @binding(11) var<storage, read_write> colBuf: array<vec4f>;
+@group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
+@group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
+@group(0) @binding(2) var<storage, read> triNrms: array<vec4f>;
+@group(0) @binding(3) var<storage, read> ltris: array<vec4f>;
+@group(0) @binding(4) var<storage, read> hits: array<vec4f>;
+@group(0) @binding(5) var<storage, read> pathStatesIn: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> config: Config;
+@group(0) @binding(7) var<storage, read_write> pathStatesOut: array<vec4f>;
+@group(0) @binding(8) var<storage, read_write> shadowRays: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> attrBuf: array<vec4f>;
+@group(0) @binding(10) var<storage, read_write> colBuf: array<vec4f>;
 
 // State of rng seed
 var<private> seed: u32;
@@ -391,6 +380,7 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
   return vec3f(0);
 }
 
+// https://psgraphics.blogspot.com/2022/01/what-is-direct-lighting-next-event.html
 /*fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let bc = sampleBarycentric(r0.xy);
@@ -568,64 +558,11 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   return mtlInstId;
 }
 
-// Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
-fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
+fn writeAttributes(pos: vec3f, nrm: vec3f, mtlInstId: u32, flags: u32, pidx: u32, ofs: u32)
 {
-  // View plane height and width
-  let vheight = 2.0 * eye.w * right.w; // 2 * halfTanVertFov * focDist
-  let vwidth = vheight * res.x / res.y;
-
-  // View plane right and down
-  let vright = vwidth * right.xyz;
-  let vdown = -vheight * up.xyz;
-
-  let forward = cross(right.xyz, up.xyz);
-
-  // Calc world space positions of view plane
-  let topLeft = eye.xyz - right.w * forward - 0.5 * (vright + vdown); // right.w = focDist
-  let botLeft = topLeft + vdown;
-  let topRight = topLeft + vright;
-  let botRight = topRight + vdown;
-
-  // Calc normals of frustum planes
-  let leftNrm = normalize(cross(botLeft - eye.xyz, topLeft - eye.xyz));
-  let rightNrm = normalize(cross(topRight - eye.xyz, botRight - eye.xyz));
-  let topNrm = normalize(cross(topLeft - eye.xyz, topRight - eye.xyz));
-  let botNrm = normalize(cross(botRight - eye.xyz, botLeft - eye.xyz));
-
-  let toPos = pos - eye.xyz;
-
-  // Project pos vec to calculate horizontal ratio
-  let d1x = dot(leftNrm, toPos);
-  let d2x = dot(rightNrm, toPos);
-
-  // Project pos vec to calculate vertical ratio
-  let d1y = dot(topNrm, toPos);
-  let d2y = dot(botNrm, toPos);
-
-  return vec2i(i32(res.x * d1x / (d1x + d2x)), i32(res.y * d1y / (d1y + d2y)));
-}
-
-fn reprojectAndWriteAttr(pos: vec3f, nrm: vec3f, mtlInstId: u32, flags: u32, pidx: u32, w: u32, h: u32)
-{
-  // Get last camera values
-  let lup = lastCamera[2];
-
-  let res = vec2i(i32(w), i32(h));
-
-  // Calc where hit pos was in screen space during the last frame/camera
-  let last = select(
-    calcScreenSpacePos(pos, lastCamera[0], lastCamera[1], lup, vec2f(f32(w), f32(h))),
-    res, // Out of bounds
-    all(lup.xyz == vec3f(0.0))); // Check if last cam is valid
-
-  let lastIdx = select(
-    w * u32(last.y) + u32(last.x),
-    w * h,
-    any(last < vec2i(0i)) || any(last >= res));
-
-  attrBuf[pidx] = vec4f(dirToOct(nrm), bitcast<f32>(lastIdx), bitcast<f32>(flags));
-  attrBuf[(w * h) + pidx] = vec4f(pos, bitcast<f32>(mtlInstId));
+  // Write nrm, pos, flags and mtl/inst id to our attributes buffer for consumption by SVGF
+  attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(flags), 0.0 /* Will be idx in prev frame */);
+  attrBuf[ofs + pidx] = vec4f(pos, bitcast<f32>(mtlInstId));
 }
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
@@ -638,10 +575,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let frame = config.frameData;
-  let w = frame.x;
-  let hMaxBounces = frame.y;
-  let h = hMaxBounces >> 8;
-  let ofs = w * h;
+  let width = frame.x;
+  let heightMaxBounces = frame.y;
+  let height = heightMaxBounces >> 8;
+  let ofs = width * height;
   let hit = hits[gidx];
   let ori = pathStatesIn[ofs + gidx];
   let dir = pathStatesIn[(ofs << 1) + gidx];
@@ -661,7 +598,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Reset attributes on first sample and bounce
   /*if((pidx & 0xf) == 0 && writeAttr) {
     let noHit = SHORT_MASK << 16;
-    attrBuf[      pidx] = vec4f(0.0, 0.0, bitcast<f32>(w * h), 0.0);
+    attrBuf[      pidx] = vec4f(0.0, 0.0, bitcast<f32>(width * height), 0.0);
     attrBuf[ofs + pidx] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
   }*/
 
@@ -670,7 +607,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     colBuf[cidx] += vec4f(throughput * config.bgColor.xyz, 1.0);
     if(writeAttr) {
       // No hit, path terminates, write attributes with values that do not hurt the filter (if not yet written)
-      reprojectAndWriteAttr(ori.xyz + 9999.0 * dir.xyz, -dir.xyz, SHORT_MASK << 16, flags, pidx >> 8, w, h);
+      writeAttributes(ori.xyz + 9999.0 * dir.xyz, -dir.xyz, SHORT_MASK << 16, flags, pidx >> 8, ofs);
     }
     return;
   }
@@ -701,7 +638,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     }
     // Path terminates, write attributes if we did not do before
     if(writeAttr) {
-      reprojectAndWriteAttr(pos, nrm, mtlInstId, flags, pidx >> 8, w, h);
+      writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
     }
     // Terminate ray after light hit (lights do not reflect)
     return;
@@ -716,19 +653,20 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // First hit and not a specular mtl, write attributes
   if(writeAttr && (flags & SPECULAR) == 0) {
-    reprojectAndWriteAttr(pos, nrm, mtlInstId, flags, pidx >> 8, w, h);
+    writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
   }
 
   seed = bitcast<u32>(ori.w);
   let r0 = rand4();
 
+  // TODO Should we drop RR due to one diffuse bounce limit?
   // Russian roulette
   // Terminate with prob inverse to throughput
   let p = min(0.95, maxComp3(throughput));
   if(r0.w > p) { // (pidx & 0xf) > 0
     // Path terminates due to russian roulette, write attributes if we did not do before
     if(writeAttr) {
-      reprojectAndWriteAttr(pos, nrm, mtlInstId, flags, pidx >> 8, w, h);
+      writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
     }
     return;
   }
@@ -743,7 +681,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var emission: vec3f;
   var lpdf: f32;
   //if(sampleLTrisUniform(rand4().xyz, pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
-  if(// TODO: (flags & SPECULAR) == 0 &&
+  if(//(flags & SPECULAR) == 0 && // TODO
     sampleLTrisRIS(pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
@@ -760,14 +698,15 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
  
   // One diffuse bounce is enough
   if((flags & DIFFUSE_BOUNCE) == 1) {
+    // Can simply return, because we wrote attributes before
     return;
   }
 
   // Reached max bounces (encoded in lower 4 bits of height)
-  if((pidx & 0xf) == (hMaxBounces & 0xf) - 1) {
+  if((pidx & 0xf) == (heightMaxBounces & 0xf) - 1) {
     // Path terminates, write attributes if we did not do before
     if(writeAttr) {
-      reprojectAndWriteAttr(pos, nrm, mtlInstId, flags, pidx >> 8, w, h);
+      writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
     }
     return;
   }
