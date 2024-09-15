@@ -77,10 +77,11 @@ const SHORT_MASK          = 0xffffu;
 const MTL_OVERRIDE_BIT    = 0x80000000u; // Bit 32
 const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
 
-// Mtl flags
-const SPECULAR            = 1u; // Current mtl is specular
-const DIFFUSE_BOUNCE      = 2u; // Had a diffuse bounce
-const SPECULAR_BOUNCE     = 4u; // Had a specular bounce
+// Mtl flags (bounces)
+const DIFFUSE_BOUNCE      = 1u;
+const SPECULAR_BOUNCE     = 2u;
+
+const BACKGROUND          = 0xfffefffe;
 
 // General constants
 const EPS                 = 0.001;
@@ -590,24 +591,20 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // For bounce 0 we index into direct col buf, further bounces into indirect col buf
   let cidx = min(pidx & 0xf, 1u) * ofs + (pidx >> 8);
 
-  // Mark for reprojection and attribute buffer writing if we are on the first sample and had no diffuse bounce before.
-  // That means we will record the attribute buffer for the filter once we are on the first diffuse hit, which might be in case
-  // the first hit is diffuse straight away or if we had one or more specular bounces so far.
-  let writeAttr = (/* sample num */ frame.w == 0) && (flags & DIFFUSE_BOUNCE) == 0;
+  // Write attribute buffer on first diffuse occurrence only (i.e. after primary hit at diffuse or via specular bounce)
+  let writeAttr = (frame.w == 0) && (flags & DIFFUSE_BOUNCE) == 0;
 
   // Reset attributes on first sample and bounce
   /*if((pidx & 0xf) == 0 && writeAttr) {
-    let noHit = SHORT_MASK << 16;
-    attrBuf[      pidx] = vec4f(0.0, 0.0, bitcast<f32>(width * height), 0.0);
-    attrBuf[ofs + pidx] = vec4f(0.0, 0.0, 0.0, bitcast<f32>(noHit));
+    writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
   }*/
 
   // No hit, terminate path
   if(hit.x == INF) {
     colBuf[cidx] += vec4f(throughput * config.bgColor.xyz, 1.0);
     if(writeAttr) {
-      // No hit, path terminates, write attributes with values that do not hurt the filter (if not yet written)
-      writeAttributes(ori.xyz + 9999.0 * dir.xyz, -dir.xyz, SHORT_MASK << 16, flags, pidx >> 8, ofs);
+      // Hit background, path terminates, write attributes with values that do not hurt the filter
+      writeAttributes(ori.xyz + 9999.0 * dir.xyz, -dir.xyz, BACKGROUND, flags, pidx >> 8, ofs);
     }
     return;
   }
@@ -649,10 +646,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   //mtl.roughness = select(1.0, mtl.roughness, (pidx & 0xf) == 0u);
 
   // Flag as "pure specular" if mtl parameters suggest, or delete the flag
-  flags = select(flags & ~SPECULAR, flags | SPECULAR, mtl.roughness < 0.05 || (mtl.roughness < 0.1 && mtl.metallic > 0.9));
+  let mtlIsSpecular = mtl.roughness < 0.05 || (mtl.roughness < 0.1 && mtl.metallic > 0.9);
 
-  // First hit and not a specular mtl, write attributes
-  if(writeAttr && (flags & SPECULAR) == 0) {
+  // Hit a diffuse material, write attributes
+  if(writeAttr && !mtlIsSpecular) {
     writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
   }
 
@@ -680,7 +677,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var emission: vec3f;
   var lpdf: f32;
   //if(sampleLTrisUniform(rand4().xyz, pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
-  if(//(flags & SPECULAR) == 0 && // TODO
+  if(//mtlIsSpecular && // TODO
     sampleLTrisRIS(pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
@@ -730,7 +727,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   pathStatesOut[ofs + gidxNext] = vec4f(pos, bitcast<f32>(seed));
 
   // Flag bounce as specular
-  flags = select(flags | DIFFUSE_BOUNCE, flags | SPECULAR_BOUNCE, (flags & SPECULAR) == 1);
+  flags |= select(DIFFUSE_BOUNCE, SPECULAR_BOUNCE, mtlIsSpecular /*&& (isSpecRefl || mtl.refractive > 0.9)*/);
 
   // Keep pixel index, set flags in bits 4-7, increase bounce num in bits 0-3
   pathStatesOut[(ofs << 1) + gidxNext] = vec4f(wi, bitcast<f32>((pidx & 0xffffff00) | (flags << 4) | ((pidx & 0xf) + 1)));
