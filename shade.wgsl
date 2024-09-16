@@ -562,7 +562,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 fn writeAttributes(pos: vec3f, nrm: vec3f, mtlInstId: u32, flags: u32, pidx: u32, ofs: u32)
 {
   // Write nrm, pos, flags and mtl/inst id to our attributes buffer for consumption by SVGF
-  attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(mtlInstId), 0.0 /* Will be idx in prev frame */);
+  attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(mtlInstId), 0.0);
   attrBuf[ofs + pidx] = vec4f(pos, bitcast<f32>(flags));
 }
 
@@ -575,6 +575,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     return;
   }
 
+  // Read data from config, hits and path state buffer
   let frame = config.frameData;
   let width = frame.x;
   let heightMaxBounces = frame.y;
@@ -595,9 +596,9 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let writeAttr = (frame.w == 0) && (flags & DIFFUSE_BOUNCE) == 0;
 
   // Reset attributes on first sample and bounce
-  /*if((pidx & 0xf) == 0 && writeAttr) {
+  if((pidx & 0xf) == 0 && writeAttr) {
     writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
-  }*/
+  }
 
   // No hit, terminate path
   if(hit.x == INF) {
@@ -658,7 +659,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Russian roulette
   // Terminate with prob inverse to throughput
-  let p = min(0.95, maxComp3(throughput));
+  let p = select(1.0, min(0.95, maxComp3(throughput)), (flags & DIFFUSE_BOUNCE) == 1);
+  //let p = min(0.95, maxComp3(throughput));
   if(r0.w > p) { // (pidx & 0xf) > 0
     // Path terminates due to russian roulette, write attributes if we did not do before
     if(writeAttr) {
@@ -677,7 +679,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var emission: vec3f;
   var lpdf: f32;
   //if(sampleLTrisUniform(rand4().xyz, pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
-  if(//mtlIsSpecular && // TODO
+  if(// !mtlIsSpecular && // TODO Activate after some more checks
     sampleLTrisRIS(pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
@@ -727,7 +729,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   pathStatesOut[ofs + gidxNext] = vec4f(pos, bitcast<f32>(seed));
 
   // Flag bounce as specular
-  flags |= select(DIFFUSE_BOUNCE, SPECULAR_BOUNCE, mtlIsSpecular /*&& (isSpecRefl || mtl.refractive > 0.9)*/);
+  flags |= select(DIFFUSE_BOUNCE, SPECULAR_BOUNCE, /*(flags & DIFFUSE_BOUNCE) == 0 &&*/ mtlIsSpecular);
 
   // Keep pixel index, set flags in bits 4-7, increase bounce num in bits 0-3
   pathStatesOut[(ofs << 1) + gidxNext] = vec4f(wi, bitcast<f32>((pidx & 0xffffff00) | (flags << 4) | ((pidx & 0xf) + 1)));

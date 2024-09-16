@@ -59,7 +59,7 @@ fn rand() -> f32
   return bitcast<f32>(0x3f800000 | (seed >> 9)) - 1.0;
 }
 
-fn rand2() -> vec2f
+/*fn rand2() -> vec2f
 {
   return vec2f(rand(), rand());
 }
@@ -67,9 +67,9 @@ fn rand2() -> vec2f
 fn rand4() -> vec4f
 {
   return vec4f(rand(), rand(), rand(), rand());
-}
+}*/
 
-/*fn hammersley(i: u32, n: u32) -> vec2f
+fn hammersley(i: u32, n: u32) -> vec2f
 {
   return vec2f(f32(i) / f32(n), f32(reverseBits(i)) * 2.3283064365386963e-10);
 }
@@ -83,7 +83,7 @@ fn rand2() -> vec2f
 fn rand4() -> vec4f
 {
   return vec4f(rand2(), rand2());
-}*/
+}
 
 // https://mathworld.wolfram.com/DiskPointPicking.html
 fn sampleDisk(r: vec2f) -> vec2f
@@ -155,5 +155,5 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Do not initialize throughput/pdf, will do in shade.wgsl for primary ray
   let ofs = w * h;
   pathStates[       ofs + gidx] = vec4f(ori, bitcast<f32>(seed));
-  pathStates[(ofs << 1) + gidx] = vec4f(dir, bitcast<f32>(gidx << 8)); // Flags and bounce num are implicitly 0
+  pathStates[(ofs << 1) + gidx] = vec4f(dir, bitcast<f32>((gidx << 8))); // Flags and bounce num are implicitly 0
 }
