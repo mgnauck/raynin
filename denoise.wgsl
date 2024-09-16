@@ -22,8 +22,8 @@
 const SHORT_MASK      = 0xffffu;
 const SPECULAR_BOUNCE = 2u;
 const ALPHA           = vec3f(0.2, 0.2, 0.2); // Alpha for dir/ind col and moments
-const SIG_LUM         = 4.0;
-const SIG_NRM         = 128.0;
+const SIG_LUM         = 5.0;
+const SIG_NRM         = 64.0;
 const SIG_POS         = 1.0; // Depth
 const EPS             = 0.00001;
 const INF             = 3.402823466e+38;
