@@ -189,6 +189,29 @@ fn searchPosition(pix: ptr<function, vec2f>, bestDist: ptr<function, f32>, pos: 
   return bestTapNum;
 }
 
+fn checkReproj(pos4: vec4f, lpos4: vec4f, nrm4: vec4f, lnrm4: vec4f) -> bool
+{
+  // Normals
+  let nrm = octToDir(nrm4.xy);
+  if(dot(nrm, octToDir(lnrm4.xy)) < 0.9) {
+    return false;
+  }
+
+  // Depth (plane distance)
+  if(abs(dot(pos4.xyz - lpos4.xyz, nrm)) > 0.01) {
+    return false;
+  }
+
+  // Mtl flag
+  if((bitcast<u32>(pos4.w) & SPECULAR_BOUNCE) != (bitcast<u32>(lpos4.w) & SPECULAR_BOUNCE)) {
+    return false;
+  }
+
+  // Mtl/inst id
+  //return bitcast<u32>(nrm4.z) == bitcast<u32>(lnrm4.z);
+  return true;
+}
+
 // Temporally accumulate illumination + moments and calc per pixel luminance variance
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
@@ -252,21 +275,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Check out of bounds for index of reprojected pixel
   ignorePrev |= lgidx == w * h;
 
-  // xy = encoded normal, z = mtl id << 16 | inst id
-  let nrm4 = attrBuf[gidx];
-
-  // Check via mtl id if this was a no hit
-  ignorePrev = (bitcast<u32>(nrm4.z) >> 16) == SHORT_MASK;
-
-  // Check if current and last material and instance ids match
+  // Read attributes 
+  let nrm4 = attrBuf[gidx]; // Normal with xy = encoded normal, z = mtl id << 16 | inst id
   let lnrm4 = lastAttrBuf[lgidx];
+  let lpos4 = lastAttrBuf[ofs + lgidx]; // Last position in xyz, mtl flags in w
 
-  //if((bitcast<u32>(pos4.w) & SPECULAR_BOUNCE) == 0) {
-  ignorePrev |= bitcast<u32>(nrm4.z) != bitcast<u32>(lnrm4.z);
-  //}
-
-  // Consider differences of current and last normal
-  ignorePrev |= dot(octToDir(nrm4.xy), octToDir(lnrm4.xy)) < 0.9;
+  ignorePrev |= !ignorePrev && !checkReproj(pos4, lpos4, nrm4, lnrm4);
 
   // Read and increase age but keep upper bound
   let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrev));
