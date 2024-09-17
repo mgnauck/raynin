@@ -115,9 +115,9 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   return vec2f(res.x * d1x / (d1x + d2x), res.y * d1y / (d1y + d2y));
 }
 
-fn getDist(pix: vec2i, pos: vec3f, res: vec2i) -> f32
+fn getDist(pix: vec2f, pos: vec3f, res: vec2f) -> f32
 {
-  if(any(pix < vec2i(0i)) || any(pix >= res)) {
+  if(any(pix < vec2f(0.0)) || any(pix >= res)) {
     return INF;
   }
 
@@ -146,13 +146,13 @@ fn getDist(pix: vec2i, pos: vec3f, res: vec2i) -> f32
   return length(pos - lpos4.xyz);
 }
 
-fn getDistanceSmall(pix: vec2f, pos: vec3f, res: vec2i) -> f32
+fn getDistanceSmall(pix: vec2f, pos: vec3f, res: vec2f) -> f32
 {
   // Small 2x2 pattern at input pixel
-  let p0 = vec2i(i32(pix.x), i32(pix.y));
-  let p1 = p0 + vec2i(1, 0);
-  let p2 = p0 + vec2i(0, 1);
-  let p3 = p0 + vec2i(1, 1);
+  let p0 = pix;
+  let p1 = p0 + vec2f(1.0, 0.0);
+  let p2 = p0 + vec2f(0.0, 1.0);
+  let p3 = p0 + vec2f(1.0, 1.0);
 
   // Get distances
   let dist = vec4f(getDist(p0, pos, res), getDist(p1, pos, res), getDist(p2, pos, res), getDist(p3, pos, res));
@@ -168,7 +168,7 @@ fn getDistanceSmall(pix: vec2f, pos: vec3f, res: vec2i) -> f32
 }
 
 // Voorhuis: Beyond Spatiotemporal Variance-Guided Filtering
-fn searchPosition(pix: ptr<function, vec2f>, bestDist: ptr<function, f32>, pos: vec3f, stepSize: f32, res: vec2i) -> u32
+fn searchPosition(pix: ptr<function, vec2f>, bestDist: ptr<function, f32>, pos: vec3f, stepSize: f32, res: vec2f) -> u32
 {
   // Large diamond search pattern, scaled by step size
   let p = array<vec2f, 4u>(
@@ -260,7 +260,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     var stepSize = 5.0;
     var cnt = 0u;
     loop {
-      let tapNum = searchPosition(&cand, &dist, pos4.xyz, stepSize, vec2i(i32(res.x), i32(res.y)));
+      let tapNum = searchPosition(&cand, &dist, pos4.xyz, stepSize, res);
       // If center tap was best pos (i.e. there was no change), reduce the step size
       stepSize *= select(1.0, 0.45, tapNum == 0);
       cnt++;
