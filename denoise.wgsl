@@ -78,7 +78,7 @@ fn octToDir(oct: vec2f) -> vec3f
 }*/
 
 // Flipcode's Jacco Bikker: https://jacco.ompf2.com/2024/01/18/reprojection-in-a-ray-tracer/
-fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2i
+fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2f) -> vec2f
 {
   // View plane height and width
   let vheight = 2.0 * eye.w * right.w; // 2 * halfTanVertFov * focDist
@@ -112,7 +112,7 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   let d1y = dot(topNrm, toPos);
   let d2y = dot(botNrm, toPos);
 
-  return vec2i(i32(res.x * d1x / (d1x + d2x)), i32(res.y * d1y / (d1y + d2y)));
+  return vec2f(res.x * d1x / (d1x + d2x), res.y * d1y / (d1y + d2y));
 }
 
 fn getDist(pix: vec2i, pos: vec3f, res: vec2i) -> f32
@@ -198,7 +198,7 @@ fn checkReproj(pos4: vec4f, lpos4: vec4f, nrm4: vec4f, lnrm4: vec4f) -> bool
   }
 
   // Depth (plane distance)
-  if(abs(dot(pos4.xyz - lpos4.xyz, nrm)) > 0.01) {
+  if(abs(dot(pos4.xyz - lpos4.xyz, nrm)) > 0.05) {
     return false;
   }
 
@@ -224,7 +224,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let ofs = w * h;
-  let res = vec2i(i32(w), i32(h));
+  let res = vec2f(f32(w), f32(h));
   let gidx = w * globalId.y + globalId.x;
 
   let lup = lastCamera[2];
@@ -236,21 +236,23 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let pos4 = attrBuf[ofs + gidx];
 
   // Reproject current position to last frame
-  var pix = calcScreenSpacePos(pos4.xyz, lastCamera[0], lastCamera[1], lup, vec2f(f32(res.x), f32(res.y)));
-  var lgidx = select(u32(res.x * pix.y + pix.x), w * h, any(pix < vec2i(0i)) || any(pix >= res));
+  var pix = calcScreenSpacePos(pos4.xyz, lastCamera[0], lastCamera[1], lup, res);
 
   // If there was a pure specular bounce, the reprojected position can be wrong
   if((bitcast<u32>(pos4.w) & SPECULAR_BOUNCE) == 1) {
+
+    let lidx = select(u32(res.x * pix.y + pix.x), w * h, any(pix < vec2f(0.0)) || any(pix >= res));
+
     // First candidate is current pos reprojected to last frame
-    let cand1 = vec2f(f32(pix.x), f32(pix.y));
-    let dist1 = length(pos4.xyz - lastAttrBuf[ofs + lgidx].xyz);
+    let cand1 = pix;
+    let dist1 = length(pos4.xyz - lastAttrBuf[ofs + lidx].xyz);
 
     // Second candidate is current pos as is taken to last frame
     let cand2 = vec2f(f32(globalId.x), f32(globalId.y));
     let dist2 = length(pos4.xyz - lastAttrBuf[ofs + gidx].xyz);
 
     // Decide which one is better as starting point
-    let useCand2 = dist2 < dist1 || lgidx == w * h;
+    let useCand2 = dist2 < dist1 || lidx == w * h;
     var dist = select(dist1, dist2, useCand2);
     var cand = select(cand1, cand2, useCand2);
 
@@ -258,7 +260,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     var stepSize = 5.0;
     var cnt = 0u;
     loop {
-      let tapNum = searchPosition(&cand, &dist, pos4.xyz, stepSize, res);
+      let tapNum = searchPosition(&cand, &dist, pos4.xyz, stepSize, vec2i(i32(res.x), i32(res.y)));
       // If center tap was best pos (i.e. there was no change), reduce the step size
       stepSize *= select(1.0, 0.45, tapNum == 0);
       cnt++;
@@ -268,19 +270,37 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     }
 
     // Reassign result from search
-    pix = vec2i(i32(cand.x), i32(cand.y));
-    lgidx = select(u32(res.x * pix.y + pix.x), w * h, any(pix < vec2i(0i)) || any(pix >= res));
+    pix = cand;
   }
 
-  // Check out of bounds for index of reprojected pixel
-  ignorePrev |= lgidx == w * h;
+  pix += vec2f(0.5, 0.5);
+  ignorePrev |= any(pix < vec2f(0.0)) || any(pix >= res);
 
-  // Read attributes 
-  let nrm4 = attrBuf[gidx]; // Normal with xy = encoded normal, z = mtl id << 16 | inst id
-  let lnrm4 = lastAttrBuf[lgidx];
-  let lpos4 = lastAttrBuf[ofs + lgidx]; // Last position in xyz, mtl flags in w
+  var ldcol = vec4f(0.0);
+  var licol = vec4f(0.0);
+  var lmom  = vec4f(0.0);
+  if(!ignorePrev) {
 
-  ignorePrev |= !ignorePrev && !checkReproj(pos4, lpos4, nrm4, lnrm4);
+    // Read last checked
+
+    let lgidx = select(u32(res.x * floor(pix.y) + floor(pix.x)), w * h, any(pix < vec2f(0.0)) || any(pix >= res));
+
+    // Check out of bounds for index of reprojected pixel
+    ignorePrev |= lgidx == w * h;
+
+    // Read attributes 
+    let nrm4 = attrBuf[gidx]; // Normal with xy = encoded normal, z = mtl id << 16 | inst id
+    let lnrm4 = lastAttrBuf[lgidx];
+    let lpos4 = lastAttrBuf[ofs + lgidx]; // Last position in xyz, mtl flags in w
+
+    ignorePrev |= !ignorePrev && !checkReproj(pos4, lpos4, nrm4, lnrm4);
+
+    if(!ignorePrev) {
+      ldcol = accumColVarInBuf[      lgidx];
+      licol = accumColVarInBuf[ofs + lgidx];
+      lmom = accumMomInBuf[lgidx];
+    }
+  }
 
   // Read and increase age but keep upper bound
   let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrev));
@@ -297,20 +317,30 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let dlum = luminance(dcol);
   let ilum = luminance(icol);
 
-  // Temporal integration using first and second raw moments of col luminance
-  let mom = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha.z);
+  var mom = vec4f(0.0);
   if(age <= 4.0) {
-    accumMomOutBuf[gidx] = mix(accumMomInBuf[lgidx], vec4f(dlum, dlum, ilum, ilum), 1.0 / age);
+    mom = mix(lmom, vec4f(dlum, dlum, ilum, ilum), 1.0 / age);
+  } else {
+    mom = mix(lmom, vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha.z);
+  }
+  accumMomOutBuf[gidx] = mom;
+
+ /*
+  // Temporal integration using first and second raw moments of col luminance
+  let mom = mix(lmom, vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha.z);
+  if(age <= 4.0) {
+    accumMomOutBuf[gidx] = mix(lmom, vec4f(dlum, dlum, ilum, ilum), 1.0 / age);
   } else {
     accumMomOutBuf[gidx] = mom;
   }
+  */
 
   // Estimate temporal variance from integrated moments
   let variance = max(vec2f(0.0), mom.yw - mom.xz * mom.xz);
 
   // Temporal integration of direct and indirect illumination and store variance
-  accumColVarOutBuf[      gidx] = vec4f(mix(accumColVarInBuf[      lgidx].xyz, dcol, alpha.x), variance.x);
-  accumColVarOutBuf[ofs + gidx] = vec4f(mix(accumColVarInBuf[ofs + lgidx].xyz, icol, alpha.y), variance.y);
+  accumColVarOutBuf[      gidx] = vec4f(mix(ldcol.xyz, dcol, alpha.x), variance.x);
+  accumColVarOutBuf[ofs + gidx] = vec4f(mix(licol.xyz, icol, alpha.y), variance.y);
 
   // Track age (already incremented)
   accumHisOutBuf[gidx] = age;
