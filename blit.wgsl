@@ -12,6 +12,7 @@
 @group(0) @binding(0) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(1) var<storage, read> colBuf: array<vec4f>;
 @group(0) @binding(2) var<storage, read> accumColBuf: array<vec4f>;
+@group(0) @binding(3) var<storage, read> attrBuf: array<vec4f>;
 
 @vertex
 fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
@@ -39,6 +40,12 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
   return vec4f(pos[vertexIndex], 0.0, 1.0);
 }
 
+fn octToDir(oct: vec2f) -> vec3f
+{
+  let v = vec3f(oct, 1.0 - abs(oct.x) - abs(oct.y));
+  return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
+}
+
 // Accumulated direct and indirect illumination
 @fragment
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
@@ -50,6 +57,10 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
   let dcol = accumColBuf[        gidx].xyz;
   let icol = accumColBuf[w * h + gidx].xyz;
   return vec4f(pow(dcol + icol, vec3f(0.4545)), 1.0);
+
+  /*let p = attrBuf[w * h + gidx].xyz;
+  let n = octToDir(attrBuf[gidx].xy);
+  return vec4f(pow(p, vec3f(0.4545)), 1.0);*/
 }
 
 // No reprojection/no filter, just pass through from direct/indirect illumination buffer

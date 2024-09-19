@@ -73,24 +73,25 @@ struct Mtl
 }*/
 
 // Scene data handling
-const SHORT_MASK          = 0xffffu;
-const MTL_OVERRIDE_BIT    = 0x80000000u; // Bit 32
-const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
+const SHORT_MASK            = 0xffffu;
+const MTL_OVERRIDE_BIT      = 0x80000000u; // Bit 32
+const INST_DATA_MASK        = 0x3fffffffu; // Bits 31-0
 
 // Mtl flags (bounces)
-const DIFFUSE_BOUNCE      = 1u;
-const SPECULAR_BOUNCE     = 2u;
+const DIFFUSE_BOUNCE        = 1u;
+const PURE_SPEC_REFL_BOUNCE = 2u;
+const REFRACTION_BOUNCE     = 4u;
 
-const BACKGROUND          = 0xfffefffe;
+const BACKGROUND            = 0xfffefffe;
 
 // General constants
-const EPS                 = 0.001;
-const INF                 = 3.402823466e+38;
-const PI                  = 3.141592;
-const TWO_PI              = 6.283185;
-const INV_PI              = 1.0 / PI;
+const EPS                   = 0.001;
+const INF                   = 3.402823466e+38;
+const PI                    = 3.141592;
+const TWO_PI                = 6.283185;
+const INV_PI                = 1.0 / PI;
 
-const WG_SIZE             = vec3u(16, 16, 1);
+const WG_SIZE               = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
 @group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
@@ -382,7 +383,7 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
 }
 
 // https://psgraphics.blogspot.com/2022/01/what-is-direct-lighting-next-event.html
-/*fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let bc = sampleBarycentric(r0.xy);
 
@@ -411,7 +412,7 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
   *pdf = 1.0 / (em.w * f32(ltriCnt));
 
   return visible;
-}*/
+}
 
 fn sampleLTriUniformPdf(ltriId: u32) -> f32
 {
@@ -561,9 +562,9 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 
 fn writeAttributes(pos: vec3f, nrm: vec3f, mtlInstId: u32, flags: u32, pidx: u32, ofs: u32)
 {
-  // Write nrm, pos, flags and mtl/inst id to our attributes buffer for consumption by SVGF
+  // Write nrm, pos, pure specular reflection flag and mtl/inst id to our attr buf for SVGF
   attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(mtlInstId), 0.0);
-  attrBuf[ofs + pidx] = vec4f(pos, bitcast<f32>(flags));
+  attrBuf[ofs + pidx] = vec4f(pos, select(0.0, 1.0, (flags & PURE_SPEC_REFL_BOUNCE) > 0));
 }
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
@@ -592,20 +593,21 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // For bounce 0 we index into direct col buf, further bounces into indirect col buf
   let cidx = min(pidx & 0xf, 1u) * ofs + (pidx >> 8);
 
-  // Write attribute buffer on first diffuse occurrence only (i.e. after primary hit at diffuse or via specular bounce)
-  let writeAttr = (frame.w == 0) && (flags & DIFFUSE_BOUNCE) == 0;
+  // Write attribute buffer on first sample and first diffuse or refaction hit
+  let writeAttr = frame.w == 0 && (flags & DIFFUSE_BOUNCE) == 0 && (flags & REFRACTION_BOUNCE) == 0;
 
   // Reset attributes on first sample and bounce
-  if((pidx & 0xf) == 0 && writeAttr) {
+  /*if((pidx & 0xf) == 0 && writeAttr) {
     writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
-  }
+  }*/
 
   // No hit, terminate path
   if(hit.x == INF) {
     colBuf[cidx] += vec4f(throughput * config.bgColor.xyz, 1.0);
     if(writeAttr) {
+    //if((pidx & 0xf) == 0) {
       // Hit background, path terminates, write attributes with values that do not hurt the filter
-      writeAttributes(ori.xyz + 9999.0 * dir.xyz, -dir.xyz, BACKGROUND, flags, pidx >> 8, ofs);
+      writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
     }
     return;
   }
@@ -615,6 +617,11 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var ltriId: u32;
   var mtl: Mtl;
   let mtlInstId = finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
+
+  // Write attributes on primary hit
+  /*if((pidx & 0xf) == 0) {
+    writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
+  }*/
 
   // Hit light via material direction
   if(mtl.emissive > 0.0) {
@@ -636,7 +643,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     }
     // Path terminates, write attributes if we did not do before
     if(writeAttr) {
-      writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
+      writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
+      //writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
     }
     // Terminate ray after light hit (lights do not reflect)
     return;
@@ -646,11 +654,11 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   //mtl.roughness = min(1.0, mtl.roughness + f32(pidx & 0xf) * mtl.roughness * 0.75);
   //mtl.roughness = select(1.0, mtl.roughness, (pidx & 0xf) == 0u);
 
-  // Flag as "pure specular" if mtl parameters suggest, or delete the flag
-  let mtlIsSpecular = mtl.roughness < 0.05 || (mtl.roughness < 0.1 && mtl.metallic > 0.9);
+  // Flag as "pure specular reflection"
+  let pureSpecReflection = (mtl.roughness < 0.05 || (mtl.roughness < 0.1 && mtl.metallic > 0.9)) && mtl.refractive == 0.0;
 
-  // Hit a diffuse material, write attributes
-  if(writeAttr && !mtlIsSpecular) {
+  // Hit a diffuse or refractive mtl, write attributes
+  if(writeAttr && !pureSpecReflection) {
     writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
   }
 
@@ -659,7 +667,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Russian roulette
   // Terminate with prob inverse to throughput
-  let p = select(1.0, min(0.95, maxComp3(throughput)), (flags & DIFFUSE_BOUNCE) == 1);
+  let p = select(1.0, min(0.95, maxComp3(throughput)), (flags & DIFFUSE_BOUNCE) > 0 || (flags & REFRACTION_BOUNCE) > 0);
   //let p = min(0.95, maxComp3(throughput));
   if(r0.w > p) { // (pidx & 0xf) > 0
     // Path terminates due to russian roulette, write attributes if we did not do before
@@ -678,8 +686,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var ldistInv: f32;
   var emission: vec3f;
   var lpdf: f32;
-  //if(sampleLTrisUniform(rand4().xyz, pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
-  if(// !mtlIsSpecular && // TODO Activate after some more checks
+  if((!pureSpecReflection || mtl.refractive > 0.0) &&
+    //sampleLTrisUniform(rand4().xyz, pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     sampleLTrisRIS(pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
@@ -695,7 +703,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
  
   // One diffuse bounce is enough
-  if((flags & DIFFUSE_BOUNCE) == 1) {
+  if((flags & REFRACTION_BOUNCE) == 0 && (flags & DIFFUSE_BOUNCE) > 0) {
     // Can simply return, because we wrote attributes before
     return;
   }
@@ -711,15 +719,21 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Sample material
   var wi: vec3f;
-  var fres: vec3f;
-  var isSpecRefl: bool;
   var pdf: f32;
-  if(!sampleMaterial(mtl, -dir.xyz, nrm, r0.xyz, &wi, &fres, &isSpecRefl, &pdf)) {
-    return;
+  if(pureSpecReflection) {
+    // Handle pure specular reflection separatedly to avoid overblurring from SVGF
+    wi = reflect(dir.xyz, nrm);
+    throughput *= mtl.col * abs(dot(nrm, wi));
+    pdf = 1.0;
+  } else {
+    // Everything else is considered glossy and is handled by microfacet bsdf
+    var fres: vec3f;
+    var isSpecRefl: bool;
+    if(!sampleMaterial(mtl, -dir.xyz, nrm, r0.xyz, &wi, &fres, &isSpecRefl, &pdf)) {
+      return;
+    }
+    throughput *= evalMaterial(mtl, -dir.xyz, nrm, wi, fres, isSpecRefl) * abs(dot(nrm, wi)) / pdf;
   }
-
-  // Apply bsdf
-  throughput *= evalMaterial(mtl, -dir.xyz, nrm, wi, fres, isSpecRefl) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the path state buffer
   let gidxNext = atomicAdd(&config.extRayCnt, 1u);
@@ -728,8 +742,9 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   pathStatesOut[      gidxNext] = vec4f(throughput, pdf);
   pathStatesOut[ofs + gidxNext] = vec4f(pos, bitcast<f32>(seed));
 
-  // Flag bounce as specular
-  flags |= select(DIFFUSE_BOUNCE, SPECULAR_BOUNCE, /*(flags & DIFFUSE_BOUNCE) == 0 &&*/ mtlIsSpecular);
+  // Flag this bounce by its material type
+  flags |= select(DIFFUSE_BOUNCE, PURE_SPEC_REFL_BOUNCE, (pureSpecReflection && mtl.refractive == 0.0));
+  flags |= select(0, REFRACTION_BOUNCE, mtl.refractive > 0.0);
 
   // Keep pixel index, set flags in bits 4-7, increase bounce num in bits 0-3
   pathStatesOut[(ofs << 1) + gidxNext] = vec4f(wi, bitcast<f32>((pidx & 0xffffff00) | (flags << 4) | ((pidx & 0xf) + 1)));

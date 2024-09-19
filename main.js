@@ -101,7 +101,7 @@ let wa, res = {};
 let frames = 0;
 let samples = 0;
 let converge = false;
-let filter = false;
+let filter = true;
 let reproj = filter | false;
 
 function handleMouseMoveEvent(e)
@@ -589,6 +589,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } }, // Debug attrBuf
     ]
   });
 
@@ -598,6 +599,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
       { binding: 2, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ATTR] } },
     ]
   });
 
@@ -607,6 +609,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
       { binding: 2, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ATTR] } },
     ]
   });
 
@@ -616,6 +619,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
       { binding: 2, resource: { buffer: res.buf[BUF_ACC2] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ATTR] } },
     ]
   });
 
@@ -768,7 +772,7 @@ function reprojectAndFilter(commandEncoder)
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE4 + res.accumIdx]);
     passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
     passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-    */
+    //*/
   }
 
   passEncoder.end();

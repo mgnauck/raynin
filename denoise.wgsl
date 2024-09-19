@@ -20,7 +20,6 @@
 }*/
 
 const SHORT_MASK      = 0xffffu;
-const SPECULAR_BOUNCE = 2u;
 const ALPHA           = vec3f(0.2, 0.2, 0.2); // Alpha for dir/ind col and moments
 const SIG_LUM         = 5.0;
 const SIG_NRM         = 64.0;
@@ -115,9 +114,9 @@ fn calcScreenSpacePos(pos: vec3f, eye: vec4f, right: vec4f, up: vec4f, res: vec2
   return vec2f(res.x * d1x / (d1x + d2x), res.y * d1y / (d1y + d2y));
 }
 
-fn getDist(pix: vec2f, pos: vec3f, res: vec2f) -> f32
+fn getDist(pix: vec2i, pos: vec3f, res: vec2i) -> f32
 {
-  if(any(pix < vec2f(0.0)) || any(pix >= res)) {
+  if(any(pix < vec2i(0)) || any(pix >= res)) {
     return INF;
   }
 
@@ -125,7 +124,7 @@ fn getDist(pix: vec2f, pos: vec3f, res: vec2f) -> f32
   let lpos4 = lastAttrBuf[u32(res.x * res.y) + idx];
 
   // Specular only
-  if((bitcast<u32>(lpos4.w) & SPECULAR_BOUNCE) != 1) {
+  if(lpos4.w == 0.0) {
     return INF;
   }
 
@@ -133,9 +132,9 @@ fn getDist(pix: vec2f, pos: vec3f, res: vec2f) -> f32
   let lnrm4 = lastAttrBuf[idx];
 
   // Mtl and inst id match
-  if(bitcast<u32>(nrm4.z) != bitcast<u32>(lnrm4.z)) {
+  /*if(nrm4.z != lnrm4.z) {
     return INF;
-  }
+  }*/
 
   // Normals match
   if(dot(octToDir(nrm4.xy), octToDir(lnrm4.xy)) < 0.9) {
@@ -146,16 +145,15 @@ fn getDist(pix: vec2f, pos: vec3f, res: vec2f) -> f32
   return length(pos - lpos4.xyz);
 }
 
-fn getDistanceSmall(pix: vec2f, pos: vec3f, res: vec2f) -> f32
+fn getDistanceSmall(pix: vec2f, pos: vec3f, res: vec2i) -> f32
 {
-  // Small 2x2 pattern at input pixel
-  let p0 = pix;
-  let p1 = p0 + vec2f(1.0, 0.0);
-  let p2 = p0 + vec2f(0.0, 1.0);
-  let p3 = p0 + vec2f(1.0, 1.0);
+  // Get distances with small 3x2 pattern
+  let p = vec2i(i32(pix.x), i32(pix.y));
+  let dist = vec4f(
+    getDist(p, pos, res), getDist(p + vec2i(1, 0), pos, res),
+    getDist(p + vec2i(0, 1), pos, res), getDist(p + vec2i(1, 1), pos, res));
 
-  // Get distances
-  let dist = vec4f(getDist(p0, pos, res), getDist(p1, pos, res), getDist(p2, pos, res), getDist(p3, pos, res));
+  //return dot(dist, vec4f(1.0)) / 4.0;
 
   // Bilinear filter distances to approximate subpixel accuracy (limit temporal instabilities)
   let f = fract(pix);
@@ -168,7 +166,7 @@ fn getDistanceSmall(pix: vec2f, pos: vec3f, res: vec2f) -> f32
 }
 
 // Voorhuis: Beyond Spatiotemporal Variance-Guided Filtering
-fn searchPosition(pix: ptr<function, vec2f>, bestDist: ptr<function, f32>, pos: vec3f, stepSize: f32, res: vec2f) -> u32
+fn searchPosition(pix: ptr<function, vec2f>, bestDist: ptr<function, f32>, pos: vec3f, stepSize: f32, res: vec2i) -> u32
 {
   // Large diamond search pattern, scaled by step size
   let p = array<vec2f, 4u>(
@@ -203,13 +201,79 @@ fn checkReproj(pos4: vec4f, lpos4: vec4f, nrm4: vec4f, lnrm4: vec4f) -> bool
   }
 
   // Mtl flag
-  if((bitcast<u32>(pos4.w) & SPECULAR_BOUNCE) != (bitcast<u32>(lpos4.w) & SPECULAR_BOUNCE)) {
+  /*if(pos4.w != lpos4.w) {
     return false;
-  }
+  }*/
 
   // Mtl/inst id
-  //return bitcast<u32>(nrm4.z) == bitcast<u32>(lnrm4.z);
+  //return nrm4.z == lnrm4.z;
   return true;
+}
+
+fn getLastChecked(pix: vec2f, pos: vec4f, nrm: vec4f, res: vec2f, ldcol: ptr<function, vec4f>, licol: ptr<function, vec4f>, lmom: ptr<function, vec4f>) -> bool
+{
+  if(all(pix >= vec2f(0.0)) && all(pix < res)) {
+    let ofs = u32(res.x * res.y);
+    let idx = u32(res.x * floor(pix.y) + floor(pix.x));
+    let lpos = lastAttrBuf[ofs + idx];
+    let lnrm = lastAttrBuf[      idx];
+    if(checkReproj(pos, lpos, nrm, lnrm)) {
+      *ldcol = accumColVarInBuf[      idx];
+      *licol = accumColVarInBuf[ofs + idx];
+      *lmom =     accumMomInBuf[      idx];
+      return true;
+    }
+  }
+  return false;
+}
+
+fn getLastFilteredChecked(pix: vec2f, pos: vec4f, nrm: vec4f, res: vec2f, ldcol: ptr<function, vec4f>, licol: ptr<function, vec4f>, lmom: ptr<function, vec4f>) -> bool
+{
+  if(all(pix >= vec2f(0.0)) && all(pix < res - vec2f(1.0))) {
+
+    let ofs = u32(res.x * res.y);
+    let w = u32(res.x);
+    let p = vec2u(u32(floor(pix.x)), u32(floor(pix.y)));
+
+    let idx0 = w * (p.y + 0) + (p.x + 0);
+    let idx1 = w * (p.y + 0) + (p.x + 1);
+    let idx2 = w * (p.y + 1) + (p.x + 0);
+    let idx3 = w * (p.y + 1) + (p.x + 1);
+
+    // Last position in xyz, mtl flags in w
+    let lpos0 = lastAttrBuf[ofs + idx0];
+    let lpos1 = lastAttrBuf[ofs + idx1];
+    let lpos2 = lastAttrBuf[ofs + idx2];
+    let lpos3 = lastAttrBuf[ofs + idx3];
+
+    // Last nrm with xy = encoded nrm, z = mtl/inst id, w = unused
+    let lnrm0 = lastAttrBuf[idx0];
+    let lnrm1 = lastAttrBuf[idx1];
+    let lnrm2 = lastAttrBuf[idx2];
+    let lnrm3 = lastAttrBuf[idx3];
+
+    // Bilinear filter
+    let f = fract(pix);
+    let w0 = select(0.0, (1.0 - f.x) * (1.0 - f.y), checkReproj(pos, lpos0, nrm, lnrm0));
+    let w1 = select(0.0,        f.x  * (1.0 - f.y), checkReproj(pos, lpos1, nrm, lnrm1));
+    let w2 = select(0.0, (1.0 - f.x) *         f.y, checkReproj(pos, lpos2, nrm, lnrm2));
+    let w3 = select(0.0,        f.x  *         f.y, checkReproj(pos, lpos3, nrm, lnrm3));
+
+    var sumW = w0 + w1 + w2 + w3;
+
+    if(sumW > EPS) {
+
+      sumW = 1.0 / sumW;
+
+      *ldcol = (w0 * accumColVarInBuf[      idx0] + w1 * accumColVarInBuf[      idx1] + w2 * accumColVarInBuf[      idx2] + w3 * accumColVarInBuf[      idx3]) * sumW;
+      *licol = (w0 * accumColVarInBuf[ofs + idx0] + w1 * accumColVarInBuf[ofs + idx1] + w2 * accumColVarInBuf[ofs + idx2] + w3 * accumColVarInBuf[ofs + idx3]) * sumW;
+      *lmom  = (w0 *    accumMomInBuf[      idx0] + w1 *    accumMomInBuf[      idx1] + w2 *    accumMomInBuf[      idx2] + w3 *    accumMomInBuf[      idx3]) * sumW;
+
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // Temporally accumulate illumination + moments and calc per pixel luminance variance
@@ -232,75 +296,70 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Flag if this is the first frame
   var ignorePrev = all(lup.xyz == vec3f(0.0));
 
-  // Position in xyz and material flags in w
-  let pos4 = attrBuf[ofs + gidx];
+   // Nrm encoded in xy, mtl/inst id in z, w unused
+  let nrm4 = attrBuf[gidx];
 
-  // Reproject current position to last frame
-  var pix = calcScreenSpacePos(pos4.xyz, lastCamera[0], lastCamera[1], lup, res);
+  // Check if no hit
+  ignorePrev |= bitcast<u32>(nrm4.z) >> 16 == SHORT_MASK;
 
-  // If there was a pure specular bounce, the reprojected position can be wrong
-  if((bitcast<u32>(pos4.w) & SPECULAR_BOUNCE) == 1) {
-
-    let lidx = select(u32(res.x * pix.y + pix.x), w * h, any(pix < vec2f(0.0)) || any(pix >= res));
-
-    // First candidate is current pos reprojected to last frame
-    let cand1 = pix;
-    let dist1 = length(pos4.xyz - lastAttrBuf[ofs + lidx].xyz);
-
-    // Second candidate is current pos as is taken to last frame
-    let cand2 = vec2f(f32(globalId.x), f32(globalId.y));
-    let dist2 = length(pos4.xyz - lastAttrBuf[ofs + gidx].xyz);
-
-    // Decide which one is better as starting point
-    let useCand2 = dist2 < dist1 || lidx == w * h;
-    var dist = select(dist1, dist2, useCand2);
-    var cand = select(cand1, cand2, useCand2);
-
-    // Begin to search from the evaluated position
-    var stepSize = 5.0;
-    var cnt = 0u;
-    loop {
-      let tapNum = searchPosition(&cand, &dist, pos4.xyz, stepSize, res);
-      // If center tap was best pos (i.e. there was no change), reduce the step size
-      stepSize *= select(1.0, 0.45, tapNum == 0);
-      cnt++;
-      if(cnt >= 25 || stepSize < 0.05) {
-        break;
-      }
-    }
-
-    // Reassign result from search
-    pix = cand;
-  }
-
-  pix += vec2f(0.5, 0.5);
-  ignorePrev |= any(pix < vec2f(0.0)) || any(pix >= res);
-
+  // Last direct/indirect illumination and moments
   var ldcol = vec4f(0.0);
   var licol = vec4f(0.0);
   var lmom  = vec4f(0.0);
+
   if(!ignorePrev) {
 
-    // Read last checked
+    // Position in xyz and material flags in w
+    let pos4 = attrBuf[ofs + gidx];
 
-    let lgidx = select(u32(res.x * floor(pix.y) + floor(pix.x)), w * h, any(pix < vec2f(0.0)) || any(pix >= res));
+    // Reproject current position to last frame
+    var pix = calcScreenSpacePos(pos4.xyz, lastCamera[0], lastCamera[1], lup, res);
 
-    // Check out of bounds for index of reprojected pixel
-    ignorePrev |= lgidx == w * h;
+    // If there was a pure specular bounce, the reprojected position can be wrong
+    if(pos4.w == 1.0) {
 
-    // Read attributes 
-    let nrm4 = attrBuf[gidx]; // Normal with xy = encoded normal, z = mtl id << 16 | inst id
-    let lnrm4 = lastAttrBuf[lgidx];
-    let lpos4 = lastAttrBuf[ofs + lgidx]; // Last position in xyz, mtl flags in w
+      let lidx = select(u32(res.x * pix.y + pix.x), w * h, any(pix < vec2f(0.0)) || any(pix >= res));
 
-    ignorePrev |= !ignorePrev && !checkReproj(pos4, lpos4, nrm4, lnrm4);
+      // First candidate is current pos reprojected to last frame
+      let cand1 = pix;
+      let dist1 = length(pos4.xyz - lastAttrBuf[ofs + lidx].xyz);
 
-    if(!ignorePrev) {
-      ldcol = accumColVarInBuf[      lgidx];
-      licol = accumColVarInBuf[ofs + lgidx];
-      lmom = accumMomInBuf[lgidx];
+      // Second candidate is current pos as is taken to last frame
+      let cand2 = vec2f(f32(globalId.x), f32(globalId.y));
+      let dist2 = length(pos4.xyz - lastAttrBuf[ofs + gidx].xyz);
+
+      // Decide which one is better as starting point
+      let useCand2 = dist2 < dist1 || lidx == w * h;
+      var dist = select(dist1, dist2, useCand2);
+      var cand = select(cand1, cand2, useCand2);
+
+      // Begin to search from the evaluated position
+      var stepSize = 5.0;
+      var cnt = 0u;
+      loop {
+        let tapNum = searchPosition(&cand, &dist, pos4.xyz, stepSize, vec2i(i32(res.x), i32(res.y)));
+        // If center tap was best pos (i.e. there was no change), reduce the step size
+        stepSize *= select(1.0, 0.45, tapNum == 0);
+        cnt++;
+        if(cnt >= 20 || stepSize < 0.05) {
+          break;
+        }
+      }
+
+      // Re-assign result from search
+      pix = cand;
     }
+
+    pix += vec2f(0.5, 0.5);
+
+    ignorePrev |= !getLastChecked(pix, pos4, nrm4, res, &ldcol, &licol, &lmom);
+    //ignorePrev |= !getLastFilteredChecked(pix, pos4, nrm4, res, &ldcol, &licol, &lmom);
   }
+
+  var debugCol = vec4f(1.0);
+  /*if(ignorePrev) {
+    debugCol = vec4f(10.0, 10.0, 1.0, 1.0);
+  }*/
 
   // Read and increase age but keep upper bound
   let age = min(32.0, select(accumHisInBuf[gidx] + 1.0, 1.0, ignorePrev));
@@ -317,6 +376,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let dlum = luminance(dcol);
   let ilum = luminance(icol);
 
+  // Temporal integration using first and second raw moments of col luminance
   var mom = vec4f(0.0);
   if(age <= 4.0) {
     mom = mix(lmom, vec4f(dlum, dlum, ilum, ilum), 1.0 / age);
@@ -325,22 +385,20 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
   accumMomOutBuf[gidx] = mom;
 
- /*
   // Temporal integration using first and second raw moments of col luminance
-  let mom = mix(lmom, vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha.z);
+  /*let mom = mix(lmom, vec4f(dlum, dlum * dlum, ilum, ilum * ilum), alpha.z);
   if(age <= 4.0) {
     accumMomOutBuf[gidx] = mix(lmom, vec4f(dlum, dlum, ilum, ilum), 1.0 / age);
   } else {
     accumMomOutBuf[gidx] = mom;
-  }
-  */
+  }*/
 
   // Estimate temporal variance from integrated moments
   let variance = max(vec2f(0.0), mom.yw - mom.xz * mom.xz);
 
   // Temporal integration of direct and indirect illumination and store variance
-  accumColVarOutBuf[      gidx] = vec4f(mix(ldcol.xyz, dcol, alpha.x), variance.x);
-  accumColVarOutBuf[ofs + gidx] = vec4f(mix(licol.xyz, icol, alpha.y), variance.y);
+  accumColVarOutBuf[      gidx] = debugCol * vec4f(mix(ldcol.xyz, dcol, alpha.x), variance.x);
+  accumColVarOutBuf[ofs + gidx] = debugCol * vec4f(mix(licol.xyz, icol, alpha.y), variance.y);
 
   // Track age (already incremented)
   accumHisOutBuf[gidx] = age;
@@ -354,8 +412,8 @@ fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec3f, nrm: vec3f, qnrm: vec
 
   // Depth edge stopping function
   let qpos = attrBuf[ofs + idx].xyz;
-  let weightPos = dot(pos - qpos, pos.xyz - qpos.xyz) / SIG_POS;
-  //let weightPos = abs(dot(pos - qpos, nrm)) / SIG_POS; // Plane distance
+  //let weightPos = dot(pos - qpos, pos.xyz - qpos.xyz) / SIG_POS;
+  let weightPos = abs(dot(pos - qpos, nrm)) / SIG_POS; // Plane distance
 
   // Luminance edge stopping function
   let weightLumDir = abs(lumColDir - lumColDirQ) / sigLumDir;
@@ -386,7 +444,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
   let nrm4 = attrBuf[gidx];
 
   let age = accumHisInBuf[gidx];
-  if(age < 4.0 && (bitcast<u32>(nrm4.z) >> 16) != SHORT_MASK) {
+  if(age < 4.0 && bitcast<u32>(nrm4.z) >> 16 != SHORT_MASK) {
 
     // Accumulated history is too short, filter illumination/moments and estimate variance
     let p = vec2i(globalId.xy);
@@ -428,7 +486,7 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
 
         let qmom = accumMomInBuf[qidx];
 
-        let weight = /*select(0.0, 1.0, qnrm4.z == nrm4.z) **/ calcEdgeStoppingWeights(
+        let weight = /*select(0.0, 1.0, qnrm4.z == nrm4.z) * */ calcEdgeStoppingWeights(
           //ofs, qidx, pos, nrm, octToDir(qnrm4.xy), lumColDir, lumColInd, luminance(qcolVarDir), luminance(qcolVarInd), SIG_LUM, SIG_LUM);
           ofs, qidx, pos, nrm, octToDir(qnrm4.xy), lumColDir, lumColInd, qmom.x, qmom.z, SIG_LUM, SIG_LUM);
 
@@ -486,6 +544,7 @@ fn filterVariance(p: vec2i, res: vec2i) -> vec2f
   return sumVar / sumWeight;
 }
 
+// Filter direct illum variance only
 /*fn filterDIVariance(p: vec2i, res: vec2i) -> vec2f
 {
   // 3x3 gaussian
@@ -509,7 +568,7 @@ fn filterVariance(p: vec2i, res: vec2i) -> vec2f
     }
   }
 
-  return vec2f(sumVar / sumWeight, accumColVarInBuf[u32(res.x * p.y + p.x)].w);
+  return vec2f(sumVar / sumWeight, accumColVarInBuf[ofs + u32(res.x * p.y + p.x)].w);
 }*/
 
 // Dammertz et al: Edge-Avoiding À-Trous Wavelet Transform for fast Global Illumination Filtering
@@ -582,7 +641,7 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
       let qcolVarInd = accumColVarInBuf[ofs + qidx];
 
       // Gaussian influenced by edge stopping weights
-      let weight = /*select(0.0, 1.0, qnrm4.z == nrm4.z) **/ kernelWeights[abs(i)] * kernelWeights[abs(j)] *
+      let weight = /*select(0.0, 1.0, qnrm4.z == nrm4.z) * */ kernelWeights[abs(i)] * kernelWeights[abs(j)] *
         calcEdgeStoppingWeights(ofs, qidx, pos, nrm, octToDir(qnrm4.xy), lumColDir, lumColInd,
           luminance(qcolVarDir.xyz), luminance(qcolVarInd.xyz), lumVarDen.x, lumVarDen.y);
 

@@ -59,31 +59,20 @@ fn rand() -> f32
   return bitcast<f32>(0x3f800000 | (seed >> 9)) - 1.0;
 }
 
-/*fn rand2() -> vec2f
+fn rand2() -> vec2f
 {
   return vec2f(rand(), rand());
 }
 
-fn rand4() -> vec4f
-{
-  return vec4f(rand(), rand(), rand(), rand());
-}*/
-
-fn hammersley(i: u32, n: u32) -> vec2f
+/*fn hammersley(i: u32, n: u32) -> vec2f
 {
   return vec2f(f32(i) / f32(n), f32(reverseBits(i)) * 2.3283064365386963e-10);
 }
 
-fn rand2() -> vec2f
+fn rand2(i: u32, n: u32) -> vec2f
 {
-  seed = (seed + 1) % 66536;
-  return hammersley(seed, 65536);
-}
-
-fn rand4() -> vec4f
-{
-  return vec4f(rand2(), rand2());
-}
+  return hammersley((seed + i) % n, n);
+}*/
 
 // https://mathworld.wolfram.com/DiskPointPicking.html
 fn sampleDisk(r: vec2f) -> vec2f
@@ -138,9 +127,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Set seed based on pixel index, current frame (z) and sample num (w)
   seed = wangHash(gidx * 32467 + frame.z * 23 + frame.w * 6173);
 
-  //let r0 = rand4();
-  let r0 = vec4f(0.0, 0.0, rand2());
-
   // Read camera values
   let e = camera[0];
   let r = camera[1];
@@ -148,8 +134,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Create new primary ray
   let ori = e.xyz;
-  //let ori = sampleEye(e, r, u, r0.xy);
-  let dir = normalize(samplePixel(vec2f(globalId.xy), e, r, u, vec2f(f32(w), f32(h)), r0.zw) - ori);
+  //let ori = sampleEye(e, r, u, rand2());
+  let dir = normalize(samplePixel(vec2f(globalId.xy), e, r, u, vec2f(f32(w), f32(h)), rand2()) - ori);
 
   // Initialize new path
   // Do not initialize throughput/pdf, will do in shade.wgsl for primary ray
