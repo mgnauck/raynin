@@ -24,8 +24,8 @@ $(OUT_DIR)/$(OUT): $(OUT_DIR)/$(LOADER_JS).3.js Makefile
 $(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(LOADER_JS).2.js
 	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=true --toplevel > $@
 
-$(OUT_DIR)/$(LOADER_JS).2.js: $(OUT_DIR)/$(WASM_OUT).base64.wasm $(OUT_DIR)/$(LOADER_JS).1.js $(SHADER_MIN)
-	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).base64.wasm $@
+$(OUT_DIR)/$(LOADER_JS).2.js: $(OUT_DIR)/$(WASM_OUT).wasm.gz.b64 $(OUT_DIR)/$(LOADER_JS).1.js $(SHADER_MIN)
+	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).wasm.gz.b64 $@
 
 $(OUT_DIR)/%.min.wgsl: ./%.wgsl $(OUT_DIR)/$(LOADER_JS).1.js
 	@mkdir -p `dirname $@`
@@ -37,9 +37,12 @@ $(OUT_DIR)/$(LOADER_JS).1.js: $(LOADER_JS).js $(SHADER)
 	@mkdir -p `dirname $@`
 	cp $< $(OUT_DIR)/$(LOADER_JS).1.js
 
-$(OUT_DIR)/$(WASM_OUT).base64.wasm: $(WASM_OUT).wasm
+$(OUT_DIR)/$(WASM_OUT).wasm.gz.b64: $(OUT_DIR)/$(WASM_OUT).wasm.gz
+	openssl base64 -A -in $< -out $(OUT_DIR)/$(WASM_OUT).wasm.gz.b64
+
+$(OUT_DIR)/$(WASM_OUT).wasm.gz: $(WASM_OUT).wasm
 	@mkdir -p `dirname $@`
-	openssl base64 -A -in $< -out $(OUT_DIR)/$(WASM_OUT).base64.wasm
+	gzip -c $< > $(OUT_DIR)/$(WASM_OUT).wasm.gz
 
 $(WASM_OUT).wasm: $(OBJ)
 	$(LD) $^ $(LDFLAGS) -o $@

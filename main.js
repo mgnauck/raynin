@@ -921,9 +921,15 @@ async function main()
   context.configure({ device, format: presentationFormat, alphaMode: "opaque" });
 
   // Load actual code
-  let module = WASM.includes("END_") ?
-    await (await fetch("intro.wasm")).arrayBuffer() :
-    Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))
+  let module;
+  if(WASM.includes("END_")) {
+    // Load wasm from file
+    module = await (await fetch("intro.wasm")).arrayBuffer();
+  } else {
+    // When embedded, the wasm is gzipped and base64 encoded. Undo in reverse.
+    module = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
+    module = await new Response(module.stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+  }
 
   wa = new Wasm(module);
   await wa.instantiate();
