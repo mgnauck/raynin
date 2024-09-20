@@ -132,10 +132,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let r = camera[1];
   let u = camera[2];
 
+  //let r0 = rand2();
+  let r1 = rand2();
+
   // Create new primary ray
   let ori = e.xyz;
-  //let ori = sampleEye(e, r, u, rand2());
-  let dir = normalize(samplePixel(vec2f(globalId.xy), e, r, u, vec2f(f32(w), f32(h)), rand2()) - ori);
+  //let ori = sampleEye(e, r, u, r0);
+  let dir = normalize(samplePixel(vec2f(globalId.xy), e, r, u, vec2f(f32(w), f32(h)), r1) - ori);
 
   // Initialize new path
   // Do not initialize throughput/pdf, will do in shade.wgsl for primary ray

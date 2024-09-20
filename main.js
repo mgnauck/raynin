@@ -589,7 +589,6 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
-      { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } }, // Debug attrBuf
     ]
   });
 
@@ -599,7 +598,6 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
       { binding: 2, resource: { buffer: res.buf[BUF_ACC0] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_ATTR] } },
     ]
   });
 
@@ -609,7 +607,6 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
       { binding: 2, resource: { buffer: res.buf[BUF_ACC1] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_ATTR] } },
     ]
   });
 
@@ -619,7 +616,6 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
       { binding: 2, resource: { buffer: res.buf[BUF_ACC2] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_ATTR] } },
     ]
   });
 
@@ -894,6 +890,7 @@ async function main()
     return;
   }
 
+  //const adapter = await navigator.gpu.requestAdapter();
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: "low-power" });
   //const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
   if(!adapter) {

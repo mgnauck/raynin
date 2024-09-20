@@ -333,17 +333,17 @@ fn evalDiffuse(mtl: Mtl, n: vec3f, wi: vec3f) -> vec3f
   return (1.0 - mtl.metallic) * mtl.col * INV_PI;
 }
 
-fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, fres: ptr<function, vec3f>, isSpecRefl: ptr<function, bool>, pdf: ptr<function, f32>) -> bool
+fn sampleMaterial(mtl: Mtl, wo: vec3f, n: vec3f, r0: vec3f, wi: ptr<function, vec3f>, fres: ptr<function, vec3f>, isReflection: ptr<function, bool>, pdf: ptr<function, f32>) -> bool
 {
   let m = sign(dot(wo, n)) * sampleGGX(n, r0.xy, getRoughness(mtl));
   *fres = fresnelSchlick(dot(wo, m), mtlToF0(mtl));
   let p = luminance(*fres);
 
   if(r0.z < p) {
-    *isSpecRefl = true;
+    *isReflection = true;
     *pdf = sampleReflection(mtl, wo, n, m, wi) * p;
   } else {
-    *isSpecRefl = false;
+    *isReflection = false;
     if(mtl.refractive > 0.0) { // Do not write as select, likely error in naga
       *pdf = sampleRefraction(mtl, wo, n, m, wi) * (1.0 - p);
     } else {
@@ -361,9 +361,9 @@ fn sampleMaterialCombinedPdf(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: vec
   return otherPdf * (1.0 - f) + sampleReflectionPdf(mtl, wo, n, wi) * f;
 }
 
-fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: vec3f, isSpecRefl: bool) -> vec3f
+fn evalMaterial(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: vec3f, isReflection: bool) -> vec3f
 {
-  if(isSpecRefl) {
+  if(isReflection) {
     return evalReflection(mtl, wo, n, wi) * fres;
   } else {
     return select(evalDiffuse(mtl, n, wi), evalRefraction(mtl, wo, n, wi), mtl.refractive > 0.0) * (vec3f(1) - fres);
@@ -383,7 +383,7 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
 }
 
 // https://psgraphics.blogspot.com/2022/01/what-is-direct-lighting-next-event.html
-fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+/*fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let bc = sampleBarycentric(r0.xy);
 
@@ -412,7 +412,7 @@ fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec
   *pdf = 1.0 / (em.w * f32(ltriCnt));
 
   return visible;
-}
+}*/
 
 fn sampleLTriUniformPdf(ltriId: u32) -> f32
 {
@@ -563,7 +563,7 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
 fn writeAttributes(pos: vec3f, nrm: vec3f, mtlInstId: u32, flags: u32, pidx: u32, ofs: u32)
 {
   // Write nrm, pos, pure specular reflection flag and mtl/inst id to our attr buf for SVGF
-  attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(mtlInstId), 0.0);
+  attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(mtlInstId), /* unused */ 0.0);
   attrBuf[ofs + pidx] = vec4f(pos, select(0.0, 1.0, (flags & PURE_SPEC_REFL_BOUNCE) > 0));
 }
 
@@ -618,7 +618,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var mtl: Mtl;
   let mtlInstId = finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
 
-  // Write attributes on primary hit
+  // Write attributes on primary hit (if pure spec is not handled separately)
   /*if((pidx & 0xf) == 0) {
     writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
   }*/
@@ -703,10 +703,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
  
   // One diffuse bounce is enough
-  if((flags & REFRACTION_BOUNCE) == 0 && (flags & DIFFUSE_BOUNCE) > 0) {
+  /*if((flags & REFRACTION_BOUNCE) == 0 && (flags & DIFFUSE_BOUNCE) > 0) {
     // Can simply return, because we wrote attributes before
     return;
-  }
+  }*/
 
   // Reached max bounces (encoded in lower 4 bits of height)
   if((pidx & 0xf) == (heightMaxBounces & 0xf) - 1) {
@@ -728,11 +728,11 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   } else {
     // Everything else is considered glossy and is handled by microfacet bsdf
     var fres: vec3f;
-    var isSpecRefl: bool;
-    if(!sampleMaterial(mtl, -dir.xyz, nrm, r0.xyz, &wi, &fres, &isSpecRefl, &pdf)) {
+    var isReflection: bool;
+    if(!sampleMaterial(mtl, -dir.xyz, nrm, r0.xyz, &wi, &fres, &isReflection, &pdf)) {
       return;
     }
-    throughput *= evalMaterial(mtl, -dir.xyz, nrm, wi, fres, isSpecRefl) * abs(dot(nrm, wi)) / pdf;
+    throughput *= evalMaterial(mtl, -dir.xyz, nrm, wi, fres, isReflection) * abs(dot(nrm, wi)) / pdf;
   }
 
   // Get compacted index into the path state buffer
