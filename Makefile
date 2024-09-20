@@ -3,7 +3,7 @@ SRC=$(shell find src/ -type f -name '*.c')
 OBJ=$(patsubst src/%.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=$(shell find ./ -maxdepth 1 -type f -name '*.wgsl')
-SHADER_MIN=$(patsubst ./%.wgsl,$(OUT_DIR)/%.min.wgsl,$(SHADER))
+SHADER_MIN=$(patsubst ./%.wgsl,$(OUT_DIR)/%.wgsl.min,$(SHADER))
 SHADER_EXCLUDES=vm,m,m1,m2,m3
 LOADER_JS=main
 OUT=index.html
@@ -27,11 +27,11 @@ $(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(LOADER_JS).2.js
 $(OUT_DIR)/$(LOADER_JS).2.js: $(OUT_DIR)/$(WASM_OUT).wasm.gz.b64 $(OUT_DIR)/$(LOADER_JS).1.js $(SHADER_MIN)
 	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).wasm.gz.b64 $@
 
-$(OUT_DIR)/%.min.wgsl: ./%.wgsl $(OUT_DIR)/$(LOADER_JS).1.js
+$(OUT_DIR)/%.wgsl.min: ./%.wgsl $(OUT_DIR)/$(LOADER_JS).1.js
 	@mkdir -p `dirname $@`
-	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUT_DIR)/$(subst .,.min.,$<)
-	@echo "$(OUT_DIR)/$(subst .,.min.,$<):" `wc -c < $(OUT_DIR)/$(subst .,.min.,$<)` "bytes"
-	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $(OUT_DIR)/$(subst .,.min.,$<) $(OUT_DIR)/$(LOADER_JS).1.js
+	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<)
+	@echo "$(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<):" `wc -c < $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<)` "bytes"
+	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<) $(OUT_DIR)/$(LOADER_JS).1.js
 
 $(OUT_DIR)/$(LOADER_JS).1.js: $(LOADER_JS).js $(SHADER)
 	@mkdir -p `dirname $@`
