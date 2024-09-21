@@ -928,7 +928,7 @@ async function main()
   } else {
     // When embedded, the wasm is gzipped and base64 encoded. Undo in reverse.
     module = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
-    module = await new Response(module.stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+    module = await new Response(module.stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
   }
 
   wa = new Wasm(module);
