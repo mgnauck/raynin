@@ -100,6 +100,7 @@ let canvas, context, device;
 let wa, res = {};
 let frames = 0;
 let samples = 0;
+let ltriCount = 0;
 let converge = false;
 let filter = true;
 let reproj = filter | false;
@@ -159,6 +160,7 @@ function Wasm(module)
     gpu_create_res: (c, m, i, t, n, l, b) => createGpuResources(c, m, i, t, n, l, b),
     gpu_write_buf: (id, ofs, addr, sz) => device.queue.writeBuffer(res.buf[id], ofs, wa.memUint8, addr, sz),
     reset_samples: () => { samples = 0; },
+    set_ltri_cnt: (n) => { ltriCount = n; },
     toggle_converge: () => { converge = !converge; },
     toggle_filter: () => { filter = !filter; if(filter) reproj = true; samples = 0; res.accumIdx = 0; },
     toggle_reprojection: () => { reproj = !reproj; if(!reproj) filter = false; samples = 0; res.accumIdx = 0; }
@@ -815,17 +817,18 @@ async function render(time)
     frameTimeAvg = frameTime;
   frameTimeAvg = 0.8 * frameTimeAvg + 0.2 * frameTime;
 
-  if(updateDisplay) {
-    document.title = `${frameTimeAvg.toFixed(2)} / ${(1000.0 / frameTimeAvg).toFixed(2)}`;
+  /*if(updateDisplay)*/ {
+    //document.title = `${frameTimeAvg.toFixed(2)} / ${(1000.0 / frameTimeAvg).toFixed(2)}`;
+    document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)}`;
     updateDisplay = false;
-    setTimeout(() => { updateDisplay = true; }, 100);
+    //setTimeout(() => { updateDisplay = true; }, 100);
   }
 
   // Initialize config data
   device.queue.writeBuffer(res.buf[BUF_CFG], 0,
     new Uint32Array([
       // Frame data
-      WIDTH, (HEIGHT << 8) | (MAX_BOUNCES & 0xf), frames, samples,
+      (WIDTH << 16) | (ltriCount & 0xffff), (HEIGHT << 16) | (MAX_BOUNCES & 0xf), frames, samples,
       // Path state grid dimensions + w = path cnt
       Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1, WIDTH * HEIGHT,
       // Shadow ray buffer grid dimensions + w = shadow ray cnt

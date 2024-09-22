@@ -1,7 +1,7 @@
 /*struct Config
 {
-  frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
+  frameData:        vec4u,          // x = bits 16-31 for width, bits 0-15 for ltri cnt
+                                    // y = bits 16-31 for height, bits 4-15 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
@@ -50,8 +50,8 @@ fn octToDir(oct: vec2f) -> vec3f
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
   let frame = config[0];
-  let w = frame.x;
-  let h = frame.y >> 8;
+  let w = frame.x >> 16;
+  let h = frame.y >> 16;
   let gidx = w * u32(pos.y) + u32(pos.x);
   let dcol = accumColBuf[        gidx].xyz;
   let icol = accumColBuf[w * h + gidx].xyz;
@@ -63,8 +63,8 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 fn m1(@builtin(position) pos: vec4f) -> @location(0) vec4f
 {
   let frame = config[0];
-  let w = frame.x;
-  let h = frame.y >> 8;
+  let w = frame.x >> 16;
+  let h = frame.y >> 16;
   let gidx = w * u32(pos.y) + u32(pos.x);
   let dcol = colBuf[        gidx].xyz;
   let icol = colBuf[w * h + gidx].xyz;

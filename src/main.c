@@ -4,6 +4,7 @@
 #include "rend/bvh.h"
 #include "rend/renderer.h"
 #include "scene/cam.h"
+#include "scene/inst.h"
 #include "scene/mesh.h"
 #include "scene/mtl.h"
 #include "scene/scene.h"
@@ -16,6 +17,7 @@ scene     *s = 0;
 uint32_t  active_cam = 0;
 bool      orbit_cam = false;
 
+extern void set_ltri_cnt(uint32_t n);
 extern void toggle_converge();
 extern void toggle_filter();
 extern void toggle_reprojection();
@@ -124,7 +126,7 @@ void init_scene_riow(scene *s)
   m.emissive = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
   mesh = scene_acquire_mesh(s);
-  mesh_create_quad(mesh, 1, 1, mtl_id, false);
+  mesh_create_quad(mesh, 0, 1, mtl_id, false);
   lid = scene_attach_mesh(s, mesh, true);
   for(uint8_t i=1; i<LIGHT_CNT; i++) {
     mesh = scene_acquire_mesh(s);
@@ -167,7 +169,7 @@ void init_scene_riow(scene *s)
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
   mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
   mat4_mul(translation, translation, scale);
-  m = mtl_init((vec3){ 0.0f, 0.0f, 0.0f });
+  m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
   m.ior = 2.3f;
   m.roughness = 0.0f;
   mtl_id = scene_add_mtl(s, &m);
@@ -179,7 +181,7 @@ void init_scene_riow(scene *s)
   mat4_mul(translation, translation, scale);
   m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
   m.ior = 1.5f;
-  m.roughness = 0.0f;
+  m.roughness = 0.075f;
   mtl_id = scene_add_mtl(s, &m);
   scene_add_inst(s, sid, mtl_id, translation);
 
@@ -200,7 +202,7 @@ void init_scene_riow(scene *s)
       vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
       if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
         m = mtl_init(vec3_rand());
-        m.roughness = 0.0f;
+        m.roughness = 0.075f;
         if(pcg_randf() < 0.4f) {
           m.refractive = 1.0f;
           m.roughness = pcg_randf();
@@ -237,6 +239,8 @@ uint8_t init(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t 
   return ret;
 }
 
+float last_change = 0.0;
+
 __attribute__((visibility("default")))
 void update(float time, bool converge)
 {
@@ -245,20 +249,41 @@ void update(float time, bool converge)
     cam *cam = scene_get_active_cam(s);
     vec3 gmin = vec3_min(s->tlas_nodes[0].lmin, s->tlas_nodes[0].rmin);
     vec3 gmax = vec3_max(s->tlas_nodes[0].lmax, s->tlas_nodes[0].rmax);
-    //vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.6f);
-    vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.27f);
-    //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
-    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 20.0f, e.z * cosf(time * 0.25f) };
-    //cam_set(cam, pos, vec3_neg(pos));
-    cam_set(cam, pos, vec3_add((vec3){0.0f, 24.0, 0.0f}, vec3_neg(pos)));
+    vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.6f);
+    //vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.27f);
+    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
+    //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 20.0f, e.z * cosf(time * 0.25f) };
+    cam_set(cam, pos, vec3_neg(pos));
+    //cam_set(cam, pos, vec3_add((vec3){0.0f, 24.0, 0.0f}, vec3_neg(pos)));
     scene_set_dirty(s, RT_CAM);
   }
 
-  /*mat4 translation;
-  mat4_trans(translation, (vec3){ cosf(time * 0.4f) * 3.0f, 0.5f + sinf(time * 0.2f) * 1.0, sinf(time * 0.3f) * 3.0f });
-  scene_upd_inst_trans(s, 6, translation);*/
+  /*
+  // Disable light instances
+  if(time - last_change > 2.0) {
+    uint8_t lid = pcg_rand() % 3;
+    if((scene_get_inst_state(s, lid) & IS_DISABLED) > 0)
+      scene_clr_inst_state(s, lid, IS_DISABLED);
+    else
+      scene_set_inst_state(s, lid, IS_DISABLED);
+    last_change = time;
+  }
+  */
+
+  /*
+  mat4 translation;
+  mat4_trans(translation, (vec3){ cosf(time * 0.4f) * 3.0f, 1.0f + sinf(time * 0.2f) * 1.0, sinf(time * 0.3f) * 3.0f });
+  scene_upd_inst_trans(s, 4, translation); // Reflecting
+
+  mat4_trans(translation, (vec3){ cosf(time * 0.3f) * 2.0f, 1.0f + sinf(time * 0.3f) * 1.0, sinf(time * 0.1f) * 2.0f });
+  scene_upd_inst_trans(s, 5, translation); // White
+
+  mat4_trans(translation, (vec3){ cosf(time * 0.4f + 123.0) * 2.0f, 1.0f + sinf(time * 0.1f) * 1.0, sinf(time * 0.45f) * 3.0f });
+  scene_upd_inst_trans(s, 6, translation); // Gold
+  */
 
   renderer_update(s, converge);
+  set_ltri_cnt(s->ltri_cnt);
 }
 
 __attribute__((visibility("default")))

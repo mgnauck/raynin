@@ -1,7 +1,7 @@
 /*struct Config
 {
-  frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
+  frameData:        vec4u,          // x = bits 16-31 for width, bits 0-15 for ltri cnt
+                                    // y = bits 16-31 for height, bits 4-15 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
@@ -395,6 +395,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   nodeStack[                0] = STACK_EMPTY_MARKER;
   nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
 
-  let ofs = frame.x * (frame.y >> 8);
+  let ofs = (frame.x >> 16) * (frame.y >> 16);
   hits[gidx] = intersectTlas(pathStates[ofs + gidx].xyz, pathStates[(ofs << 1) + gidx].xyz, INF);
 }

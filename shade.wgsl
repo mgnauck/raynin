@@ -1,7 +1,7 @@
 struct Config
 {
-  frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
+  frameData:        vec4u,          // x = bits 16-31 for width, bits 0-15 for ltri cnt
+                                    // y = bits 16-31 for height, bits 4-15 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path cnt
@@ -383,11 +383,9 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
 }
 
 // https://psgraphics.blogspot.com/2022/01/what-is-direct-lighting-next-event.html
-/*fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+/*fn sampleLTrisUniform(r0: vec3f, pos: vec3f, nrm: vec3f, ltriCnt: u32, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let bc = sampleBarycentric(r0.xy);
-
-  let ltriCnt = arrayLength(&ltris) >> 2; // TODO Use actual ltri cnt because of disabled ones!
   let ltriId = u32(floor(r0.z * f32(ltriCnt)));
 
   let v0 = ltris[(ltriId << 2) + 0]; // w = lnrm.x
@@ -414,10 +412,10 @@ fn evalMaterialCombined(mtl: Mtl, wo: vec3f, n: vec3f, wi: vec3f, fres: ptr<func
   return visible;
 }*/
 
-fn sampleLTriUniformPdf(ltriId: u32) -> f32
+fn sampleLTriUniformPdf(ltriId: u32, ltriCnt: u32) -> f32
 {
   let area = ltris[(ltriId << 2) + 3].w;
-  return 1.0 / (area * f32(arrayLength(&ltris) >> 2)); // TODO Use actual ltri cnt because of disabled ones!
+  return 1.0 / (area * f32(ltriCnt)); // TODO Use actual ltri cnt because of disabled ones!
 }
 
 fn calcLTriContribution(pos: vec3f, nrm: vec3f, lpos: vec3f, lnrm: vec3f, lightPower: f32, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>) -> f32
@@ -442,12 +440,11 @@ fn calcLTriContribution(pos: vec3f, nrm: vec3f, lpos: vec3f, lnrm: vec3f, lightP
 }
 
 // Talbot et al: Importance Resampling for Global Illumination
-fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
+fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, ltriCnt: u32, lnrm: ptr<function, vec3f>, ldir: ptr<function, vec3f>, ldistInv: ptr<function, f32>, emission: ptr<function, vec3f>, pdf: ptr<function, f32>) -> bool
 {
   let sampleCnt = 8u;
   
   // Source pdf is uniform selection of ltris
-  let ltriCnt = f32(arrayLength(&ltris) >> 2); // TODO Use actual ltri cnt because of disabled ones!
   let sourcePdf = 1.0 / f32(ltriCnt);
 
   // Selected sample tracking
@@ -461,7 +458,7 @@ fn sampleLTrisRIS(pos: vec3f, nrm: vec3f, lnrm: ptr<function, vec3f>, ldir: ptr<
     let bc = sampleBarycentric(r.xy);
 
     // Sample a candidate ltri from all ltris with 'cheap' source pdf
-    let ltriId = u32(floor(r.z * ltriCnt));
+    let ltriId = u32(floor(r.z * f32(ltriCnt)));
     let v0 = ltris[(ltriId << 2) + 0]; // w = lnrm.x
     let v1 = ltris[(ltriId << 2) + 1]; // w = lnrm.y
     let v2 = ltris[(ltriId << 2) + 2]; // w = lnrm.z
@@ -578,9 +575,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   // Read data from config, hits and path state buffer
   let frame = config.frameData;
-  let width = frame.x;
-  let heightMaxBounces = frame.y;
-  let height = heightMaxBounces >> 8;
+  let width = frame.x >> 16;
+  let height = frame.y >> 16;
+  let maxBounces = frame.y & 0xf;
+  let ltriCnt = frame.x & 0xffff;
   let ofs = width * height;
   let hit = hits[gidx];
   let ori = pathStatesIn[ofs + gidx];
@@ -633,7 +631,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
         let ldir = pos - ori.xyz;
         let ldistInv = inverseSqrt(dot(ldir, ldir));
         let pdf = throughput4.w * geomSolidAngle(ldir * ldistInv, nrm, ldistInv); // throughput4.w = pdf
-        let lpdf = sampleLTriUniformPdf(ltriId);
+        let lpdf = sampleLTriUniformPdf(ltriId, ltriCnt);
         let weight = pdf / (pdf + lpdf);
         colBuf[cidx] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
       } else {
@@ -686,9 +684,9 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var ldistInv: f32;
   var emission: vec3f;
   var lpdf: f32;
-  if((!pureSpecReflection || mtl.refractive > 0.0) &&
-    //sampleLTrisUniform(rand4().xyz, pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
-    sampleLTrisRIS(pos, nrm, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
+  if(ltriCnt > 0 && (!pureSpecReflection || mtl.refractive > 0.0) &&
+    //sampleLTrisUniform(rand4().xyz, pos, nrm, ltriCnt, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
+    sampleLTrisRIS(pos, nrm, ltriCnt, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
     let gsa = geomSolidAngle(ldir, lnrm, ldistInv);
     var fres: vec3f;
@@ -709,7 +707,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }*/
 
   // Reached max bounces (encoded in lower 4 bits of height)
-  if((pidx & 0xf) == (heightMaxBounces & 0xf) - 1) {
+  if((pidx & 0xf) == (maxBounces & 0xf) - 1) {
     // Path terminates, write attributes if we did not do before
     if(writeAttr) {
       writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);

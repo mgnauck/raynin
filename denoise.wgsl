@@ -10,8 +10,8 @@
 
 /*struct Config
 {
-  frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
+  frameData:        vec4u,          // x = bits 16-31 for width, bits 0-15 for ltri cnt
+                                    // y = bits 16-31 for height, bits 4-15 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path state cnt
@@ -281,8 +281,8 @@ fn getLastChecked(pix: vec2f, pos: vec4f, nrm: vec4f, res: vec2f, ldcol: ptr<fun
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
-  let w = frame.x;
-  let h = frame.y >> 8;
+  let w = frame.x >> 16;
+  let h = frame.y >> 16;
   if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }
@@ -424,8 +424,8 @@ fn calcEdgeStoppingWeights(ofs: u32, idx: u32, pos: vec3f, nrm: vec3f, qnrm: vec
 fn m1(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
-  let w = frame.x;
-  let h = frame.y >> 8;
+  let w = frame.x >> 16;
+  let h = frame.y >> 16;
   if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }
@@ -570,8 +570,8 @@ fn filterVariance(p: vec2i, res: vec2i) -> vec2f
 fn m2(@builtin(global_invocation_id) globalId: vec3u)
 {
   let frame = config[0];
-  let w = frame.x;
-  let h = frame.y >> 8;
+  let w = frame.x >> 16;
+  let h = frame.y >> 16;
   if(any(globalId.xy >= vec2u(w, h))) {
     return;
   }

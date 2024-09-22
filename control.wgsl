@@ -1,7 +1,7 @@
 /*struct Config
 {
-  frameData:        vec4u,          // x = width
-                                    // y = bits 8-31 for height, bits 4-7 unused, bits 0-3 max bounces
+  frameData:        vec4u,          // x = bits 16-31 for width, bits 0-15 for ltri cnt
+                                    // y = bits 16-31 for height, bits 4-15 unused, bits 0-3 max bounces
                                     // z = frame number
                                     // w = sample number
   pathStateGrid:    vec4u,          // w = path cnt
@@ -53,8 +53,8 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let frame = config[0];
-  let w = frame.x;
-  let h = frame.y >> 8;
+  let w = frame.x >> 16;
+  let h = frame.y >> 16;
 
   // Update sample num of current frame
   config[0].w += 1u;
