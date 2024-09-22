@@ -334,17 +334,22 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
 
 void scene_set_inst_state(scene *s, uint32_t inst_id, uint32_t state)
 {
-  // Set new state and trigger transformation and material updates
-  s->inst_info[inst_id].state |= state | IS_TRANS_DIRTY | IS_MTL_DIRTY;
+  s->inst_info[inst_id].state |= state;
+
+  // If something gets disabled, tlas and ltri rebuild might be necessary
+  if(state & IS_DISABLED)
+    s->inst_info[inst_id].state |= IS_TRANS_DIRTY | IS_MTL_DIRTY;
 
   ///logc("Set inst state for %d", inst_id);
 }
 
 void scene_clr_inst_state(scene *s, uint32_t inst_id, uint32_t state)
 {
-  // Set new state and trigger transformation and material updates
-  s->inst_info[inst_id].state =
-    (s->inst_info[inst_id].state & ~state) | IS_TRANS_DIRTY | IS_MTL_DIRTY;
+  s->inst_info[inst_id].state &= ~state;
+
+  // If something gets enabled, tlas and ltri rebuild might be necessary
+  if(state & IS_DISABLED)
+    s->inst_info[inst_id].state |= IS_TRANS_DIRTY | IS_MTL_DIRTY;
 
   ///logc("Cleared inst state for %d", inst_id);
 }
