@@ -122,7 +122,7 @@ void mesh_create_sphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uin
       *t = (tri){ .v0 = a, .v1 = b, .v2 = c };
       
       if(face_normals) {
-        tn->n0 = tn->n1 = tn->n2 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b))), inv);
+        tn->n0 = tn->n1 = tn->n2 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(c, b), vec3_sub(a, b))), inv);
       } else {
         tn->n0 = vec3_scale(a, inv * inv_r);
         tn->n1 = vec3_scale(b, inv * inv_r);
@@ -138,7 +138,7 @@ void mesh_create_sphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uin
       *t = (tri){ .v0 = a, .v1 = c, .v2 = d };
       
       if(face_normals) {
-        tn->n0 = tn->n1 = tn->n2 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c))), inv);
+        tn->n0 = tn->n1 = tn->n2 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(d, c), vec3_sub(a, c))), inv);
       } else {
         tn->n0 = vec3_scale(a, inv * inv_r);
         tn->n1 = vec3_scale(c, inv * inv_r);
@@ -191,7 +191,7 @@ void mesh_create_cylinder(mesh *m, float radius, float height, uint32_t subx, ui
       *t = (tri){ .v0 = a, .v1 = b, .v2 = c };
       
       if(face_normals) {
-        tn->n0 = tn->n1 = tn->n2 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(a, b), vec3_sub(c, b))), inv);
+        tn->n0 = tn->n1 = tn->n2 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(c, b), vec3_sub(a, b))), inv);
       } else {
         tn->n0 = tn->n1 = vec3_scale((vec3){ x0, 0.0f, z0 }, inv * inv_r);
         tn->n2 = vec3_scale((vec3){ x1, 0.0f, z1 }, inv * inv_r);
@@ -206,7 +206,7 @@ void mesh_create_cylinder(mesh *m, float radius, float height, uint32_t subx, ui
       *t = (tri){ .v0 = a, .v1 = c, .v2 = d };
       
       if(face_normals) {
-        tn->n0 = tn->n1 = tn->n2 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(a, c), vec3_sub(d, c))), inv);
+        tn->n0 = tn->n1 = tn->n2 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(d, c), vec3_sub(a, c))), inv);
       } else {
         tn->n0 = vec3_scale((vec3){ x0, 0.0f, z0 }, inv * inv_r);
         tn->n1 = tn->n2 = vec3_scale((vec3){ x1, 0.0f, z1 }, inv * inv_r);
@@ -296,7 +296,7 @@ void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint32_t
 
       vec3 n0, n1, n2, n3;
       if(face_normals) {
-        n0 = n1 = n2 = n3 = vec3_scale(vec3_cross(vec3_unit(vec3_sub(v1, v0)), vec3_unit(vec3_sub(v2, v0))), inv);
+        n0 = n1 = n2 = n3 = vec3_scale(vec3_unit(vec3_cross(vec3_sub(v1, v0), vec3_sub(v2, v0))), inv);
       } else {
         n0 = vec3_scale(vec3_sub(v0, p0), inv * inv_ir);
         n1 = vec3_scale(vec3_sub(v1, p0), inv * inv_ir);

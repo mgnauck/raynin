@@ -168,8 +168,8 @@ void generate_mesh_data(mesh *m, gltf_mesh *gm, bool is_emissive)
 {
   obj_type type = get_type(gm->name); 
   if(type == OT_TORUS) {
-    uint32_t subx = (gm->subx > 0) ? gm->subx : TORUS_DEFAULT_SUB_INNER;
-    uint32_t suby = (gm->suby > 0) ? gm->suby : TORUS_DEFAULT_SUB_OUTER;
+    uint32_t subx = gm->subx > 0 ? gm->subx : TORUS_DEFAULT_SUB_INNER;
+    uint32_t suby = gm->suby > 0 ? gm->suby : TORUS_DEFAULT_SUB_OUTER;
     mesh_create_torus(m, gm->in_radius, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated torus with %i triangles.", m->tri_cnt);
   } else if(type == OT_SPHERE) {
@@ -257,11 +257,6 @@ bool check_has_valid_mtl(gltf_mesh *gm, gltf_data* d)
   return true;
 }
 
-bool check_is_custom(gltf_mesh *gm)
-{
-  return gm->subx > 0 || gm->suby > 0 || gm->face_nrms;
-}
-
 uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
 {
   // Parse the gltf
@@ -285,7 +280,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     if(check_has_valid_mtl(gm, &data)) {
       mr->inst_cnt = 0; // Init for duplicate identification
       bool is_emissive = check_is_emissive_mesh(gm, &data);
-      mr->mesh_idx = 1; // Assign something that is not -1 ot indicate it is a mesh, actual index will follow during mesh creation
+      mr->mesh_idx = 1; // Assign something that is not -1 to indicate it is a mesh, actual index will follow during mesh creation
       mr->is_emissive = is_emissive;
       mesh_cnt++;
       logc("Gltf mesh %i (%s) will be a render mesh in the scene. This mesh is %semissive.",

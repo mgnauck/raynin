@@ -334,8 +334,6 @@ uint32_t read_nodes(gltf_data *data, const char *s, jsmntok_t *t)
 
 uint32_t read_cam_perspective(gltf_cam *c, const char *s, jsmntok_t *t)
 {
-  c->vert_fov = 45.0f;
-
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -355,6 +353,8 @@ uint32_t read_cam_perspective(gltf_cam *c, const char *s, jsmntok_t *t)
 
 uint32_t read_cam(gltf_cam *c, const char *s, jsmntok_t *t)
 {
+  c->vert_fov = 45.0f;
+
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -400,14 +400,6 @@ uint32_t read_cams(gltf_data *data, const char *s, jsmntok_t *t)
 
 uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
-  m->subx = 0;
-  m->suby = 0;
-  m->steps = 0;
-  m->in_radius = 0.25f;
-  m->no_caps = false;
-  m->face_nrms = false;
-  m->invert_nrms = false;
-
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -469,9 +461,6 @@ uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 
 uint32_t read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
 {
-  p->pos_idx = -1;
-  p->nrm_idx = -1;
-
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -500,6 +489,8 @@ uint32_t read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
 {
   p->ind_idx = -1;
   p->mtl_idx = -1;
+  p->pos_idx = -1;
+  p->nrm_idx = -1;
 
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
@@ -554,6 +545,13 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
   m->prims = NULL;
   m->prim_cnt = 0;
+  m->subx = 0;
+  m->suby = 0;
+  m->steps = 0;
+  m->in_radius = 0.25f;
+  m->no_caps = false;
+  m->face_nrms = false;
+  m->invert_nrms = false;
 
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
@@ -752,8 +750,6 @@ uint32_t read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
 
 uint32_t read_scene_extras(gltf_data *d, const char *s, jsmntok_t *t)
 {
-  d->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
-
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
@@ -776,6 +772,8 @@ uint32_t read_scene_extras(gltf_data *d, const char *s, jsmntok_t *t)
 
 uint32_t read_scene(gltf_data *d, const char *s, jsmntok_t *t)
 {
+  d->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
+
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;

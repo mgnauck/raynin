@@ -184,6 +184,12 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
 
   // Buffers
 
+  // No mesh in scene, keep min size buffers, for proper mapping to our layout/shader
+  triSz = triSz == 0 ? 48 : triSz;
+  nrmSz = nrmSz == 0 ? 48 : nrmSz;
+  ltriSz = ltriSz == 0 ? 64 : ltriSz;
+  nodeSz = nodeSz == 0 ? 64 : nodeSz;
+
   res.buf[BUF_CAM] = device.createBuffer({
     size: camSz,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
