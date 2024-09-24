@@ -122,7 +122,7 @@ void init_scene_riow(scene *s)
   mat4 transform, translation, rotation, scale;
 
   // Light meshes (need to be unique)
-  uint32_t lid = 0;
+  uint16_t lid = 0;
   m = mtl_init((vec3){ 1.16f, 1.16f, 1.16f });
   m.emissive = 1.0f;
   mtl_id = scene_add_mtl(s, &m);
@@ -136,13 +136,13 @@ void init_scene_riow(scene *s)
   }
 
   // Sphere mesh
-  uint32_t sid = 0;
+  uint16_t sid = 0;
   mesh = scene_acquire_mesh(s);
   mesh_create_sphere(mesh, 1.0f, 20, 20, mtl_id, false, false);
   sid = scene_attach_mesh(s, mesh, false);
 
   // Floor mesh
-  uint32_t fid = 0;
+  uint16_t fid = 0;
   m = mtl_init((vec3){ 0.25f, 0.25f, 0.25f });
   m.metallic = 0.0f;
   m.roughness = 1.0f;
@@ -159,12 +159,12 @@ void init_scene_riow(scene *s)
     mat4_trans(translation, (vec3){ 0.0f, 5.0f, -10.0f + (i * 10.0f) });
     //mat4_trans(translation, (vec3){ 0.0f, 5.0f, (i * 10.0f) });
     mat4_mul(transform, translation, transform);
-    scene_add_inst(s, lid + i, -1, transform);
+    scene_add_inst(s, lid + i, NO_MTL_OVERRIDE, transform);
   }
 
   // Floor instance
   mat4_scale_u(scale, 12.0f);
-  scene_add_inst(s, fid, -1, scale);
+  scene_add_inst(s, fid, NO_MTL_OVERRIDE, scale);
 
   // Reflecting sphere (black)
   mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });

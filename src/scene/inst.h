@@ -22,7 +22,7 @@ typedef struct inst_info {
   mat4        transform;
   mat4        inv_transform;
   aabb        box;
-  uint32_t    mesh_id;
+  uint16_t    mesh_id;
   uint32_t    ltri_ofs;
   uint32_t    ltri_cnt;
   uint32_t    state;

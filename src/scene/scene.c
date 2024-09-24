@@ -10,7 +10,7 @@
 #include "mtl.h"
 #include "tri.h"
 
-void scene_init(scene *s, uint32_t max_mesh_cnt, uint32_t max_mtl_cnt, uint32_t max_cam_cnt, uint32_t max_inst_cnt)
+void scene_init(scene *s, uint16_t max_mesh_cnt, uint16_t max_mtl_cnt, uint16_t max_cam_cnt, uint16_t max_inst_cnt)
 {
   s->mtls         = malloc(max_mtl_cnt * sizeof(*s->mtls));
   s->max_mtl_cnt  = max_mtl_cnt;
@@ -48,7 +48,7 @@ void scene_init(scene *s, uint32_t max_mesh_cnt, uint32_t max_mtl_cnt, uint32_t 
 
 void scene_release(scene *s)
 {
-  for(uint32_t i=0; i<s->mesh_cnt; i++)
+  for(uint16_t i=0; i<s->mesh_cnt; i++)
     mesh_release(&s->meshes[i]);
 
   free(s->cams);
@@ -77,7 +77,7 @@ void scene_finalize(scene *s)
   // Count tris and ltris of all the meshes
   s->max_tri_cnt = 0;
   s->max_ltri_cnt = 0;
-  for(uint32_t i=0; i<s->mesh_cnt; i++) {
+  for(uint16_t i=0; i<s->mesh_cnt; i++) {
     mesh *m = &s->meshes[i];
     if(m->is_emissive)
       s->max_ltri_cnt += m->tri_cnt;
@@ -92,7 +92,7 @@ void scene_finalize(scene *s)
   s->blas_nodes = malloc(2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
 
   // Build a blas for each mesh
-  for(uint32_t i=0; i<s->mesh_cnt; i++) {
+  for(uint16_t i=0; i<s->mesh_cnt; i++) {
     mesh *m = &s->meshes[i];
     blas_build(&s->blas_nodes[2 * m->ofs], m->tris, m->tri_cnt);
   }
@@ -235,7 +235,7 @@ void scene_prepare_render(scene *s)
 }
 
 // Material updates can trigger light tri changes, so not exposing mtl update for now.
-void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
+void scene_upd_mtl(scene *s, uint16_t mtl_id, mtl *mtl)
 {
   if(&s->mtls[mtl_id] != mtl)
     memcpy(&s->mtls[mtl_id], mtl, sizeof(*s->mtls));
@@ -243,13 +243,13 @@ void scene_upd_mtl(scene *s, uint32_t mtl_id, mtl *mtl)
   scene_set_dirty(s, RT_MTL);
 }
 
-uint32_t scene_add_mtl(scene *s, mtl *mtl)
+uint16_t scene_add_mtl(scene *s, mtl *mtl)
 {
   scene_upd_mtl(s, s->mtl_cnt, mtl);
   return s->mtl_cnt++;
 }
 
-void scene_set_active_cam(scene *s, uint32_t cam_id)
+void scene_set_active_cam(scene *s, uint16_t cam_id)
 {
   s->active_cam = &s->cams[cam_id];
 }
@@ -259,12 +259,12 @@ cam *scene_get_active_cam(scene *s)
   return s->active_cam;
 }
 
-cam *scene_get_cam(scene *s, uint32_t cam_id)
+cam *scene_get_cam(scene *s, uint16_t cam_id)
 {
   return &s->cams[cam_id];
 }
 
-uint32_t scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transform)
+uint16_t scene_add_inst(scene *s, uint16_t mesh_id, uint16_t mtl_id, mat4 transform)
 {
   inst_info *info = &s->inst_info[s->inst_cnt];
   info->mesh_id = mesh_id;
@@ -287,7 +287,7 @@ uint32_t scene_add_inst(scene *s, uint32_t mesh_id, int32_t mtl_id, mat4 transfo
   return s->inst_cnt++;
 }
 
-void scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform)
+void scene_upd_inst_trans(scene *s, uint16_t inst_id, mat4 transform)
 {
   inst_info *info = &s->inst_info[inst_id];
   memcpy(info->transform, transform, sizeof(mat4));
@@ -295,7 +295,7 @@ void scene_upd_inst_trans(scene *s, uint32_t inst_id, mat4 transform)
   info->state |= IS_TRANS_DIRTY;
 }
 
-void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
+void scene_upd_inst_mtl(scene *s, uint16_t inst_id, uint16_t mtl_id)
 {
   inst *inst = &s->instances[inst_id];
   inst_info *info = &s->inst_info[inst_id];
@@ -304,9 +304,9 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
   if(info->state & IS_EMISSIVE)
     info->state |= IS_WAS_EMISSIVE;
 
-  // Mtl override if mtl_id >= 0
-  if(mtl_id >= 0) {
-    // Highest 16 bits are mtl override id, i.e. max 65536 materials
+  // Mtl override if mtl_id != 0xffff
+  if(mtl_id < NO_MTL_OVERRIDE) {
+    // Highest 16 bits are mtl override id, i.e. max 65535 - 1 materials
     inst->id = (mtl_id << 16) | (inst->id & INST_ID_MASK);
 
     // Set highest bit to enable the material override
@@ -332,7 +332,7 @@ void scene_upd_inst_mtl(scene *s, uint32_t inst_id, int32_t mtl_id)
   s->inst_info[inst_id].state |= IS_MTL_DIRTY;
 }
 
-void scene_set_inst_state(scene *s, uint32_t inst_id, uint32_t state)
+void scene_set_inst_state(scene *s, uint16_t inst_id, uint32_t state)
 {
   s->inst_info[inst_id].state |= state;
 
@@ -343,7 +343,7 @@ void scene_set_inst_state(scene *s, uint32_t inst_id, uint32_t state)
   ///logc("Set inst state for %d", inst_id);
 }
 
-void scene_clr_inst_state(scene *s, uint32_t inst_id, uint32_t state)
+void scene_clr_inst_state(scene *s, uint16_t inst_id, uint32_t state)
 {
   s->inst_info[inst_id].state &= ~state;
 
@@ -354,7 +354,7 @@ void scene_clr_inst_state(scene *s, uint32_t inst_id, uint32_t state)
   ///logc("Cleared inst state for %d", inst_id);
 }
 
-uint32_t scene_get_inst_state(scene *s, uint32_t inst_id)
+uint32_t scene_get_inst_state(scene *s, uint16_t inst_id)
 {
   return s->inst_info[inst_id].state;
 }
@@ -364,7 +364,7 @@ mesh *scene_acquire_mesh(scene *s)
   return &s->meshes[s->mesh_cnt];
 }
 
-uint32_t scene_attach_mesh(scene *s, mesh *m, bool is_mesh_emissive)
+uint16_t scene_attach_mesh(scene *s, mesh *m, bool is_mesh_emissive)
 {
   scene_set_dirty(s, RT_TRI);
 

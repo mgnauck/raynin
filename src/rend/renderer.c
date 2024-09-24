@@ -94,7 +94,7 @@ void renderer_update(scene *s, bool converge)
   }
 
   if(s->dirty & RT_TRI) {
-    for(uint32_t i=0; i<s->mesh_cnt; i++) {
+    for(uint16_t i=0; i<s->mesh_cnt; i++) {
       mesh *m = &s->meshes[i];
       gpu_write_buf(BT_TRI, m->ofs * sizeof(*m->tris), m->tris, m->tri_cnt * sizeof(*m->tris));
       gpu_write_buf(BT_NRM, m->ofs * sizeof(*m->tri_nrms), m->tri_nrms, m->tri_cnt * sizeof(*m->tri_nrms));

@@ -18,7 +18,7 @@ void mesh_release(mesh *m)
   free(m->tris);
 }
 
-static void create_quad(tri *tris, tri_nrm *tri_nrms, vec3 pos, vec3 t, vec3 b, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals)
+static void create_quad(tri *tris, tri_nrm *tri_nrms, vec3 pos, vec3 t, vec3 b, uint8_t subx, uint8_t suby, uint16_t mtl, bool invert_normals)
 {
   float P = QUAD_DEFAULT_SIZE;
   float P2 = 0.5f * P;
@@ -38,9 +38,9 @@ static void create_quad(tri *tris, tri_nrm *tri_nrms, vec3 pos, vec3 t, vec3 b, 
   tri_nrm *tn = tri_nrms;
 
   float z = 0.0f;
-  for(uint32_t j=0; j<suby; j++) {
+  for(uint8_t j=0; j<suby; j++) {
     float x = 0.0f;
-    for(uint32_t i=0; i<subx; i++) {
+    for(uint8_t i=0; i<subx; i++) {
       // Tri 0
       *tp = (tri){
         .v0 = vec3_add(vec3_add(o, vec3_scale(t, x)), vec3_scale(b, z)),
@@ -70,14 +70,14 @@ static void create_quad(tri *tris, tri_nrm *tri_nrms, vec3 pos, vec3 t, vec3 b, 
   }
 }
 
-void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals)
+void mesh_create_quad(mesh *m, uint8_t subx, uint8_t suby, uint16_t mtl, bool invert_normals)
 {
   // Generate quad in XZ plane at origin with normal pointing up in Y
   mesh_init(m, 2 * subx * suby);
   create_quad(m->tris, m->tri_nrms, (vec3){ 0.0f, 0.0f, 0.0f }, (vec3){ 1.0f, 0.0f, 0.0f }, (vec3){ 0.0f, 0.0f, 1.0f }, subx, suby, mtl, invert_normals);
 }
 
-void mesh_create_box(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals)
+void mesh_create_box(mesh *m, uint8_t subx, uint8_t suby, uint16_t mtl, bool invert_normals)
 {
   uint32_t cnt_per_side = 2 * subx * suby;
   mesh_init(m, 6 * cnt_per_side);
@@ -95,7 +95,7 @@ void mesh_create_box(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool i
   create_quad(m->tris + 5 * cnt_per_side, m->tri_nrms + 5 * cnt_per_side, (vec3){ 0.0f, 0.0f, -QUAD_DEFAULT_SIZE * 0.5f }, (vec3){ 1.0f,  0.0f, 0.0f }, (vec3){ 0.0f,  1.0f, 0.0f }, subx, suby, mtl, invert_normals);
 }
 
-void mesh_create_sphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uint32_t mtl, bool face_normals, bool invert_normals)
+void mesh_create_sphere(mesh *m, float radius, uint8_t subx, uint8_t suby, uint16_t mtl, bool face_normals, bool invert_normals)
 {
   mesh_init(m, 2 * subx * suby);
 
@@ -110,9 +110,9 @@ void mesh_create_sphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uin
   tri_nrm *tn = m->tri_nrms;
 
   float theta = 0.0f;
-  for(uint32_t j=0; j<suby; j++) {
+  for(uint8_t j=0; j<suby; j++) {
     float phi = 0.0f;
-    for(uint32_t i=0; i<subx; i++) {
+    for(uint8_t i=0; i<subx; i++) {
       vec3 a = vec3_scale(vec3_spherical(theta + dtheta, phi), radius);
       vec3 b = vec3_scale(vec3_spherical(theta, phi), radius);
       vec3 c = vec3_scale(vec3_spherical(theta, phi + dphi), radius);
@@ -157,7 +157,7 @@ void mesh_create_sphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uin
   }
 }
 
-void mesh_create_cylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, bool caps, uint32_t mtl, bool face_normals, bool invert_normals)
+void mesh_create_cylinder(mesh *m, float radius, float height, uint8_t subx, uint8_t suby, bool caps, uint16_t mtl, bool face_normals, bool invert_normals)
 {
   mesh_init(m, 2 * subx * suby + (caps ? 2 * subx : 0));
 
@@ -172,9 +172,9 @@ void mesh_create_cylinder(mesh *m, float radius, float height, uint32_t subx, ui
   tri_nrm *tn = m->tri_nrms;
 
   float h = 0.0f;
-  for(uint32_t j=0; j<suby; j++) {
+  for(uint8_t j=0; j<suby; j++) {
     float phi = 0.0f;
-    for(uint32_t i=0; i<subx; i++) {
+    for(uint8_t i=0; i<subx; i++) {
       float x0 = radius * sinf(phi);
       float x1 = radius * sinf(phi + dphi);
       float y0 = -height * 0.5f + h;
@@ -225,7 +225,7 @@ void mesh_create_cylinder(mesh *m, float radius, float height, uint32_t subx, ui
 
   if(caps) {
     float phi = 0.0f;
-    for(uint32_t i=0; i<subx; i++) {
+    for(uint8_t i=0; i<subx; i++) {
       float x0 = radius * sinf(phi);
       float x1 = radius * sinf(phi + dphi);
       float z0 = radius * cosf(phi);
@@ -259,7 +259,7 @@ void mesh_create_cylinder(mesh *m, float radius, float height, uint32_t subx, ui
   }
 }
 
-void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint32_t sub_inner, uint32_t sub_outer, uint32_t mtl, bool face_normals, bool invert_normals)
+void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint8_t sub_inner, uint8_t sub_outer, uint16_t mtl, bool face_normals, bool invert_normals)
 {
   mesh_init(m, 2 * sub_inner * sub_outer);
 
@@ -276,14 +276,14 @@ void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint32_t
   tri_nrm *tn = m->tri_nrms;
 
   float v = 0.0f;
-  for(uint32_t j=0; j<sub_outer; j++) {
+  for(uint8_t j=0; j<sub_outer; j++) {
     vec3 p0n = (vec3){ sinf(v), 0.0f, cosf(v) };
     vec3 p0 = vec3_scale(p0n, outer_radius);
     vec3 p1n = (vec3){ sinf(v + dv), 0.0f, cosf(v + dv) };
     vec3 p1 = vec3_scale(p1n, outer_radius);
 
     float u = 0.0f;
-    for(uint32_t i=0; i<sub_inner; i++) {
+    for(uint8_t i=0; i<sub_inner; i++) {
       float x0 = sinf(u) * inner_radius;
       float y0 = cosf(u) * inner_radius;
       float x1 = sinf(u + du) * inner_radius;

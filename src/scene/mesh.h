@@ -31,10 +31,10 @@ typedef struct mesh {
 void mesh_init(mesh *m, uint32_t tri_cnt);
 void mesh_release(mesh *m);
 
-void mesh_create_quad(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals);
-void mesh_create_box(mesh *m, uint32_t subx, uint32_t suby, uint32_t mtl, bool invert_normals);
-void mesh_create_sphere(mesh *m, float radius, uint32_t subx, uint32_t suby, uint32_t mtl, bool face_normals, bool invert_normals);
-void mesh_create_cylinder(mesh *m, float radius, float height, uint32_t subx, uint32_t suby, bool caps, uint32_t mtl, bool face_normals, bool invert_normals);
-void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint32_t sub_inner, uint32_t sub_outer, uint32_t mtl, bool face_normals, bool invert_normals);
+void mesh_create_quad(mesh *m, uint8_t subx, uint8_t suby, uint16_t mtl, bool invert_normals);
+void mesh_create_box(mesh *m, uint8_t subx, uint8_t suby, uint16_t mtl, bool invert_normals);
+void mesh_create_sphere(mesh *m, float radius, uint8_t subx, uint8_t suby, uint16_t mtl, bool face_normals, bool invert_normals);
+void mesh_create_cylinder(mesh *m, float radius, float height, uint8_t subx, uint8_t suby, bool caps, uint16_t mtl, bool face_normals, bool invert_normals);
+void mesh_create_torus(mesh *m, float inner_radius, float outer_radius, uint8_t sub_inner, uint8_t sub_outer, uint16_t mtl, bool face_normals, bool invert_normals);
 
 #endif
