@@ -4,6 +4,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef enum obj_type {
+  OT_QUAD,
+  OT_BOX,
+  OT_SPHERE,
+  OT_CYLINDER,
+  OT_TORUS,
+  OT_MESH,
+  OT_CAMERA,
+  OT_MATERIAL,
+  OT_SCENE
+} obj_type;
+
 typedef struct scene scene;
 typedef struct ex_scene ex_scene;
 

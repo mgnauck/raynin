@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include "imex/ex_scene.h"
 #include "imex/import.h"
 #include "rend/bvh.h"
 #include "rend/renderer.h"
@@ -233,6 +234,11 @@ uint8_t init(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t 
   logc("max tris: %i, max ltris: %i, max mtls: %i, max insts: %i",
       s->max_tri_cnt, s->max_ltri_cnt, s->max_mtl_cnt, s->max_inst_cnt);
 
+  ex_scene es;
+  if(import_gltf_ex(&es, gltf, gltf_sz, bin, bin_sz) != 0) {
+    logc("Importing gltf for export failed");
+  }
+
   // Allocate resource on the GPU
   if(ret == 0)
     renderer_gpu_alloc(s->max_tri_cnt, s->max_ltri_cnt, s->max_mtl_cnt, s->max_inst_cnt);
@@ -243,7 +249,7 @@ uint8_t init(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t 
 __attribute__((visibility("default")))
 void save()
 {
-  logc("Saving scene via download");
+  //logc("Saving scene via download");
   //save_binary(bin, bin_sz);
 }
 

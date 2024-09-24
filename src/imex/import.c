@@ -164,7 +164,8 @@ void generate_mesh_data(mesh *m, gltf_mesh *gm, bool is_emissive)
   if(type == OT_TORUS) {
     uint32_t subx = gm->subx > 0 ? gm->subx : TORUS_DEFAULT_SUB_INNER;
     uint32_t suby = gm->suby > 0 ? gm->suby : TORUS_DEFAULT_SUB_OUTER;
-    mesh_create_torus(m, gm->in_radius, 1.0f, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
+    float in_radius = gm->in_radius > 0.0 ? gm->in_radius : TORUS_DEFAULT_INNER_RADIUS;
+    mesh_create_torus(m, in_radius, TORUS_DEFAULT_OUTER_RADIUS, subx, suby, gm->prims[0].mtl_idx, gm->face_nrms | is_emissive, gm->invert_nrms);
     logc("Generated torus with %i triangles.", m->tri_cnt);
   } else if(type == OT_SPHERE) {
     uint32_t subx = (gm->subx > 0) ? gm->subx : SPHERE_DEFAULT_SUBX;
@@ -367,18 +368,14 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     create_mtl(&m, gm);
     scene_add_mtl(s, &m);
     logc("Created material %s (emissive: %i, refractive: %i)", gm->name, m.emissive > 0.0f, m.refractive == 1.0f);
-    /*mtl m = (mtl){ .metallic = gm->metallic, .roughness = gm->roughness, .ior = gm->ior, .refractive = gm->refractive > 0.99f ? 1.0f : 0.0f };
-    bool is_emissive = check_is_emissive_mtl(gm);
-    m.col = is_emissive ? gm->emission : gm->col;
-    m.emissive = is_emissive ? 1.0f : 0.0f;
-    scene_add_mtl(s, &m);
-    logc("Created material %s (emissive: %i, refractive: %i)", gm->name, is_emissive, m.refractive == 1.0f);*/
   }
 
-  // Initialize a default camera (might be overwritten if there are one or more cams in the scene)
-  cam *c = scene_get_active_cam(s);
-  *c = (cam){ .vert_fov = 45.0f, .foc_dist = 10.0f, .foc_angle = 0.0f };
-  cam_set(c, (vec3){ 0.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+  // Initialize a default camera if there is no other camera in the scene
+  if(data.cam_node_cnt == 0) {
+    cam *c = scene_get_active_cam(s);
+    *c = (cam){ .vert_fov = 45.0f, .foc_dist = 10.0f, .foc_angle = 0.0f };
+    cam_set(c, (vec3){ 0.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+  }
 
   // Add nodes as scene instances
   logc("-------- Processing nodes and creating instances:");
@@ -401,15 +398,103 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
  
   gltf_release(&data);
 
-  logc("-------- Completed scene: %i meshes, %i materials, %i cameras, %i instances", s->mesh_cnt, s->mtl_cnt, data.cam_cnt, s->inst_cnt);
+  logc("-------- Completed scene: %i meshes, %i materials, %i cameras, %i instances", s->mesh_cnt, s->mtl_cnt, s->cam_cnt, s->inst_cnt);
 
   return 0;
 }
 
 void process_loaded_ex_mesh_data(ex_mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 {
-  // TODO
-  logc("Meshes with loaded data are not yet supported in export meshes.");
+  *m = (ex_mesh){ .mtl_id = 0xffff, .type = OT_MESH, .share_id = 0 }; // TODO Share id
+
+  // Sum vertex/normal/index count from gltf mesh primitives
+  uint32_t index_cnt = 0;
+  uint32_t vertex_cnt = 0;
+  uint32_t normal_cnt = 0;
+  for(uint32_t j=0; j<gm->prim_cnt; j++) {
+    gltf_prim *p = &gm->prims[j];
+    gltf_accessor *ind_a = &d->accessors[p->ind_idx];
+    gltf_accessor *pos_a = &d->accessors[p->pos_idx];
+    gltf_accessor *nrm_a = &d->accessors[p->nrm_idx];
+    if(ind_a->data_type == DT_SCALAR && pos_a->data_type == DT_VEC3 && nrm_a->data_type == DT_VEC3) {
+      index_cnt += ind_a->count;
+      vertex_cnt += pos_a->count;
+      normal_cnt += nrm_a->count;
+    } else
+      logc("#### WARN: Unexpected accessor data type found when creating a mesh. Ignoring primitive.");
+  }
+
+  if(index_cnt > 0xffff) {
+    logc("#### WARN: Mesh %s has indices of more than 16 bit. This is not supported for size reasons. Skipping.", gm->name);
+    return;
+  }
+
+  if(vertex_cnt != normal_cnt) {
+    logc("#### WARN: Mesh %s has unsupported difference in number of vertices and normals. Skipping.", gm->name);
+    return;
+  }
+
+  ex_mesh_init(m, vertex_cnt, index_cnt);
+
+  float inv = gm->invert_nrms ? -1.0f : 1.0f;
+
+  normal_cnt = 0;
+  for(uint32_t j=0; j<gm->prim_cnt; j++) {
+    gltf_prim *p = &gm->prims[j];
+
+    gltf_accessor *ind_acc = &d->accessors[p->ind_idx];
+    if(ind_acc->data_type != DT_SCALAR) {
+      logc("#### WARN: Expected index buffer with data type SCALAR. Ignoring primitive.");
+      continue;
+    }
+    if(ind_acc->comp_type != 5121 && ind_acc->comp_type != 5123 && ind_acc->comp_type != 5125) {
+      logc("#### WARN: Expected index buffer with component type of byte, short or int. Ignoring primitive.");
+      continue;
+    }
+
+    gltf_accessor *pos_acc = &d->accessors[p->pos_idx];
+    if(pos_acc->data_type != DT_VEC3) {
+      logc("#### WARN: Expected position buffer with data type VEC3. Ignoring primitive.");
+      continue;
+    }
+    if(pos_acc->comp_type != 5126) {
+      logc("#### WARN: Expected position buffer with component type of float. Ignoring primitive.");
+      continue;
+    }
+
+    gltf_accessor *nrm_acc = &d->accessors[p->nrm_idx];
+    if(nrm_acc->data_type != DT_VEC3) {
+      logc("#### WARN: Expected normal buffer with data type VEC3. Ignoring primitive.");
+      continue;
+    }
+    if(nrm_acc->comp_type != 5126) {
+      logc("#### WARN: Expected normal buffer with component type of float. Ignoring primitive.");
+      continue;
+    }
+
+    // Indices
+    gltf_bufview *ind_bv = &d->bufviews[ind_acc->bufview];
+    for(uint16_t i=0; i<ind_acc->count; i++) {
+      m->indices[m->index_cnt++] = (ind_acc->comp_type == 5121) ?
+        read_ubyte(bin, ind_bv->byte_ofs, i) : (ind_acc->comp_type == 5123) ?
+          read_ushort(bin, ind_bv->byte_ofs, i) : /* 5125 */ read_uint(bin, ind_bv->byte_ofs, i);
+    }
+
+    // Positions and normals
+    gltf_bufview *pos_bv = &d->bufviews[pos_acc->bufview];
+    gltf_bufview *nrm_bv = &d->bufviews[nrm_acc->bufview];
+    for(uint32_t i=0; i<pos_acc->count; i++) {
+      m->vertices[m->vertex_cnt] = read_vec(bin, pos_bv->byte_ofs, i);
+      m->normals[m->vertex_cnt++] = read_vec(bin, nrm_bv->byte_ofs, i);
+    }
+
+    if(m->mtl_id != 0xffff && m->mtl_id != p->mtl_idx) {
+      logc("#### WARN: Mesh with multiple materials found. This is not supported for size reasons. Ignoring material change.");
+    } else
+      m->mtl_id = p->mtl_idx;
+  }
+
+  logc("Loaded mesh %s from gltf data with %i vertices and %i indices.", gm->name, m->vertex_cnt, m->index_cnt);
 }
 
 void process_generated_ex_mesh_data(ex_mesh *m, gltf_mesh *gm)
@@ -419,7 +504,7 @@ void process_generated_ex_mesh_data(ex_mesh *m, gltf_mesh *gm)
     .type = get_mesh_type(gm->name),
     .subx = gm->subx,
     .suby = gm->suby,
-    .share_id = 0,
+    .share_id = 0,  // TODO share id
     .face_nrms = gm->face_nrms,
     .invert_nrms = gm->invert_nrms,
     .no_caps = gm->no_caps,
@@ -428,15 +513,15 @@ void process_generated_ex_mesh_data(ex_mesh *m, gltf_mesh *gm)
 
   obj_type type = get_mesh_type(gm->name);
   if(type == OT_TORUS) {
-    logc("Found generated torus");
+    logc("Found generated torus (%s)", gm->name);
   } else if(type == OT_SPHERE) {
-    logc("Found generated uvsphere");
+    logc("Found generated uvsphere (%s)", gm->name);
   } else if(type == OT_CYLINDER) {
-    logc("Found generated uvcylinder");
+    logc("Found generated uvcylinder (%s)", gm->name);
   } else if(type == OT_BOX) {
-    logc("Found generated box");
+    logc("Found generated box (%s)", gm->name);
   } else if(type == OT_QUAD) {
-    logc("Found generated quad");
+    logc("Found generated quad (%s)", gm->name);
   } else {
     logc("Found something unexpected while processing mesh data");
   }
@@ -586,7 +671,7 @@ uint8_t import_gltf_ex(ex_scene *s, const char *gltf, size_t gltf_sz, const uint
     logc("Created material %s (emissive: %i, refractive: %i)", gm->name, m.emissive > 0.0, m.refractive == 1.0f);
   }
 
-  // Initialize a default camera
+  // Initialize a default camera if there is no other camera in the scene
   if(data.cam_node_cnt == 0)
     s->cams[0] = (ex_cam){ .eye = (vec3){ 0.0f, 5.0f, 10.0f }, .tgt = (vec3){ 0.0f, 0.0f, 0.0f }, .vert_fov = 45.0f };
 
@@ -607,7 +692,7 @@ uint8_t import_gltf_ex(ex_scene *s, const char *gltf, size_t gltf_sz, const uint
 
   gltf_release(&data);
 
-  logc("-------- Completed scene: %i meshes, %i materials, %i cameras, %i instances", s->mesh_cnt, s->mtl_cnt, data.cam_cnt, s->inst_cnt);
+  logc("-------- Completed scene: %i meshes, %i materials, %i cameras, %i instances", s->mesh_cnt, s->mtl_cnt, s->cam_cnt, s->inst_cnt);
 
   return 0;
 }

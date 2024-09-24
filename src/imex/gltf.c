@@ -548,7 +548,7 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
   m->subx = 0;
   m->suby = 0;
   m->steps = 0;
-  m->in_radius = 0.25f;
+  m->in_radius = 0.0f;
   m->no_caps = false;
   m->face_nrms = false;
   m->invert_nrms = false;

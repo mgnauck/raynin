@@ -17,15 +17,15 @@ void ex_scene_init(ex_scene *s, uint16_t max_mesh_cnt, uint16_t max_mtl_cnt, uin
   s->inst_cnt     = 0;
 
   s->cams         = malloc(max_cam_cnt * sizeof(*s->cams));
-  s->cam_cnt      = max_cam_cnt;
+  s->cam_cnt      = 0;
 
   s->bg_col       = (vec3){ 0.0f, 0.0f, 0.0f };
 }
 
 void ex_scene_release(ex_scene *s)
 {
-  //for(uint16_t i=0; i<s->mesh_cnt; i++)
-  //  ex_mesh_release(&s->meshes[i]);
+  for(uint16_t i=0; i<s->mesh_cnt; i++)
+    ex_mesh_release(&s->meshes[i]);
 
   free(s->cams);
   free(s->instances);

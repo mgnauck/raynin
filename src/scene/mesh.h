@@ -4,17 +4,20 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define QUAD_DEFAULT_SIZE         2.0f
-#define QUAD_DEFAULT_SUBX         2
-#define QUAD_DEFAULT_SUBY         2
-#define BOX_DEFAULT_SUBY          2
-#define BOX_DEFAULT_SUBX          2
-#define SPHERE_DEFAULT_SUBX       18
-#define SPHERE_DEFAULT_SUBY       18
-#define CYLINDER_DEFAULT_SUBX     18
-#define CYLINDER_DEFAULT_SUBY     2
-#define TORUS_DEFAULT_SUB_INNER   18
-#define TORUS_DEFAULT_SUB_OUTER   18
+#define QUAD_DEFAULT_SUBX           2
+#define QUAD_DEFAULT_SUBY           2
+#define BOX_DEFAULT_SUBY            2
+#define BOX_DEFAULT_SUBX            2
+#define SPHERE_DEFAULT_SUBX         18
+#define SPHERE_DEFAULT_SUBY         18
+#define CYLINDER_DEFAULT_SUBX       18
+#define CYLINDER_DEFAULT_SUBY       2
+#define TORUS_DEFAULT_SUB_INNER     18
+#define TORUS_DEFAULT_SUB_OUTER     18
+
+#define QUAD_DEFAULT_SIZE           2.0f
+#define TORUS_DEFAULT_INNER_RADIUS  0.25f
+#define TORUS_DEFAULT_OUTER_RADIUS  1.0f
 
 typedef struct vec3 vec3;
 typedef struct tri tri;
