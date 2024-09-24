@@ -21,8 +21,9 @@ extern void set_ltri_cnt(uint32_t n);
 extern void toggle_converge();
 extern void toggle_filter();
 extern void toggle_reprojection();
+extern void save_binary(const void *ptr, uint32_t sz);
 
-  __attribute__((visibility("default")))
+__attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
 {
   vec3 gmin = vec3_min(s->tlas_nodes[0].lmin, s->tlas_nodes[0].rmin);
@@ -239,6 +240,13 @@ uint8_t init(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t 
   return ret;
 }
 
+__attribute__((visibility("default")))
+void save()
+{
+  logc("Saving scene via download");
+  //save_binary(bin, bin_sz);
+}
+
 float last_change = 0.0;
 
 __attribute__((visibility("default")))
@@ -249,12 +257,12 @@ void update(float time, bool converge)
     cam *cam = scene_get_active_cam(s);
     vec3 gmin = vec3_min(s->tlas_nodes[0].lmin, s->tlas_nodes[0].rmin);
     vec3 gmax = vec3_max(s->tlas_nodes[0].lmax, s->tlas_nodes[0].rmax);
-    vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.6f);
-    //vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.27f);
-    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
-    //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 20.0f, e.z * cosf(time * 0.25f) };
-    cam_set(cam, pos, vec3_neg(pos));
-    //cam_set(cam, pos, vec3_add((vec3){0.0f, 24.0, 0.0f}, vec3_neg(pos)));
+    //vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.6f);
+    vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.4f);
+    //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
+    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 20.0f, e.z * cosf(time * 0.25f) };
+    //cam_set(cam, pos, vec3_neg(pos));
+    cam_set(cam, pos, vec3_add((vec3){0.0f, 24.0, 0.0f}, vec3_neg(pos)));
     scene_set_dirty(s, RT_CAM);
   }
 

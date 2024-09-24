@@ -7,6 +7,9 @@
 #include "../sys/log.h"
 #include "../sys/mutil.h"
 #include "../sys/sutil.h"
+#include "ex_cam.h"
+#include "ex_mesh.h"
+#include "ex_scene.h"
 #include "gltf.h"
 
 typedef struct mesh_ref {
@@ -15,16 +18,7 @@ typedef struct mesh_ref {
   uint32_t  inst_cnt;     // Instances pointing to a mesh
 } mesh_ref;
 
-typedef enum obj_type {
-  OT_QUAD,
-  OT_BOX,
-  OT_SPHERE,
-  OT_CYLINDER,
-  OT_TORUS,
-  OT_MESH,
-} obj_type;
-
-obj_type get_type(const char *name)
+obj_type get_mesh_type(const char *name)
 {
   if(strstr_lower(name, "grid") || strstr_lower(name, "plane") || strstr_lower(name, "quad"))
     return OT_QUAD;
@@ -166,7 +160,7 @@ void load_mesh_data(mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 
 void generate_mesh_data(mesh *m, gltf_mesh *gm, bool is_emissive)
 {
-  obj_type type = get_type(gm->name); 
+  obj_type type = get_mesh_type(gm->name);
   if(type == OT_TORUS) {
     uint32_t subx = gm->subx > 0 ? gm->subx : TORUS_DEFAULT_SUB_INNER;
     uint32_t suby = gm->suby > 0 ? gm->suby : TORUS_DEFAULT_SUB_OUTER;
@@ -239,6 +233,14 @@ void process_cam_node(scene *s, gltf_data *d, gltf_node *gn)
 bool check_is_emissive_mtl(gltf_mtl *gm)
 {
   return vec3_max_comp(gm->emission) > 0.0f;
+}
+
+void create_mtl(mtl *m, gltf_mtl *gm)
+{
+  *m = (mtl){ .metallic = gm->metallic, .roughness = gm->roughness, .ior = gm->ior, .refractive = gm->refractive > 0.99f ? 1.0f : 0.0f };
+  bool is_emissive = check_is_emissive_mtl(gm);
+  m->col = is_emissive ? gm->emission : gm->col;
+  m->emissive = is_emissive ? 1.0f : 0.0f;
 }
 
 bool check_is_emissive_mesh(gltf_mesh *gm, gltf_data* d)
@@ -329,7 +331,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
         if(++mr->inst_cnt == 1 || mr->is_emissive) {
           gltf_mesh *gm = &data.meshes[gn->mesh_idx];
           mesh *m = scene_acquire_mesh(s);
-          obj_type type = get_type(gm->name); 
+          obj_type type = get_mesh_type(gm->name);
           if(type == OT_MESH || gm->prim_cnt > 1)
             load_mesh_data(m, &data, gm, bin);
           else
@@ -361,12 +363,16 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   logc("-------- Creating materials:");
   for(uint32_t i=0; i<data.mtl_cnt; i++) {
     gltf_mtl *gm = &data.mtls[i];
-    mtl m = (mtl){ .metallic = gm->metallic, .roughness = gm->roughness, .ior = gm->ior, .refractive = gm->refractive > 0.99f ? 1.0f : 0.0f };
+    mtl m;
+    create_mtl(&m, gm);
+    scene_add_mtl(s, &m);
+    logc("Created material %s (emissive: %i, refractive: %i)", gm->name, m.emissive > 0.0f, m.refractive == 1.0f);
+    /*mtl m = (mtl){ .metallic = gm->metallic, .roughness = gm->roughness, .ior = gm->ior, .refractive = gm->refractive > 0.99f ? 1.0f : 0.0f };
     bool is_emissive = check_is_emissive_mtl(gm);
     m.col = is_emissive ? gm->emission : gm->col;
     m.emissive = is_emissive ? 1.0f : 0.0f;
     scene_add_mtl(s, &m);
-    logc("Created material %s (emissive: %i, refractive: %i)", gm->name, is_emissive, m.refractive == 1.0f);
+    logc("Created material %s (emissive: %i, refractive: %i)", gm->name, is_emissive, m.refractive == 1.0f);*/
   }
 
   // Initialize a default camera (might be overwritten if there are one or more cams in the scene)
@@ -380,7 +386,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
     gltf_node *gn = &data.nodes[i];
     if(gn->mesh_idx >= 0)
       process_mesh_node(s, &data, gn, i, render_mesh_ids);
-    else if(gn->cam_idx >= 0) 
+    else if(gn->cam_idx >= 0)
       process_cam_node(s, &data, gn);
     else
       logc("#### WARN: Found unknown node %i (%s). Expected camera or mesh. Skipping.", i, gn->name);
@@ -393,6 +399,212 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   logc("-------- Finalizing scene (blas and ltri creation)");
   scene_finalize(s);
  
+  gltf_release(&data);
+
+  logc("-------- Completed scene: %i meshes, %i materials, %i cameras, %i instances", s->mesh_cnt, s->mtl_cnt, data.cam_cnt, s->inst_cnt);
+
+  return 0;
+}
+
+void process_loaded_ex_mesh_data(ex_mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
+{
+  // TODO
+  logc("Meshes with loaded data are not yet supported in export meshes.");
+}
+
+void process_generated_ex_mesh_data(ex_mesh *m, gltf_mesh *gm)
+{
+  *m = (ex_mesh){
+    .mtl_id = gm->prims[0].mtl_idx,
+    .type = get_mesh_type(gm->name),
+    .subx = gm->subx,
+    .suby = gm->suby,
+    .share_id = 0,
+    .face_nrms = gm->face_nrms,
+    .invert_nrms = gm->invert_nrms,
+    .no_caps = gm->no_caps,
+    .in_radius = gm->in_radius,
+  };
+
+  obj_type type = get_mesh_type(gm->name);
+  if(type == OT_TORUS) {
+    logc("Found generated torus");
+  } else if(type == OT_SPHERE) {
+    logc("Found generated uvsphere");
+  } else if(type == OT_CYLINDER) {
+    logc("Found generated uvcylinder");
+  } else if(type == OT_BOX) {
+    logc("Found generated box");
+  } else if(type == OT_QUAD) {
+    logc("Found generated quad");
+  } else {
+    logc("Found something unexpected while processing mesh data");
+  }
+
+  logc("mtl id: %i, subx: %i, suby: %i, share id: %i, face nrms: %i, invert nrms: %i, no caps: %i, inner radius: %f",
+      m->mtl_id, m->subx, m->suby, m->share_id, m->face_nrms, m->invert_nrms, m->no_caps, m->in_radius);
+}
+
+void process_ex_mesh_node(ex_scene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx, int32_t *render_mesh_ids)
+{
+  // Get mesh data
+  gltf_mesh *gm = &d->meshes[gn->mesh_idx];
+  int32_t mesh_idx = render_mesh_ids[node_idx];
+
+  // Create instance
+  if(mesh_idx >= 0) {
+    ex_scene_add_inst(s, mesh_idx, gn->scale, gn->rot, gn->trans);
+    logc("Created mesh instance of gltf mesh %i (%s) (render mesh %i) for node %i (%s).",
+        gn->mesh_idx, gm->name, mesh_idx, node_idx, gn->name);
+  } else {
+    logc("#### WARN: Node %i (%s) points at gltf mesh %i (%s) with invalid data. No instance will be created.",
+        node_idx, gn->name, gn->mesh_idx, gm->name);
+  }
+}
+
+void process_ex_cam_node(ex_scene *s, gltf_data *d, gltf_node *gn)
+{
+  mat4 rot;
+  mat4_from_quat(rot, gn->rot[0], gn->rot[1], gn->rot[2], gn->rot[3]);
+
+  vec3 dir = vec3_unit(mat4_mul_dir(rot, (vec3){ 0.0f, 0.0f, -1.0f }));
+
+  gltf_cam *gc = &d->cams[gn->cam_idx];
+
+  ex_scene_add_cam(s, gn->trans, vec3_add(gn->trans, dir), gc->vert_fov);
+
+  logc("Created camera %i from node (%s) pointing to gltf cam %i (%s).", gn->cam_idx, gn->name, gn->cam_idx, gc->name);
+}
+
+uint8_t import_gltf_ex(ex_scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
+{
+  // Parse the gltf
+  logc("-------- Reading gltf:");
+  gltf_data data = (gltf_data){ .nodes = NULL };
+  if(gltf_read(&data, gltf, gltf_sz) != 0) {
+    gltf_release(&data);
+    logc("Failed to read gltf data.");
+    return 1;
+  }
+
+  // Mapping gltf meshes to renderer meshes
+  mesh_ref *mesh_map = malloc(data.mesh_cnt * sizeof(*mesh_map));
+  uint32_t mesh_cnt = 0;
+
+  // Identify actual meshes
+  logc("-------- Identifying meshes:");
+  for(uint32_t j=0; j<data.mesh_cnt; j++) {
+    gltf_mesh *gm = &data.meshes[j];
+    mesh_ref *mr = &mesh_map[j];
+    if(check_has_valid_mtl(gm, &data)) {
+      mr->inst_cnt = 0; // Init for duplicate identification
+      bool is_emissive = check_is_emissive_mesh(gm, &data);
+      mr->mesh_idx = 1; // Assign something that is not -1 to indicate it is a mesh, actual index will follow during mesh creation
+      mr->is_emissive = is_emissive;
+      mesh_cnt++;
+      logc("Gltf mesh %i (%s) will be a render mesh in the scene. This mesh is %semissive.",
+          j, gm->name, is_emissive ? "" : "not ");
+    } else {
+      mr->mesh_idx = -2;
+      mr->is_emissive = false;
+      logc("#### WARN: Gltf mesh %i (%s) has one or more invalid material indices.", j, gm->name);
+    }
+  }
+
+  uint32_t dup_mesh_cnt = 0;
+
+  // Count required emissive mesh duplicates by counting the nodes pointing to a mesh
+  logc("-------- Identifying emissive meshes that need to be duplicated");
+  for(uint32_t i=0; i<data.node_cnt; i++) {
+    gltf_node *gn = &data.nodes[i];
+    if(gn->mesh_idx >= 0) {
+      mesh_ref *mr = &mesh_map[gn->mesh_idx];
+      if(++mr->inst_cnt > 1 && mr->is_emissive) {
+        logc("Node %i (%s) references a mesh that is emissive and requires duplication.", i, gn->name);
+        dup_mesh_cnt++;
+      }
+    }
+  }
+  logc("Found that %i duplicates of emissive meshes are required.", dup_mesh_cnt);
+
+  // Allocate scene
+  logc("-------- Allocating %i meshes, %i materials, %i cameras and %i instances.",
+    mesh_cnt + dup_mesh_cnt, data.mtl_cnt, max(1, data.cam_node_cnt), data.node_cnt - data.cam_node_cnt);
+  ex_scene_init(s, mesh_cnt + dup_mesh_cnt, data.mtl_cnt, max(1, data.cam_node_cnt), data.node_cnt - data.cam_node_cnt);
+
+  // Gltf node indices to render mesh indices
+  int32_t *render_mesh_ids = malloc(data.node_cnt * sizeof(*render_mesh_ids));
+
+  // Reset mesh instance counters
+  for(uint32_t i=0; i<data.mesh_cnt; i++)
+    mesh_map[i].inst_cnt = 0;
+
+  logc("-------- Creating render meshes");
+  for(uint32_t i=0; i<data.node_cnt; i++) {
+    gltf_node *gn = &data.nodes[i];
+    if(gn->mesh_idx >= 0) {
+      mesh_ref *mr = &mesh_map[gn->mesh_idx];
+      if(mr->mesh_idx >= 0) {
+        if(++mr->inst_cnt == 1 || mr->is_emissive) {
+          gltf_mesh *gm = &data.meshes[gn->mesh_idx];
+          ex_mesh *m = ex_scene_acquire_mesh(s);
+          obj_type type = get_mesh_type(gm->name);
+          if(type == OT_MESH || gm->prim_cnt > 1)
+            process_loaded_ex_mesh_data(m, &data, gm, bin);
+          else
+            process_generated_ex_mesh_data(m, gm);
+          render_mesh_ids[i] = ex_scene_attach_mesh(s, m);
+          if(mr->inst_cnt == 1)
+            // Update to actual render mesh id, so all other (non-emissive) instances get the index as well
+            mr->mesh_idx = render_mesh_ids[i];
+          logc("Created render mesh %i from gltf mesh %i (%s) for node %i (%s).",
+              render_mesh_ids[i], gn->mesh_idx, gm->name, i, gn->name);
+        } else {
+          render_mesh_ids[i] = mr->mesh_idx;
+          logc("Found non-emissive instance of gltf mesh %i for node %i (%s) pointing at render mesh %i",
+              gn->mesh_idx, i, gn->name, mr->mesh_idx);
+        }
+      } else {
+        render_mesh_ids[i] = -2; // Not a valid mesh, so no render mesh
+        logc("#### WARN: Skipping gltf mesh %i pointed to by node %i (%s) because the gltf has invalid data.",
+            gn->mesh_idx, i, gn->name);
+      }
+    } else {
+      render_mesh_ids[i] = -2; // Not a mesh node, so no render mesh
+    }
+  }
+
+  free(mesh_map);
+
+  // Add materials to scene
+  logc("-------- Creating materials:");
+  for(uint32_t i=0; i<data.mtl_cnt; i++) {
+    gltf_mtl *gm = &data.mtls[i];
+    mtl m;
+    create_mtl(&m, gm);
+    ex_scene_add_mtl(s, &m);
+    logc("Created material %s (emissive: %i, refractive: %i)", gm->name, m.emissive > 0.0, m.refractive == 1.0f);
+  }
+
+  // Initialize a default camera
+  if(data.cam_node_cnt == 0)
+    s->cams[0] = (ex_cam){ .eye = (vec3){ 0.0f, 5.0f, 10.0f }, .tgt = (vec3){ 0.0f, 0.0f, 0.0f }, .vert_fov = 45.0f };
+
+  // Add nodes as scene instances
+  logc("-------- Processing nodes and creating instances:");
+  for(uint32_t i=0; i<data.node_cnt; i++) {
+    gltf_node *gn = &data.nodes[i];
+    if(gn->mesh_idx >= 0)
+      process_ex_mesh_node(s, &data, gn, i, render_mesh_ids);
+    else if(gn->cam_idx >= 0) 
+      process_ex_cam_node(s, &data, gn);
+    else
+      logc("#### WARN: Found unknown node %i (%s). Expected camera or mesh. Skipping.", i, gn->name);
+  }
+
+  // Set scene attributes
+  s->bg_col = data.bg_col;
+
   gltf_release(&data);
 
   logc("-------- Completed scene: %i meshes, %i materials, %i cameras, %i instances", s->mesh_cnt, s->mtl_cnt, data.cam_cnt, s->inst_cnt);

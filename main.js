@@ -1,5 +1,8 @@
-const GLTF_SCENE_PATH = "scenes/scene.gltf";
-const GLTF_BIN_PATH = "scenes/scene.bin";
+const SCENE_FILENAME = "scene";
+const GLTF_SCENE_PATH = "scenes/" + SCENE_FILENAME + ".gltf";
+const GLTF_BIN_PATH = "scenes/" + SCENE_FILENAME + ".bin";
+
+const DOWNLOAD_BINARY_TO_DISK = true;
 
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
@@ -163,7 +166,17 @@ function Wasm(module)
     set_ltri_cnt: (n) => { ltriCount = n; },
     toggle_converge: () => { converge = !converge; },
     toggle_filter: () => { filter = !filter; if(filter) reproj = true; samples = 0; res.accumIdx = 0; },
-    toggle_reprojection: () => { reproj = !reproj; if(!reproj) filter = false; samples = 0; res.accumIdx = 0; }
+    toggle_reprojection: () => { reproj = !reproj; if(!reproj) filter = false; samples = 0; res.accumIdx = 0; },
+    save_binary: (ptr, size) => {
+      const filename = SCENE_FILENAME + ".bin";
+      const blob = new Blob([wa.memUint8.slice(ptr, ptr + size)], { type: "" });
+      const anchor = document.createElement('a');
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }
   };
 
   this.instantiate = async function()
@@ -935,7 +948,7 @@ async function main()
     // Load wasm from file
     module = await (await fetch("intro.wasm")).arrayBuffer();
   } else {
-    // When embedded, the wasm is gzipped and base64 encoded. Undo in reverse.
+    // When embedded, the wasm is deflated and base64 encoded. Undo in reverse.
     module = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
     module = await new Response(module.stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
   }
@@ -957,6 +970,10 @@ async function main()
     alert("Failed to initialize scene");
     return;
   }
+
+  // Save scene to file via download
+  if(DOWNLOAD_BINARY_TO_DISK)
+    wa.save();
 
   // Shader modules and pipelines
   if(SM_BLIT.includes("END_blit_wgsl")) {
