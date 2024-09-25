@@ -22,19 +22,25 @@ typedef struct ex_mesh {
   uint8_t   type;         // obj_type
   uint8_t   subx;
   uint8_t   suby;
-  uint8_t   share_id;
-  bool      face_nrms;
-  bool      invert_nrms;
-  bool      no_caps;
+  uint8_t   flags;        // (no_caps << 2) | (invert_nrms << 1) | (face_nrms & 0x1)
   float     in_radius;
-  uint32_t  vertex_cnt;     // OT_MESH only
+  uint32_t  vertex_cnt;   // OT_MESH only
   vec3      *vertices;
   vec3      *normals;
-  uint16_t  index_cnt;     // Limit to 16 bit
+  uint16_t  index_cnt;    // Limit to 16 bit
   uint16_t  *indices;
+  uint32_t  vertices_ofs; // Modified and used by export
+  uint32_t  normals_ofs;  // Modified and used by export
+  uint32_t  indices_ofs;  // Modified and used by export
+  uint8_t   share_id;     // Does not get written, just for identification
 } ex_mesh;
 
-void ex_mesh_init(ex_mesh *m, uint32_t vertex_cnt, uint16_t index_cnt);
-void ex_mesh_release(ex_mesh *m);
+void      ex_mesh_init(ex_mesh *m, uint32_t vertex_cnt, uint16_t index_cnt);
+void      ex_mesh_release(ex_mesh *m);
+
+uint32_t  ex_mesh_calc_mesh_data_size(ex_mesh const *m);
+uint32_t  ex_mesh_calc_size(ex_mesh const *m);
+
+uint8_t   *ex_mesh_write(ex_mesh const *m, uint8_t *dst);
 
 #endif

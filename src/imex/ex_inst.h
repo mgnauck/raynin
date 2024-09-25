@@ -11,4 +11,8 @@ typedef struct ex_inst {
   vec3      trans;
 } ex_inst;
 
+uint16_t ex_inst_calc_size(ex_inst const *inst);
+
+uint8_t *ex_inst_write(ex_inst const *inst, uint8_t *dst);
+
 #endif

@@ -405,7 +405,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
 void process_loaded_ex_mesh_data(ex_mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 {
-  *m = (ex_mesh){ .mtl_id = 0xffff, .type = OT_MESH, .share_id = 0 }; // TODO Share id
+  *m = (ex_mesh){ .mtl_id = 0xffff, .type = OT_MESH, .share_id = 0, .flags = (gm->invert_nrms ? 1 : 0) << 1 }; // TODO Share id
 
   // Sum vertex/normal/index count from gltf mesh primitives
   uint32_t index_cnt = 0;
@@ -435,8 +435,6 @@ void process_loaded_ex_mesh_data(ex_mesh *m, gltf_data *d, gltf_mesh *gm, const 
   }
 
   ex_mesh_init(m, vertex_cnt, index_cnt);
-
-  float inv = gm->invert_nrms ? -1.0f : 1.0f;
 
   normal_cnt = 0;
   for(uint32_t j=0; j<gm->prim_cnt; j++) {
@@ -505,29 +503,27 @@ void process_generated_ex_mesh_data(ex_mesh *m, gltf_mesh *gm)
     .subx = gm->subx,
     .suby = gm->suby,
     .share_id = 0,  // TODO share id
-    .face_nrms = gm->face_nrms,
-    .invert_nrms = gm->invert_nrms,
-    .no_caps = gm->no_caps,
+    .flags = ((gm->no_caps ? 1 : 0) << 2) | ((gm->invert_nrms ? 1 : 0) << 1) | (gm->face_nrms ? 1 : 0),
     .in_radius = gm->in_radius,
   };
 
-  obj_type type = get_mesh_type(gm->name);
-  if(type == OT_TORUS) {
+  obj_type type = m->type;
+  if(m->type == OT_TORUS) {
     logc("Found generated torus (%s)", gm->name);
-  } else if(type == OT_SPHERE) {
+  } else if(m->type == OT_SPHERE) {
     logc("Found generated uvsphere (%s)", gm->name);
-  } else if(type == OT_CYLINDER) {
+  } else if(m->type == OT_CYLINDER) {
     logc("Found generated uvcylinder (%s)", gm->name);
-  } else if(type == OT_BOX) {
+  } else if(m->type == OT_BOX) {
     logc("Found generated box (%s)", gm->name);
-  } else if(type == OT_QUAD) {
+  } else if(m->type == OT_QUAD) {
     logc("Found generated quad (%s)", gm->name);
   } else {
     logc("Found something unexpected while processing mesh data");
   }
 
   logc("mtl id: %i, subx: %i, suby: %i, share id: %i, face nrms: %i, invert nrms: %i, no caps: %i, inner radius: %f",
-      m->mtl_id, m->subx, m->suby, m->share_id, m->face_nrms, m->invert_nrms, m->no_caps, m->in_radius);
+      m->mtl_id, m->subx, m->suby, m->share_id, m->flags & 0x1, m->flags >> 1, m->flags >> 2, m->in_radius);
 }
 
 void process_ex_mesh_node(ex_scene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx, int32_t *render_mesh_ids)

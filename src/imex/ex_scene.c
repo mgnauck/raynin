@@ -1,5 +1,6 @@
 #include "ex_scene.h"
 #include "../scene/mtl.h"
+#include "../sys/log.h"
 #include "../sys/sutil.h"
 #include "ex_cam.h"
 #include "ex_inst.h"
@@ -60,4 +61,42 @@ ex_mesh *ex_scene_acquire_mesh(ex_scene *s)
 uint16_t ex_scene_attach_mesh(ex_scene *s, ex_mesh *m)
 {
   return s->mesh_cnt++;
+}
+
+uint16_t calc_mtl_size(mtl const* m)
+{
+  return sizeof(m->col) + sizeof(m->metallic) + sizeof(m->roughness) +
+    sizeof(m->ior) + sizeof(uint8_t); // Flags refractive << 1 | emissive
+}
+
+uint32_t ex_scene_calc_size(ex_scene const *s)
+{
+  uint32_t sz = 0;
+
+  sz += sizeof(s->mtl_cnt);
+  sz += sizeof(s->cam_cnt);
+  sz += sizeof(s->inst_cnt);
+  sz += sizeof(s->mesh_cnt);
+  sz += sizeof(s->bg_col);
+
+  sz += s->mtl_cnt * calc_mtl_size(&s->mtls[0]);
+  logc("mtls: %i, size per: %i", s->mtl_cnt, calc_mtl_size(&s->mtls[0]));
+  
+  sz += s->cam_cnt * ex_cam_calc_size(&s->cams[0]);
+  logc("cams: %i, size per: %i", s->cam_cnt, ex_cam_calc_size(&s->cams[0]));
+  
+  sz += s->inst_cnt * ex_inst_calc_size(&s->instances[0]);
+  logc("insts: %i, size per: %i", s->inst_cnt, ex_inst_calc_size(&s->instances[0]));
+
+  for(uint16_t i=0; i<s->mesh_cnt; i++) {
+    sz += ex_mesh_calc_size(&s->meshes[i]);
+    logc("mesh size: %i", ex_mesh_calc_size(&s->meshes[i]));
+    if(s->meshes[i].type == OT_MESH) {
+      logc("mesh vertex cnt: %i, index cnt: %i", s->meshes[i].vertex_cnt, s->meshes[i].index_cnt);
+    }
+  }
+
+  logc("Total scene size: %i", sz);
+
+  return sz;
 }

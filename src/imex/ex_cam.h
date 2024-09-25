@@ -9,4 +9,8 @@ typedef struct ex_cam {
   float vert_fov;
 } ex_cam;
 
+uint8_t ex_cam_calc_size(ex_cam const *c);
+
+uint8_t *ex_cam_write(ex_cam const *c, uint8_t *dst);
+
 #endif
