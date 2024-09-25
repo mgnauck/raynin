@@ -4,8 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct ex_scene ex_scene;
+typedef struct escene escene;
 
-uint8_t export_bin(ex_scene *scenes, uint8_t scene_cnt, uint8_t **bin, size_t *bin_sz);
+uint8_t export_bin(escene *scenes, uint8_t scene_cnt, uint8_t **bin, size_t *bin_sz);
 
 #endif

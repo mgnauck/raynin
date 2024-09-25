@@ -1,5 +1,5 @@
-#ifndef EX_MESH_H
-#define EX_MESH_H
+#ifndef EMESH_H
+#define EMESH_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -17,7 +17,7 @@ typedef enum obj_type {
 
 typedef struct vec3 vec3;
 
-typedef struct ex_mesh {
+typedef struct emesh {
   uint16_t  mtl_id;       // 0xffff = not set (loaded meshes with mtl per tri)
   uint8_t   type;         // obj_type
   uint8_t   subx;
@@ -33,14 +33,14 @@ typedef struct ex_mesh {
   uint32_t  normals_ofs;  // Modified and used by export
   uint32_t  indices_ofs;  // Modified and used by export
   uint8_t   share_id;     // Does not get written, just for identification
-} ex_mesh;
+} emesh;
 
-void      ex_mesh_init(ex_mesh *m, uint32_t vertex_cnt, uint16_t index_cnt);
-void      ex_mesh_release(ex_mesh *m);
+void      emesh_init(emesh *m, uint32_t vertex_cnt, uint16_t index_cnt);
+void      emesh_release(emesh *m);
 
-uint32_t  ex_mesh_calc_mesh_data_size(ex_mesh const *m);
-uint32_t  ex_mesh_calc_size(ex_mesh const *m);
+uint32_t  emesh_calc_mesh_data_size(emesh const *m);
+uint32_t  emesh_calc_size(emesh const *m);
 
-uint8_t   *ex_mesh_write(ex_mesh const *m, uint8_t *dst);
+uint8_t   *emesh_write(emesh const *m, uint8_t *dst);
 
 #endif

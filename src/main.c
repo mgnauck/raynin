@@ -1,6 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include "imex/ex_scene.h"
+#include "imex/escene.h"
 #include "imex/export.h"
 #include "imex/import.h"
 #include "rend/bvh.h"
@@ -235,7 +235,7 @@ uint8_t init(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t 
   logc("max tris: %i, max ltris: %i, max mtls: %i, max insts: %i",
       s->max_tri_cnt, s->max_ltri_cnt, s->max_mtl_cnt, s->max_inst_cnt);
 
-  ex_scene es;
+  escene es;
   if(import_gltf_ex(&es, gltf, gltf_sz, bin, bin_sz) == 0) {
     export_bin(&es, 1, 0, 0);
   } else {

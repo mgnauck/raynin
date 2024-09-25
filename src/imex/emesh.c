@@ -1,29 +1,29 @@
-#include "ex_mesh.h"
+#include "emesh.h"
 #include "../sys/sutil.h"
 #include "../util/vec3.h"
 #include "ieutil.h"
 
-void ex_mesh_init(ex_mesh *m, uint32_t vertex_cnt, uint16_t index_cnt)
+void emesh_init(emesh *m, uint32_t vertex_cnt, uint16_t index_cnt)
 {
   m->vertices = malloc(vertex_cnt * sizeof(*m->vertices));
   m->normals = malloc(vertex_cnt * sizeof(*m->normals));
   m->indices = malloc(index_cnt * sizeof(*m->indices));
 }
 
-void ex_mesh_release(ex_mesh *m)
+void emesh_release(emesh *m)
 {
   free(m->indices);
   free(m->normals);
   free(m->vertices);
 }
 
-uint32_t ex_mesh_calc_mesh_data_size(ex_mesh const *m)
+uint32_t emesh_calc_mesh_data_size(emesh const *m)
 {
   return m->vertex_cnt * (sizeof(*m->vertices) + sizeof(*m->normals)) +
     m->index_cnt * sizeof(*m->indices);
 }
 
-uint32_t ex_mesh_calc_size(ex_mesh const *m)
+uint32_t emesh_calc_size(emesh const *m)
 {
   uint32_t sz = 0;
 
@@ -40,13 +40,13 @@ uint32_t ex_mesh_calc_size(ex_mesh const *m)
     sz += sizeof(m->vertices_ofs);
     sz += sizeof(m->normals_ofs);
     sz += sizeof(m->indices_ofs);
-    sz += ex_mesh_calc_mesh_data_size(m);
+    sz += emesh_calc_mesh_data_size(m);
   }
 
   return sz;
 }
 
-uint8_t *ex_mesh_write_primitive(ex_mesh const *m, uint8_t *dst)
+uint8_t *emesh_write_primitive(emesh const *m, uint8_t *dst)
 {
   dst = ie_write(dst, &m->mtl_id, sizeof(m->mtl_id));
   dst = ie_write(dst, &m->type, sizeof(m->type));
@@ -66,17 +66,17 @@ uint8_t *ex_mesh_write_primitive(ex_mesh const *m, uint8_t *dst)
   return dst;
 }
 
-uint8_t *ex_mesh_write_vertices(ex_mesh const *m, uint8_t *dst)
+uint8_t *emesh_write_vertices(emesh const *m, uint8_t *dst)
 {
   return ie_write(dst, m->vertices, m->vertex_cnt * sizeof(*m->vertices));
 }
 
-uint8_t *ex_mesh_write_normals(ex_mesh const *m, uint8_t *dst)
+uint8_t *emesh_write_normals(emesh const *m, uint8_t *dst)
 {
   return ie_write(dst, m->normals, m->vertex_cnt * sizeof(*m->normals));
 }
 
-uint8_t *ex_mesh_write_indices(ex_mesh const *m, uint8_t *dst)
+uint8_t *emesh_write_indices(emesh const *m, uint8_t *dst)
 {
   return ie_write(dst, m->indices, m->index_cnt * sizeof(*m->indices));
 }

@@ -1,12 +1,12 @@
-#include "ex_scene.h"
+#include "escene.h"
 #include "../scene/mtl.h"
 #include "../sys/log.h"
 #include "../sys/sutil.h"
-#include "ex_cam.h"
-#include "ex_inst.h"
-#include "ex_mesh.h"
+#include "ecam.h"
+#include "einst.h"
+#include "emesh.h"
 
-void ex_scene_init(ex_scene *s, uint16_t max_mesh_cnt, uint16_t max_mtl_cnt, uint16_t max_cam_cnt, uint16_t max_inst_cnt)
+void escene_init(escene *s, uint16_t max_mesh_cnt, uint16_t max_mtl_cnt, uint16_t max_cam_cnt, uint16_t max_inst_cnt)
 {
   s->mtls         = malloc(max_mtl_cnt * sizeof(*s->mtls));
   s->mtl_cnt      = 0;
@@ -23,10 +23,10 @@ void ex_scene_init(ex_scene *s, uint16_t max_mesh_cnt, uint16_t max_mtl_cnt, uin
   s->bg_col       = (vec3){ 0.0f, 0.0f, 0.0f };
 }
 
-void ex_scene_release(ex_scene *s)
+void escene_release(escene *s)
 {
   for(uint16_t i=0; i<s->mesh_cnt; i++)
-    ex_mesh_release(&s->meshes[i]);
+    emesh_release(&s->meshes[i]);
 
   free(s->cams);
   free(s->instances);
@@ -34,31 +34,31 @@ void ex_scene_release(ex_scene *s)
   free(s->mtls);
 }
 
-uint16_t ex_scene_add_mtl(ex_scene *s, mtl *mtl)
+uint16_t escene_add_mtl(escene *s, mtl *mtl)
 {
   memcpy(&s->mtls[s->mtl_cnt], mtl, sizeof(*s->mtls));
   return s->mtl_cnt++;
 }
 
-uint16_t ex_scene_add_cam(ex_scene *s, vec3 eye, vec3 tgt, float vert_fov)
+uint16_t escene_add_cam(escene *s, vec3 eye, vec3 tgt, float vert_fov)
 {
-  s->cams[s->cam_cnt] = (ex_cam){ .eye = eye, .tgt = tgt, .vert_fov = vert_fov };
+  s->cams[s->cam_cnt] = (ecam){ .eye = eye, .tgt = tgt, .vert_fov = vert_fov };
   return s->cam_cnt++;
 }
 
-uint16_t ex_scene_add_inst(ex_scene *s, uint16_t mesh_id, vec3 scale, float *rot, vec3 trans)
+uint16_t escene_add_inst(escene *s, uint16_t mesh_id, vec3 scale, float *rot, vec3 trans)
 {
-  s->instances[s->inst_cnt] = (ex_inst){ .mesh_id = mesh_id, .scale = scale, .trans = trans };
+  s->instances[s->inst_cnt] = (einst){ .mesh_id = mesh_id, .scale = scale, .trans = trans };
   memcpy(&s->instances[s->inst_cnt].rot, rot, 4 * sizeof(*rot));
   return s->inst_cnt++;
 }
 
-ex_mesh *ex_scene_acquire_mesh(ex_scene *s)
+emesh *escene_acquire_mesh(escene *s)
 {
   return &s->meshes[s->mesh_cnt];
 }
 
-uint16_t ex_scene_attach_mesh(ex_scene *s, ex_mesh *m)
+uint16_t escene_attach_mesh(escene *s, emesh *m)
 {
   return s->mesh_cnt++;
 }
@@ -69,7 +69,7 @@ uint16_t calc_mtl_size(mtl const* m)
     sizeof(m->ior) + sizeof(uint8_t); // Flags refractive << 1 | emissive
 }
 
-uint32_t ex_scene_calc_size(ex_scene const *s)
+uint32_t escene_calc_size(escene const *s)
 {
   uint32_t sz = 0;
 
@@ -82,15 +82,15 @@ uint32_t ex_scene_calc_size(ex_scene const *s)
   sz += s->mtl_cnt * calc_mtl_size(&s->mtls[0]);
   logc("mtls: %i, size per: %i", s->mtl_cnt, calc_mtl_size(&s->mtls[0]));
   
-  sz += s->cam_cnt * ex_cam_calc_size(&s->cams[0]);
-  logc("cams: %i, size per: %i", s->cam_cnt, ex_cam_calc_size(&s->cams[0]));
+  sz += s->cam_cnt * ecam_calc_size(&s->cams[0]);
+  logc("cams: %i, size per: %i", s->cam_cnt, ecam_calc_size(&s->cams[0]));
   
-  sz += s->inst_cnt * ex_inst_calc_size(&s->instances[0]);
-  logc("insts: %i, size per: %i", s->inst_cnt, ex_inst_calc_size(&s->instances[0]));
+  sz += s->inst_cnt * einst_calc_size(&s->instances[0]);
+  logc("insts: %i, size per: %i", s->inst_cnt, einst_calc_size(&s->instances[0]));
 
   for(uint16_t i=0; i<s->mesh_cnt; i++) {
-    sz += ex_mesh_calc_size(&s->meshes[i]);
-    logc("mesh size: %i", ex_mesh_calc_size(&s->meshes[i]));
+    sz += emesh_calc_size(&s->meshes[i]);
+    logc("mesh size: %i", emesh_calc_size(&s->meshes[i]));
     if(s->meshes[i].type == OT_MESH) {
       logc("mesh vertex cnt: %i, index cnt: %i", s->meshes[i].vertex_cnt, s->meshes[i].index_cnt);
     }

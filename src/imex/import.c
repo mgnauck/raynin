@@ -7,9 +7,9 @@
 #include "../sys/log.h"
 #include "../sys/mutil.h"
 #include "../sys/sutil.h"
-#include "ex_cam.h"
-#include "ex_mesh.h"
-#include "ex_scene.h"
+#include "ecam.h"
+#include "emesh.h"
+#include "escene.h"
 #include "gltf.h"
 
 typedef struct mesh_ref {
@@ -403,9 +403,9 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   return 0;
 }
 
-void process_loaded_ex_mesh_data(ex_mesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
+void process_loaded_emesh_data(emesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 {
-  *m = (ex_mesh){ .mtl_id = 0xffff, .type = OT_MESH, .share_id = 0, .flags = (gm->invert_nrms ? 1 : 0) << 1 }; // TODO Share id
+  *m = (emesh){ .mtl_id = 0xffff, .type = OT_MESH, .share_id = 0, .flags = (gm->invert_nrms ? 1 : 0) << 1 }; // TODO Share id
 
   // Sum vertex/normal/index count from gltf mesh primitives
   uint32_t index_cnt = 0;
@@ -434,7 +434,7 @@ void process_loaded_ex_mesh_data(ex_mesh *m, gltf_data *d, gltf_mesh *gm, const 
     return;
   }
 
-  ex_mesh_init(m, vertex_cnt, index_cnt);
+  emesh_init(m, vertex_cnt, index_cnt);
 
   normal_cnt = 0;
   for(uint32_t j=0; j<gm->prim_cnt; j++) {
@@ -495,9 +495,9 @@ void process_loaded_ex_mesh_data(ex_mesh *m, gltf_data *d, gltf_mesh *gm, const 
   logc("Loaded mesh %s from gltf data with %i vertices and %i indices.", gm->name, m->vertex_cnt, m->index_cnt);
 }
 
-void process_generated_ex_mesh_data(ex_mesh *m, gltf_mesh *gm)
+void process_generated_emesh_data(emesh *m, gltf_mesh *gm)
 {
-  *m = (ex_mesh){
+  *m = (emesh){
     .mtl_id = gm->prims[0].mtl_idx,
     .type = get_mesh_type(gm->name),
     .subx = gm->subx,
@@ -526,7 +526,7 @@ void process_generated_ex_mesh_data(ex_mesh *m, gltf_mesh *gm)
       m->mtl_id, m->subx, m->suby, m->share_id, m->flags & 0x1, m->flags >> 1, m->flags >> 2, m->in_radius);
 }
 
-void process_ex_mesh_node(ex_scene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx, int32_t *render_mesh_ids)
+void process_emesh_node(escene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx, int32_t *render_mesh_ids)
 {
   // Get mesh data
   gltf_mesh *gm = &d->meshes[gn->mesh_idx];
@@ -534,7 +534,7 @@ void process_ex_mesh_node(ex_scene *s, gltf_data *d, gltf_node *gn, uint32_t nod
 
   // Create instance
   if(mesh_idx >= 0) {
-    ex_scene_add_inst(s, mesh_idx, gn->scale, gn->rot, gn->trans);
+    escene_add_inst(s, mesh_idx, gn->scale, gn->rot, gn->trans);
     logc("Created mesh instance of gltf mesh %i (%s) (render mesh %i) for node %i (%s).",
         gn->mesh_idx, gm->name, mesh_idx, node_idx, gn->name);
   } else {
@@ -543,7 +543,7 @@ void process_ex_mesh_node(ex_scene *s, gltf_data *d, gltf_node *gn, uint32_t nod
   }
 }
 
-void process_ex_cam_node(ex_scene *s, gltf_data *d, gltf_node *gn)
+void process_ecam_node(escene *s, gltf_data *d, gltf_node *gn)
 {
   mat4 rot;
   mat4_from_quat(rot, gn->rot[0], gn->rot[1], gn->rot[2], gn->rot[3]);
@@ -552,12 +552,12 @@ void process_ex_cam_node(ex_scene *s, gltf_data *d, gltf_node *gn)
 
   gltf_cam *gc = &d->cams[gn->cam_idx];
 
-  ex_scene_add_cam(s, gn->trans, vec3_add(gn->trans, dir), gc->vert_fov);
+  escene_add_cam(s, gn->trans, vec3_add(gn->trans, dir), gc->vert_fov);
 
   logc("Created camera %i from node (%s) pointing to gltf cam %i (%s).", gn->cam_idx, gn->name, gn->cam_idx, gc->name);
 }
 
-uint8_t import_gltf_ex(ex_scene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
+uint8_t import_gltf_ex(escene *s, const char *gltf, size_t gltf_sz, const uint8_t *bin, size_t bin_sz)
 {
   // Parse the gltf
   logc("-------- Reading gltf:");
@@ -611,7 +611,7 @@ uint8_t import_gltf_ex(ex_scene *s, const char *gltf, size_t gltf_sz, const uint
   // Allocate scene
   logc("-------- Allocating %i meshes, %i materials, %i cameras and %i instances.",
     mesh_cnt + dup_mesh_cnt, data.mtl_cnt, max(1, data.cam_node_cnt), data.node_cnt - data.cam_node_cnt);
-  ex_scene_init(s, mesh_cnt + dup_mesh_cnt, data.mtl_cnt, max(1, data.cam_node_cnt), data.node_cnt - data.cam_node_cnt);
+  escene_init(s, mesh_cnt + dup_mesh_cnt, data.mtl_cnt, max(1, data.cam_node_cnt), data.node_cnt - data.cam_node_cnt);
 
   // Gltf node indices to render mesh indices
   int32_t *render_mesh_ids = malloc(data.node_cnt * sizeof(*render_mesh_ids));
@@ -628,13 +628,13 @@ uint8_t import_gltf_ex(ex_scene *s, const char *gltf, size_t gltf_sz, const uint
       if(mr->mesh_idx >= 0) {
         if(++mr->inst_cnt == 1 || mr->is_emissive) {
           gltf_mesh *gm = &data.meshes[gn->mesh_idx];
-          ex_mesh *m = ex_scene_acquire_mesh(s);
+          emesh *m = escene_acquire_mesh(s);
           obj_type type = get_mesh_type(gm->name);
           if(type == OT_MESH || gm->prim_cnt > 1)
-            process_loaded_ex_mesh_data(m, &data, gm, bin);
+            process_loaded_emesh_data(m, &data, gm, bin);
           else
-            process_generated_ex_mesh_data(m, gm);
-          render_mesh_ids[i] = ex_scene_attach_mesh(s, m);
+            process_generated_emesh_data(m, gm);
+          render_mesh_ids[i] = escene_attach_mesh(s, m);
           if(mr->inst_cnt == 1)
             // Update to actual render mesh id, so all other (non-emissive) instances get the index as well
             mr->mesh_idx = render_mesh_ids[i];
@@ -663,22 +663,22 @@ uint8_t import_gltf_ex(ex_scene *s, const char *gltf, size_t gltf_sz, const uint
     gltf_mtl *gm = &data.mtls[i];
     mtl m;
     create_mtl(&m, gm);
-    ex_scene_add_mtl(s, &m);
+    escene_add_mtl(s, &m);
     logc("Created material %s (emissive: %i, refractive: %i)", gm->name, m.emissive > 0.0, m.refractive == 1.0f);
   }
 
   // Initialize a default camera if there is no other camera in the scene
   if(data.cam_node_cnt == 0)
-    s->cams[0] = (ex_cam){ .eye = (vec3){ 0.0f, 5.0f, 10.0f }, .tgt = (vec3){ 0.0f, 0.0f, 0.0f }, .vert_fov = 45.0f };
+    s->cams[0] = (ecam){ .eye = (vec3){ 0.0f, 5.0f, 10.0f }, .tgt = (vec3){ 0.0f, 0.0f, 0.0f }, .vert_fov = 45.0f };
 
   // Add nodes as scene instances
   logc("-------- Processing nodes and creating instances:");
   for(uint32_t i=0; i<data.node_cnt; i++) {
     gltf_node *gn = &data.nodes[i];
     if(gn->mesh_idx >= 0)
-      process_ex_mesh_node(s, &data, gn, i, render_mesh_ids);
+      process_emesh_node(s, &data, gn, i, render_mesh_ids);
     else if(gn->cam_idx >= 0) 
-      process_ex_cam_node(s, &data, gn);
+      process_ecam_node(s, &data, gn);
     else
       logc("#### WARN: Found unknown node %i (%s). Expected camera or mesh. Skipping.", i, gn->name);
   }
