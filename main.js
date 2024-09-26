@@ -1,17 +1,18 @@
+const LOAD_FROM_GLTF = false;
 const PATH_TO_SCENES = "scenes/";
 const SCENES_TO_LOAD = [
   "bernstein.gltf",
   "big-triangle.gltf",
-  "donuts.gltf",
-  "layers-of-spheres.gltf",
-  "only-god-forgives.gltf",
-  "purple-motion.gltf",
-  "red-skybox.gltf",
-  "schellen.gltf",
-  "sphere-grid.gltf",
-  "triangle-cave.gltf",
-  "yellow-blue-hangar.gltf",
-  "yellow-donut-cubes.gltf",
+  //"donuts.gltf",
+  //"layers-of-spheres.gltf",
+  //"only-god-forgives.gltf",
+  //"purple-motion.gltf",
+  //"red-skybox.gltf",
+  //"schellen.gltf",
+  //"sphere-grid.gltf",
+  //"triangle-cave.gltf",
+  //"yellow-blue-hangar.gltf",
+  //"yellow-donut-cubes.gltf",
 ];
 const EXPORT_BIN_TO_DISK = false;
 const EXPORT_FILENAME = "scenes-export.bin";
@@ -936,7 +937,7 @@ async function loadSceneBin(binPath)
   let bin = await (await fetch(binPath)).arrayBuffer();
   let binPtr = wa.malloc(bin.byteLength);
   wa.memUint8.set(new Uint8Array(bin), binPtr);
-  return wa.load_scene_bin(binPtr, bin.byteLength) == 0;
+  return wa.load_scenes_bin(binPtr, bin.byteLength) == 0;
 }
 
 async function main()
@@ -993,10 +994,17 @@ async function main()
 
   // Load scenes
   let t0 = performance.now();
-  for(let i=0; i<SCENES_TO_LOAD.length; i++) {
-    console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
-    if(!await loadSceneGltf(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
-      alert("Failed to load scene");
+  if(LOAD_FROM_GLTF) {
+    for(let i=0; i<SCENES_TO_LOAD.length; i++) {
+      console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
+      if(!await loadSceneGltf(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
+        alert("Failed to load scene");
+        return;
+      }
+    }
+  } else {
+    if(!await loadSceneBin(PATH_TO_SCENES + EXPORT_FILENAME)) {
+      alert("Failed to load scenes");
       return;
     }
   }

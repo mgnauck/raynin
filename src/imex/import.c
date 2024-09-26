@@ -700,6 +700,8 @@ uint8_t import_gltf_ex(escene *s, const char *gltf, size_t gltf_sz, const uint8_
 
 uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_t bin_sz)
 {
+  logc("Trying to load %i bytes of scene(s) data", bin_sz);
+
   // Read offset to scene data
   uint32_t ofs;
   ie_read(&ofs, bin, sizeof(ofs));
@@ -716,5 +718,5 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_
 
   // TODO
 
-  return 0;
+  return 1;
 }

@@ -18,7 +18,7 @@
 #define MAX_SCENES 20
 
 // Scenes
-scene     scenes[MAX_SCENES];
+scene     *scenes = NULL;
 uint8_t   scene_cnt = 0;
 uint8_t   active_scene_id = 0;
 scene     *active_scene = NULL;
@@ -250,7 +250,11 @@ uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *b
 {
   uint8_t ret = 0;
 
-  scene *s = &scenes[scene_cnt];
+  if(scenes == NULL)
+    scenes = malloc(MAX_SCENES * sizeof(*scenes));
+
+  // Scene to load
+  scene *s = scenes + scene_cnt;
 
   //init_scene_riow(s);
 
@@ -276,9 +280,14 @@ uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *b
 }
 
 __attribute__((visibility("default")))
-uint8_t load_scene_bin(uint8_t *bin, size_t bin_sz)
+uint8_t load_scenes_bin(uint8_t *bin, size_t bin_sz)
 {
-  return 0;
+  if(import_bin(&scenes, &scene_cnt, bin, bin_sz) == 0) {
+    logc("Loaded %i scenes", scene_cnt);
+    return 0;
+  }
+
+  return 1;
 }
 
 __attribute__((visibility("default")))
@@ -362,5 +371,7 @@ void release()
 {
   for(uint8_t i=0; i<scene_cnt; i++)
     scene_release(&scenes[i]);
+  free(scenes);
+  scenes = NULL;
   scene_cnt = 0;
 }
