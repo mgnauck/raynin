@@ -41,6 +41,6 @@ void      emesh_release(emesh *m);
 uint32_t  emesh_calc_mesh_data_size(emesh const *m);
 uint32_t  emesh_calc_size(emesh const *m);
 
-uint8_t   *emesh_write(emesh const *m, uint8_t *dst);
+uint8_t   *emesh_write_primitive(uint8_t *dst, emesh const *m);
 
 #endif

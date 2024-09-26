@@ -12,6 +12,6 @@ typedef struct einst {
 } einst;
 
 uint16_t einst_calc_size(einst const *inst);
-uint8_t *einst_write(einst const *inst, uint8_t *dst);
+uint8_t *einst_write(uint8_t *dst, einst const *inst);
 
 #endif

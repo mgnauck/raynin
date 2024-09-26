@@ -1,6 +1,6 @@
-const SCENE_FILENAME = "scene";
-const GLTF_SCENE_PATH = "scenes/" + SCENE_FILENAME + ".gltf";
-const GLTF_BIN_PATH = "scenes/" + SCENE_FILENAME + ".bin";
+const GLTF_SCENE_PATH = "scenes/scene.gltf";
+const GLTF_BIN_PATH = "scenes/scene.bin";
+const EXPORT_SCENE_FILENAME = "scene-export.bin";
 
 const DOWNLOAD_BINARY_TO_DISK = true;
 
@@ -168,11 +168,10 @@ function Wasm(module)
     toggle_filter: () => { filter = !filter; if(filter) reproj = true; samples = 0; res.accumIdx = 0; },
     toggle_reprojection: () => { reproj = !reproj; if(!reproj) filter = false; samples = 0; res.accumIdx = 0; },
     save_binary: (ptr, size) => {
-      const filename = SCENE_FILENAME + ".bin";
       const blob = new Blob([wa.memUint8.slice(ptr, ptr + size)], { type: "" });
       const anchor = document.createElement('a');
       anchor.href = URL.createObjectURL(blob);
-      anchor.download = filename;
+      anchor.download = EXPORT_SCENE_FILENAME;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -965,15 +964,21 @@ async function main()
   let gltfBinPtr = wa.malloc(gltfBin.byteLength);
   wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
 
-  // Init scene from gltf data and alloc GPU resources
-  if(wa.init(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength) > 0) {
+  // Load scene from gltf data and possibly prepare for export
+  if(wa.load_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength, DOWNLOAD_BINARY_TO_DISK) > 0) {
     alert("Failed to initialize scene");
     return;
   }
 
   // Save scene to file via download
   if(DOWNLOAD_BINARY_TO_DISK)
-    wa.save();
+    if(wa.export_scenes() > 0)
+      alert("Failed to make a binary export of the available scenes");
+    else
+      console.log("Downloaded binary export of available scenes");
+
+  // Init gpu resources according to loaded scenes
+  wa.init_gpu_resources();
 
   // Shader modules and pipelines
   if(SM_BLIT.includes("END_blit_wgsl")) {

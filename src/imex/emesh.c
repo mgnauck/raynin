@@ -46,7 +46,7 @@ uint32_t emesh_calc_size(emesh const *m)
   return sz;
 }
 
-uint8_t *emesh_write_primitive(emesh const *m, uint8_t *dst)
+uint8_t *emesh_write_primitive(uint8_t *dst, emesh const *m)
 {
   dst = ie_write(dst, &m->mtl_id, sizeof(m->mtl_id));
   dst = ie_write(dst, &m->type, sizeof(m->type));
@@ -64,19 +64,4 @@ uint8_t *emesh_write_primitive(emesh const *m, uint8_t *dst)
   }
 
   return dst;
-}
-
-uint8_t *emesh_write_vertices(emesh const *m, uint8_t *dst)
-{
-  return ie_write(dst, m->vertices, m->vertex_cnt * sizeof(*m->vertices));
-}
-
-uint8_t *emesh_write_normals(emesh const *m, uint8_t *dst)
-{
-  return ie_write(dst, m->normals, m->vertex_cnt * sizeof(*m->normals));
-}
-
-uint8_t *emesh_write_indices(emesh const *m, uint8_t *dst)
-{
-  return ie_write(dst, m->indices, m->index_cnt * sizeof(*m->indices));
 }
