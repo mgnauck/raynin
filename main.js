@@ -1,8 +1,5 @@
-const GLTF_SCENE_PATH = "scenes/scene.gltf";
-const GLTF_BIN_PATH = "scenes/scene.bin";
-const EXPORT_SCENE_FILENAME = "scene-export.bin";
-
-const DOWNLOAD_BINARY_TO_DISK = true;
+const DOWNLOAD_BINARY_TO_DISK = false;
+const EXPORT_FILENAME = "scenes-export.bin";
 
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
@@ -171,7 +168,7 @@ function Wasm(module)
       const blob = new Blob([wa.memUint8.slice(ptr, ptr + size)], { type: "" });
       const anchor = document.createElement('a');
       anchor.href = URL.createObjectURL(blob);
-      anchor.download = EXPORT_SCENE_FILENAME;
+      anchor.download = EXPORT_FILENAME;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -903,6 +900,23 @@ function startRender()
   requestAnimationFrame(render);
 }
 
+async function loadScene(gltfPath, prepareForExport)
+{
+  console.log("Trying to load " + gltfPath + " with " + gltfPath.replace(/\.gltf/, ".bin"));
+
+  // Create buffers with scene gltf text and binary data
+  let gltf = await (await fetch(gltfPath)).arrayBuffer();
+  let gltfPtr = wa.malloc(gltf.byteLength);
+  wa.memUint8.set(new Uint8Array(gltf), gltfPtr);
+
+  let gltfBin = await (await fetch(gltfPath.replace(/\.gltf/, ".bin"))).arrayBuffer();
+  let gltfBinPtr = wa.malloc(gltfBin.byteLength);
+  wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
+
+  // Load scene from gltf data
+  return wa.load_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength, prepareForExport) == 0;
+}
+
 async function main()
 {
   // WebGPU
@@ -955,27 +969,25 @@ async function main()
   wa = new Wasm(module);
   await wa.instantiate();
 
-  // Create buffers with scene gltf text and binary data
-  let gltf = await (await fetch(GLTF_SCENE_PATH)).arrayBuffer();
-  let gltfPtr = wa.malloc(gltf.byteLength);
-  wa.memUint8.set(new Uint8Array(gltf), gltfPtr);
+  // Load scenes
+  /*if(!await loadScene("scenes/donuts.gltf", DOWNLOAD_BINARY_TO_DISK)) {
+    alert("Failed to load scene");
+    return;
+  }*/
 
-  let gltfBin = await (await fetch(GLTF_BIN_PATH)).arrayBuffer();
-  let gltfBinPtr = wa.malloc(gltfBin.byteLength);
-  wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
-
-  // Load scene from gltf data and possibly prepare for export
-  if(wa.load_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength, DOWNLOAD_BINARY_TO_DISK) > 0) {
-    alert("Failed to initialize scene");
+  if(!await loadScene("scenes/big-triangle.gltf", DOWNLOAD_BINARY_TO_DISK)) {
+    alert("Failed to load scene");
     return;
   }
 
-  // Save scene to file via download
-  if(DOWNLOAD_BINARY_TO_DISK)
-    if(wa.export_scenes() > 0)
+  // Save exported scene to file via download
+  if(DOWNLOAD_BINARY_TO_DISK) {
+    if(wa.export_scenes() > 0) {
       alert("Failed to make a binary export of the available scenes");
-    else
+      return;
+    } else
       console.log("Downloaded binary export of available scenes");
+  }
 
   // Init gpu resources according to loaded scenes
   wa.init_gpu_resources();
