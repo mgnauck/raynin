@@ -2,7 +2,7 @@ const PATH_TO_SCENES = "scenes/";
 const SCENES_TO_LOAD = [
   //"bernstein.gltf",
   "big-triangle.gltf",
-  "donuts.gltf",
+  //"donuts.gltf",
   //"layers-of-spheres.gltf",
   //"only-god-forgives.gltf",
   //"purple-motion.gltf",
