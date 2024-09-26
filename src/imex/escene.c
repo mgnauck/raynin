@@ -62,13 +62,13 @@ uint16_t escene_attach_mesh(escene *s, emesh *m)
   return s->mesh_cnt++;
 }
 
-uint16_t calc_mtl_size(mtl const* m)
+uint16_t calc_mtl_size(const mtl *m)
 {
   return sizeof(m->col) + sizeof(m->metallic) + sizeof(m->roughness) +
     sizeof(m->ior) + sizeof(uint8_t); // Flags
 }
 
-uint32_t escene_calc_size(escene const *s)
+uint32_t escene_calc_size(const escene *s)
 {
   uint32_t sz = 0;
 

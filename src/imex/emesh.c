@@ -17,13 +17,13 @@ void emesh_release(emesh *m)
   free(m->vertices);
 }
 
-uint32_t emesh_calc_mesh_data_size(emesh const *m)
+uint32_t emesh_calc_mesh_data_size(const emesh *m)
 {
   return m->vertex_cnt * (sizeof(*m->vertices) + sizeof(*m->normals)) +
     m->index_cnt * sizeof(*m->indices);
 }
 
-uint32_t emesh_calc_size(emesh const *m)
+uint32_t emesh_calc_size(const emesh *m)
 {
   uint32_t sz = 0;
 
@@ -46,7 +46,7 @@ uint32_t emesh_calc_size(emesh const *m)
   return sz;
 }
 
-uint8_t *emesh_write_primitive(uint8_t *dst, emesh const *m)
+uint8_t *emesh_write_primitive(uint8_t *dst, const emesh *m)
 {
   dst = ie_write(dst, &m->mtl_id, sizeof(m->mtl_id));
   dst = ie_write(dst, &m->type, sizeof(m->type));

@@ -38,9 +38,9 @@ typedef struct emesh {
 void      emesh_init(emesh *m, uint32_t vertex_cnt, uint16_t index_cnt);
 void      emesh_release(emesh *m);
 
-uint32_t  emesh_calc_mesh_data_size(emesh const *m);
-uint32_t  emesh_calc_size(emesh const *m);
+uint32_t  emesh_calc_mesh_data_size(const emesh *m);
+uint32_t  emesh_calc_size(const emesh *m);
 
-uint8_t   *emesh_write_primitive(uint8_t *dst, emesh const *m);
+uint8_t   *emesh_write_primitive(uint8_t *dst, const emesh *m);
 
 #endif

@@ -11,7 +11,7 @@ typedef struct einst {
   vec3      trans;
 } einst;
 
-uint16_t einst_calc_size(einst const *inst);
-uint8_t *einst_write(uint8_t *dst, einst const *inst);
+uint16_t einst_calc_size(const einst *inst);
+uint8_t *einst_write(uint8_t *dst, const einst *inst);
 
 #endif

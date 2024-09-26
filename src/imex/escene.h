@@ -31,6 +31,6 @@ uint16_t  escene_add_inst(escene *s, uint16_t mesh_id, vec3 scale, float *rot, v
 emesh     *escene_acquire_mesh(escene *s);
 uint16_t  escene_attach_mesh(escene *s, emesh *m);
 
-uint32_t  escene_calc_size(escene const *s);
+uint32_t  escene_calc_size(const escene *s);
 
 #endif

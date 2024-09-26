@@ -9,7 +9,7 @@ typedef struct ecam {
   float vert_fov;
 } ecam;
 
-uint8_t ecam_calc_size(ecam const *c);
-uint8_t *ecam_write(uint8_t *dst, ecam const *c);
+uint8_t ecam_calc_size(const ecam *c);
+uint8_t *ecam_write(uint8_t *dst, const ecam *c);
 
 #endif

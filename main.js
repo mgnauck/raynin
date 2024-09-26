@@ -916,7 +916,7 @@ function startRender()
   requestAnimationFrame(render);
 }
 
-async function loadScene(gltfPath, prepareForExport)
+async function loadSceneGltf(gltfPath, prepareForExport)
 {
   // Create buffers with scene gltf text and binary data
   let gltf = await (await fetch(gltfPath)).arrayBuffer();
@@ -928,7 +928,15 @@ async function loadScene(gltfPath, prepareForExport)
   wa.memUint8.set(new Uint8Array(gltfBin), gltfBinPtr);
 
   // Load scene from gltf data
-  return wa.load_scene(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength, prepareForExport) == 0;
+  return wa.load_scene_gltf(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength, prepareForExport) == 0;
+}
+
+async function loadSceneBin(binPath)
+{
+  let bin = await (await fetch(binPath)).arrayBuffer();
+  let binPtr = wa.malloc(bin.byteLength);
+  wa.memUint8.set(new Uint8Array(bin), binPtr);
+  return wa.load_scene_bin(binPtr, bin.byteLength) == 0;
 }
 
 async function main()
@@ -987,7 +995,7 @@ async function main()
   let t0 = performance.now();
   for(let i=0; i<SCENES_TO_LOAD.length; i++) {
     console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
-    if(!await loadScene(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
+    if(!await loadSceneGltf(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
       alert("Failed to load scene");
       return;
     }

@@ -246,7 +246,7 @@ void init_scene_riow(scene *s)
 }
 
 __attribute__((visibility("default")))
-uint8_t load_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz, bool prepare_for_export)
+uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz, bool prepare_for_export)
 {
   uint8_t ret = 0;
 
@@ -272,6 +272,12 @@ uint8_t load_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, s
       logc("Failed to import gltf scene for export");
   }
 
+  return 0;
+}
+
+__attribute__((visibility("default")))
+uint8_t load_scene_bin(uint8_t *bin, size_t bin_sz)
+{
   return 0;
 }
 

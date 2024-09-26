@@ -11,10 +11,11 @@
 #include "emesh.h"
 #include "escene.h"
 #include "gltf.h"
+#include "ieutil.h"
 
 // Make silent
-#undef logc
-#define logc(...) ((void)0)
+//#undef logc
+//#define logc(...) ((void)0)
 
 typedef struct mesh_ref {
   int32_t   mesh_idx;     // Render mesh index
@@ -693,6 +694,27 @@ uint8_t import_gltf_ex(escene *s, const char *gltf, size_t gltf_sz, const uint8_
   gltf_release(&data);
 
   logc("-------- Completed scene: %i meshes, %i materials, %i cameras, %i instances", s->mesh_cnt, s->mtl_cnt, s->cam_cnt, s->inst_cnt);
+
+  return 0;
+}
+
+uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_t bin_sz)
+{
+  // Read offset to scene data
+  uint32_t ofs;
+  ie_read(&ofs, bin, sizeof(ofs));
+
+  // Jump to scene data, skip mesh data
+  const uint8_t *p = bin + ofs;
+
+  // Read scene count
+  p = ie_read(scene_cnt, p, sizeof(*scene_cnt));
+  logc("Found %i scenes to load", *scene_cnt);
+
+  // Allocate scenes
+  *scenes = malloc(*scene_cnt * sizeof(**scenes));
+
+  // TODO
 
   return 0;
 }
