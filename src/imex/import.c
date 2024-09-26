@@ -12,6 +12,10 @@
 #include "escene.h"
 #include "gltf.h"
 
+// Make silent
+#undef logc
+#define logc(...) ((void)0)
+
 typedef struct mesh_ref {
   int32_t   mesh_idx;     // Render mesh index
   bool      is_emissive;  // True if mesh has emissive mtl

@@ -250,14 +250,15 @@ uint8_t load_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, s
   } else
     return 1;
 
-  logc("Imported GLTF scene with: %i max tris, %i max ltris, %i max mtls, %i max insts",
+  logc("Imported gltf scene with: %i tris, %i ltris, %i mtls, %i insts",
       s->max_tri_cnt, s->max_ltri_cnt, s->max_mtl_cnt, s->max_inst_cnt);
 
   // Import the scene again for export
   if(prepare_for_export && escene_cnt < MAX_SCENES) {
-    if(import_gltf_ex(&escenes[escene_cnt], gltf, gltf_sz, bin, bin_sz) == 0)
+    if(import_gltf_ex(&escenes[escene_cnt], gltf, gltf_sz, bin, bin_sz) == 0) {
       escene_cnt++;
-    else
+      logc("Created export scene from gltf scene");
+    } else
       logc("Failed to import gltf scene for export");
   }
 

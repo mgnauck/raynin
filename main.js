@@ -1,4 +1,19 @@
-const DOWNLOAD_BINARY_TO_DISK = false;
+const PATH_TO_SCENES = "scenes/";
+const SCENES_TO_LOAD = [
+  //"bernstein.gltf",
+  "big-triangle.gltf",
+  "donuts.gltf",
+  //"layers-of-spheres.gltf",
+  //"only-god-forgives.gltf",
+  //"purple-motion.gltf",
+  //"red-skybox.gltf",
+  //"schellen.gltf",
+  //"sphere-grid.gltf",
+  //"triangle-cave.gltf",
+  //"yellow-blue-hangar.gltf",
+  //"yellow-donut-cubes.gltf",
+];
+const DOWNLOAD_BINARY_TO_DISK = true;
 const EXPORT_FILENAME = "scenes-export.bin";
 
 const FULLSCREEN = false;
@@ -172,6 +187,7 @@ function Wasm(module)
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
+      console.log("Downloaded exported binary scenes to " + EXPORT_FILENAME + " with " + size + " bytes");
     }
   };
 
@@ -902,8 +918,6 @@ function startRender()
 
 async function loadScene(gltfPath, prepareForExport)
 {
-  console.log("Trying to load " + gltfPath + " with " + gltfPath.replace(/\.gltf/, ".bin"));
-
   // Create buffers with scene gltf text and binary data
   let gltf = await (await fetch(gltfPath)).arrayBuffer();
   let gltfPtr = wa.malloc(gltf.byteLength);
@@ -970,14 +984,12 @@ async function main()
   await wa.instantiate();
 
   // Load scenes
-  /*if(!await loadScene("scenes/donuts.gltf", DOWNLOAD_BINARY_TO_DISK)) {
-    alert("Failed to load scene");
-    return;
-  }*/
-
-  if(!await loadScene("scenes/big-triangle.gltf", DOWNLOAD_BINARY_TO_DISK)) {
-    alert("Failed to load scene");
-    return;
+  for(let i=0; i<SCENES_TO_LOAD.length; i++) {
+    console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
+    if(!await loadScene(PATH_TO_SCENES + SCENES_TO_LOAD[i], DOWNLOAD_BINARY_TO_DISK)) {
+      alert("Failed to load scene");
+      return;
+    }
   }
 
   // Save exported scene to file via download
@@ -985,8 +997,7 @@ async function main()
     if(wa.export_scenes() > 0) {
       alert("Failed to make a binary export of the available scenes");
       return;
-    } else
-      console.log("Downloaded binary export of available scenes");
+    }
   }
 
   // Init gpu resources according to loaded scenes

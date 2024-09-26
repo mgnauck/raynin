@@ -8,6 +8,10 @@
 #include "../sys/log.h"
 #include "../sys/sutil.h"
 
+// Make silent
+#undef logc
+#define logc(...) ((void)0)
+
 uint8_t export_bin(escene *scenes, uint8_t scene_cnt, uint8_t **bin, size_t *bin_sz)
 {
   // Account for offset to where scene data starts + the number of scenes

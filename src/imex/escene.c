@@ -1,6 +1,5 @@
 #include "escene.h"
 #include "../scene/mtl.h"
-#include "../sys/log.h"
 #include "../sys/sutil.h"
 #include "ecam.h"
 #include "einst.h"
@@ -66,7 +65,7 @@ uint16_t escene_attach_mesh(escene *s, emesh *m)
 uint16_t calc_mtl_size(mtl const* m)
 {
   return sizeof(m->col) + sizeof(m->metallic) + sizeof(m->roughness) +
-    sizeof(m->ior) + sizeof(uint8_t); // Flags refractive << 1 | emissive
+    sizeof(m->ior) + sizeof(uint8_t); // Flags
 }
 
 uint32_t escene_calc_size(escene const *s)
@@ -80,23 +79,13 @@ uint32_t escene_calc_size(escene const *s)
   sz += sizeof(s->bg_col);
 
   sz += s->mtl_cnt * calc_mtl_size(&s->mtls[0]);
-  logc("mtls: %i, size per: %i", s->mtl_cnt, calc_mtl_size(&s->mtls[0]));
   
   sz += s->cam_cnt * ecam_calc_size(&s->cams[0]);
-  logc("cams: %i, size per: %i", s->cam_cnt, ecam_calc_size(&s->cams[0]));
   
   sz += s->inst_cnt * einst_calc_size(&s->instances[0]);
-  logc("insts: %i, size per: %i", s->inst_cnt, einst_calc_size(&s->instances[0]));
 
-  for(uint16_t i=0; i<s->mesh_cnt; i++) {
+  for(uint16_t i=0; i<s->mesh_cnt; i++)
     sz += emesh_calc_size(&s->meshes[i]);
-    logc("mesh size: %i", emesh_calc_size(&s->meshes[i]));
-    if(s->meshes[i].type == OT_MESH) {
-      logc("mesh vertex cnt: %i, index cnt: %i", s->meshes[i].vertex_cnt, s->meshes[i].index_cnt);
-    }
-  }
-
-  logc("Total scene size: %i", sz);
 
   return sz;
 }

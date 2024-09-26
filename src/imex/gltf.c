@@ -9,6 +9,10 @@
 #define SBUF_LEN 1024 // Fixed buffer for temporary string storage
 char sbuf[SBUF_LEN];
 
+// Make silent
+#undef logc
+#define logc(...) ((void)0)
+
 char *bstrndup(char *dest, const char *src, size_t len, size_t max_len)
 {
   uint32_t l = min(len, max_len - 1);
@@ -124,7 +128,7 @@ uint32_t read_pbr_metallic_roughness(gltf_mtl *m, const char *s, jsmntok_t *t)
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 4) {
         // Just read rgb, ignore alpha component (= j + 5)
         m->col = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        vec3_logc("baseColorFactor: ", m->col);
+        //vec3_logc("baseColorFactor: ", m->col);
         j += 6;
         continue;
       } else
@@ -184,7 +188,7 @@ uint32_t read_mtl(gltf_mtl *m, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "emissiveFactor") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
         emissive_factor = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        vec3_logc("emissiveFactor: ", emissive_factor);
+        //vec3_logc("emissiveFactor: ", emissive_factor);
         j += 5;
         continue;
       } else
@@ -266,7 +270,7 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "translation") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
         n->trans = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        vec3_logc("translation: ", n->trans);
+        //vec3_logc("translation: ", n->trans);
         j += 5;
         continue;
       } else
@@ -276,7 +280,7 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "scale") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
         n->scale = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        vec3_logc("scale: ", n->scale);
+        //vec3_logc("scale: ", n->scale);
         j += 5;
         continue;
       } else
@@ -757,7 +761,7 @@ uint32_t read_scene_extras(gltf_data *d, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "bgcol") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
         d->bg_col = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        vec3_logc("bg col: ", d->bg_col);
+        //vec3_logc("bg col: ", d->bg_col);
         j += 5;
         continue;
       } else
