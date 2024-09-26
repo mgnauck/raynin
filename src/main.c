@@ -20,6 +20,7 @@
 // Scenes
 scene     scenes[MAX_SCENES];
 uint8_t   scene_cnt = 0;
+uint8_t   active_scene_id = 0;
 scene     *active_scene = NULL;
 
 // Export scenes
@@ -79,13 +80,23 @@ void key_down(unsigned char key, float move_vel)
       active_scene->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, active_scene->bg_col);
       scene_set_dirty(active_scene, RT_CFG);
       break;
-    case 'm':
-      active_cam = (active_cam + 1) % active_scene->cam_cnt;
-      scene_set_active_cam(active_scene, active_cam);
-      logc("Setting cam %i of %i cams active", active_cam, active_scene->cam_cnt);
+    case 'v':
+      active_scene_id = (active_scene_id > 0 ) ? active_scene_id - 1 : scene_cnt - 1;
+      active_scene = &scenes[active_scene_id];
+      scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
+      break;
+    case 'b':
+      active_scene_id = (active_scene_id + 1) % scene_cnt;
+      active_scene = &scenes[active_scene_id];
+      scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
       break;
     case 'n':
       active_cam = active_cam > 0 ? active_cam - 1 : active_scene->cam_cnt - 1;
+      scene_set_active_cam(active_scene, active_cam);
+      logc("Setting cam %i of %i cams active", active_cam, active_scene->cam_cnt);
+      break;
+    case 'm':
+      active_cam = (active_cam + 1) % active_scene->cam_cnt;
       scene_set_active_cam(active_scene, active_cam);
       logc("Setting cam %i of %i cams active", active_cam, active_scene->cam_cnt);
       break;
@@ -244,10 +255,9 @@ uint8_t load_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, s
   //init_scene_riow(s);
 
   // Import scene from given GLTF for rendering
-  if(import_gltf(s, gltf, gltf_sz, bin, bin_sz) == 0) {
+  if(import_gltf(s, gltf, gltf_sz, bin, bin_sz) == 0)
     scene_cnt++;
-    active_scene = s;
-  } else
+  else
     return 1;
 
   logc("Imported gltf scene with: %i tris, %i ltris, %i mtls, %i insts",
@@ -263,28 +273,6 @@ uint8_t load_scene(const char *gltf, size_t gltf_sz, const unsigned char *bin, s
   }
 
   return 0;
-}
-
-__attribute__((visibility("default")))
-void init_gpu_resources()
-{
-  uint32_t max_tri_cnt = 0;
-  uint32_t max_ltri_cnt = 0;
-  uint16_t max_mtl_cnt = 0;
-  uint16_t max_inst_cnt = 0;
-
-  for(uint8_t i=0; i<scene_cnt; i++) {
-    scene *s = &scenes[i];
-    max_tri_cnt = max(max_tri_cnt, s->max_tri_cnt);
-    max_ltri_cnt = max(max_ltri_cnt, s->max_ltri_cnt);
-    max_mtl_cnt = max(max_mtl_cnt, s->max_mtl_cnt);
-    max_inst_cnt = max(max_inst_cnt, s->max_inst_cnt);
-  }
-
-  renderer_gpu_alloc(max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
-
-  logc("Allocated gpu resources for max %i tris, %i ltris, %i mtls and %i insts",
-      max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
 }
 
 __attribute__((visibility("default")))
@@ -306,11 +294,45 @@ uint8_t export_scenes()
   return 1;
 }
 
+__attribute__((visibility("default")))
+void init()
+{
+  // Find max resource sizes among the different scenes
+  uint32_t max_tri_cnt = 0;
+  uint32_t max_ltri_cnt = 0;
+  uint16_t max_mtl_cnt = 0;
+  uint16_t max_inst_cnt = 0;
+
+  for(uint8_t i=0; i<scene_cnt; i++) {
+    scene *s = &scenes[i];
+    max_tri_cnt = max(max_tri_cnt, s->max_tri_cnt);
+    max_ltri_cnt = max(max_ltri_cnt, s->max_ltri_cnt);
+    max_mtl_cnt = max(max_mtl_cnt, s->max_mtl_cnt);
+    max_inst_cnt = max(max_inst_cnt, s->max_inst_cnt);
+  }
+
+  // Allocated space for scene resources on GPU
+  renderer_gpu_alloc(max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
+
+  logc("Allocated gpu resources for max %i tris, %i ltris, %i mtls and %i insts",
+      max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
+
+  // Initialize active scene
+  active_scene = &scenes[active_scene_id];
+}
+
 float last_change = 0.0;
 
 __attribute__((visibility("default")))
 void update(float time, bool converge)
 {
+  if(time - last_change > 4.0) {
+    active_scene_id = (active_scene_id + 1) % scene_cnt;
+    active_scene = &scenes[active_scene_id];
+    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
+    last_change = time;
+  }
+
   // Update camera
   if(active_scene->tlas_nodes && orbit_cam) {
     cam *cam = scene_get_active_cam(active_scene);
@@ -324,30 +346,6 @@ void update(float time, bool converge)
     cam_set(cam, pos, vec3_add((vec3){0.0f, 24.0, 0.0f}, vec3_neg(pos)));
     scene_set_dirty(active_scene, RT_CAM);
   }
-
-  /*
-  // Disable light instances
-  if(time - last_change > 2.0) {
-    uint8_t lid = pcg_rand() % 3;
-    if((scene_get_inst_state(active_scene, lid) & IS_DISABLED) > 0)
-      scene_clr_inst_state(active_scene, lid, IS_DISABLED);
-    else
-      scene_set_inst_state(active_scene, lid, IS_DISABLED);
-    last_change = time;
-  }
-  */
-
-  /*
-  mat4 translation;
-  mat4_trans(translation, (vec3){ cosf(time * 0.4f) * 3.0f, 1.0f + sinf(time * 0.2f) * 1.0, sinf(time * 0.3f) * 3.0f });
-  scene_upd_inst_trans(active_scene, 4, translation); // Reflecting
-
-  mat4_trans(translation, (vec3){ cosf(time * 0.3f) * 2.0f, 1.0f + sinf(time * 0.3f) * 1.0, sinf(time * 0.1f) * 2.0f });
-  scene_upd_inst_trans(active_scene, 5, translation); // White
-
-  mat4_trans(translation, (vec3){ cosf(time * 0.4f + 123.0) * 2.0f, 1.0f + sinf(time * 0.1f) * 1.0, sinf(time * 0.45f) * 3.0f });
-  scene_upd_inst_trans(active_scene, 6, translation); // Gold
-  */
 
   renderer_update(active_scene, converge);
   set_ltri_cnt(active_scene->ltri_cnt);

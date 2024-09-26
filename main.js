@@ -1,19 +1,19 @@
 const PATH_TO_SCENES = "scenes/";
 const SCENES_TO_LOAD = [
-  //"bernstein.gltf",
+  "bernstein.gltf",
   "big-triangle.gltf",
-  //"donuts.gltf",
-  //"layers-of-spheres.gltf",
-  //"only-god-forgives.gltf",
-  //"purple-motion.gltf",
-  //"red-skybox.gltf",
-  //"schellen.gltf",
-  //"sphere-grid.gltf",
-  //"triangle-cave.gltf",
-  //"yellow-blue-hangar.gltf",
-  //"yellow-donut-cubes.gltf",
+  "donuts.gltf",
+  "layers-of-spheres.gltf",
+  "only-god-forgives.gltf",
+  "purple-motion.gltf",
+  "red-skybox.gltf",
+  "schellen.gltf",
+  "sphere-grid.gltf",
+  "triangle-cave.gltf",
+  "yellow-blue-hangar.gltf",
+  "yellow-donut-cubes.gltf",
 ];
-const DOWNLOAD_BINARY_TO_DISK = true;
+const EXPORT_BIN_TO_DISK = false;
 const EXPORT_FILENAME = "scenes-export.bin";
 
 const FULLSCREEN = false;
@@ -984,24 +984,26 @@ async function main()
   await wa.instantiate();
 
   // Load scenes
+  let t0 = performance.now();
   for(let i=0; i<SCENES_TO_LOAD.length; i++) {
     console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
-    if(!await loadScene(PATH_TO_SCENES + SCENES_TO_LOAD[i], DOWNLOAD_BINARY_TO_DISK)) {
+    if(!await loadScene(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
       alert("Failed to load scene");
       return;
     }
   }
+  console.log("Loaded and generated scenes in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
   // Save exported scene to file via download
-  if(DOWNLOAD_BINARY_TO_DISK) {
+  if(EXPORT_BIN_TO_DISK) {
     if(wa.export_scenes() > 0) {
       alert("Failed to make a binary export of the available scenes");
       return;
     }
   }
 
-  // Init gpu resources according to loaded scenes
-  wa.init_gpu_resources();
+  // Init gpu resources and prepare scene
+  wa.init();
 
   // Shader modules and pipelines
   if(SM_BLIT.includes("END_blit_wgsl")) {
