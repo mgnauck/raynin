@@ -1,5 +1,6 @@
 #include "import.h"
 #include "../scene/cam.h"
+#include "../scene/inst.h"
 #include "../scene/mesh.h"
 #include "../scene/mtl.h"
 #include "../scene/scene.h"
@@ -410,7 +411,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
 void process_loaded_emesh_data(emesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 {
-  *m = (emesh){ .mtl_id = 0xffff, .type = OT_MESH, .share_id = 0, .flags = (gm->invert_nrms ? 1 : 0) << 1 }; // TODO Share id
+  *m = (emesh){ .mtl_id = 0xffff, .type = ((gm->invert_nrms ? 1 : 0) << 5) | (OT_MESH & 0xf), .share_id = 0 }; // TODO Share id
 
   // Sum vertex/normal/index count from gltf mesh primitives
   uint32_t index_cnt = 0;
@@ -502,17 +503,17 @@ void process_loaded_emesh_data(emesh *m, gltf_data *d, gltf_mesh *gm, const uint
 
 void process_generated_emesh_data(emesh *m, gltf_mesh *gm)
 {
+  uint8_t flags = ((gm->no_caps ? 1 : 0) << 2) | ((gm->invert_nrms ? 1 : 0) << 1) | (gm->face_nrms ? 1 : 0);
   *m = (emesh){
     .mtl_id = gm->prims[0].mtl_idx,
-    .type = get_mesh_type(gm->name),
+    .type = (flags << 4) | (get_mesh_type(gm->name) & 0xf),
     .subx = gm->subx,
     .suby = gm->suby,
     .share_id = 0,  // TODO share id
-    .flags = ((gm->no_caps ? 1 : 0) << 2) | ((gm->invert_nrms ? 1 : 0) << 1) | (gm->face_nrms ? 1 : 0),
     .in_radius = gm->in_radius,
   };
 
-  obj_type type = m->type;
+  obj_type type = m->type & 0xf;
   if(m->type == OT_TORUS) {
     logc("Found generated torus (%s)", gm->name);
   } else if(m->type == OT_SPHERE) {
@@ -528,7 +529,7 @@ void process_generated_emesh_data(emesh *m, gltf_mesh *gm)
   }
 
   logc("mtl id: %i, subx: %i, suby: %i, share id: %i, face nrms: %i, invert nrms: %i, no caps: %i, inner radius: %f",
-      m->mtl_id, m->subx, m->suby, m->share_id, m->flags & 0x1, m->flags >> 1, m->flags >> 2, m->in_radius);
+      m->mtl_id, m->subx, m->suby, m->share_id, flags & 0x1, flags >> 1, flags >> 2, m->in_radius);
 }
 
 void process_emesh_node(escene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx, int32_t *render_mesh_ids)
@@ -716,7 +717,155 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_
   // Allocate scenes
   *scenes = malloc(*scene_cnt * sizeof(**scenes));
 
-  // TODO
+  // Read scene infos
+  for(uint8_t j=0; j<*scene_cnt; j++) {
+    uint16_t mtl_cnt, cam_cnt, mesh_cnt, inst_cnt;
+    p = ie_read(&mtl_cnt, p, sizeof(mtl_cnt));
+    p = ie_read(&cam_cnt, p, sizeof(cam_cnt));
+    p = ie_read(&mesh_cnt, p, sizeof(mesh_cnt));
+    p = ie_read(&inst_cnt, p, sizeof(inst_cnt));
+    scene *s = &(*scenes)[j];
+    scene_init(s, mesh_cnt, mtl_cnt, cam_cnt, inst_cnt);
+    p = ie_read(&s->bg_col, p, sizeof(s->bg_col));
+    logc("Initialized scene %i with %i meshes, %i mtls, %i cams, %i instances",
+        j, s->max_mesh_cnt, s->max_mtl_cnt, s->cam_cnt, s->max_inst_cnt);
+  }
 
-  return 1;
+  // Read materials
+  for(uint8_t j=0; j<*scene_cnt; j++) {
+    scene *s = &(*scenes)[j];
+    for(uint16_t i=0; i<s->max_mtl_cnt; i++) {
+      mtl m;
+      p = ie_read(&m.col, p, sizeof(m.col));
+      p = ie_read(&m.metallic, p, sizeof(m.metallic));
+      p = ie_read(&m.roughness, p, sizeof(m.roughness));
+      p = ie_read(&m.ior, p, sizeof(m.ior));
+      uint8_t flags;
+      p = ie_read(&flags, p, sizeof(flags));
+      m.emissive = (flags & 0x1) > 0 ? 1.0 : 0.0;
+      m.refractive = (flags >> 1) > 0 ? 1.0 : 0.0;
+      scene_add_mtl(s, &m);
+      logc("Added mtl %i to scene %i with col %f, %f, %f, metallic %f, roughness %f, ior %f, emissive %f, refractive %f",
+          i, j, m.col.x, m.col.y, m.col.z, m.metallic, m.roughness, m.ior, m.emissive, m.refractive);
+    }
+  }
+
+  // Read cams
+  for(uint8_t j=0; j<*scene_cnt; j++) {
+    scene *s = &(*scenes)[j];
+    for(uint16_t i=0; i<s->cam_cnt; i++) {
+      vec3 eye, tgt;
+      p = ie_read(&eye, p, sizeof(eye));
+      p = ie_read(&tgt, p, sizeof(tgt));
+      float vert_fov;
+      p = ie_read(&vert_fov, p, sizeof(vert_fov));
+      cam *c = scene_get_cam(s, i);
+      *c = (cam){ .vert_fov = vert_fov * 180.0f / PI, .foc_dist = 10.0 };
+      cam_set(c, eye, tgt);
+      logc("Added cam %i to scene %i with vert fov %f", i, j, c->vert_fov);
+    }
+  }
+
+  // Read meshes
+  for(uint8_t j=0; j<*scene_cnt; j++) {
+    scene *s = &(*scenes)[j];
+    for(uint16_t i=0; i<s->max_mesh_cnt; i++) {
+      uint16_t mtl_id;
+      p = ie_read(&mtl_id, p, sizeof(mtl_id));
+      uint8_t type_flags;
+      p = ie_read(&type_flags, p, sizeof(type_flags));
+      uint8_t type = type_flags & 0xf;
+      uint8_t flags = type_flags >> 4;
+      bool is_emissive = s->mtls[mtl_id].emissive > 0.0f;
+      bool face_nrms = (flags & 0x1) > 0;
+      bool invert_nrms = (flags >> 1) > 0;
+      bool no_caps = (flags >> 2) > 0;
+      mesh *m = scene_acquire_mesh(s);
+      if(type == OT_MESH) {
+        uint32_t vertex_cnt;
+        p = ie_read(&vertex_cnt, p, sizeof(vertex_cnt));
+        uint32_t vertices_ofs;
+        p = ie_read(&vertices_ofs, p, sizeof(vertices_ofs));
+        uint32_t normals_ofs;
+        p = ie_read(&normals_ofs, p, sizeof(normals_ofs));
+        uint32_t indices_ofs;
+        p = ie_read(&indices_ofs, p, sizeof(indices_ofs));
+        uint16_t index_cnt;
+        p = ie_read(&index_cnt, p, sizeof(index_cnt));
+        //
+        // TODO Read vertices/normals/indices and generate tri data
+        //
+      } else {
+        uint8_t subx;
+        p = ie_read(&subx, p, sizeof(subx));
+        uint8_t suby;
+        p = ie_read(&suby, p, sizeof(suby));
+        float in_radius = 0.0;
+        //p = ie_read(&in_radius, p, sizeof(in_radius));
+        if(type == OT_TORUS) {
+          subx = subx > 0 ? subx : TORUS_DEFAULT_SUB_INNER;
+          suby = suby > 0 ? suby : TORUS_DEFAULT_SUB_OUTER;
+          in_radius = in_radius > 0.0 ? in_radius : TORUS_DEFAULT_INNER_RADIUS;
+          mesh_create_torus(m, in_radius, TORUS_DEFAULT_OUTER_RADIUS, subx, suby, mtl_id, face_nrms | is_emissive, invert_nrms);
+          logc("Generated torus with %i triangles.", m->tri_cnt);
+        } else if(type == OT_SPHERE) {
+          subx = subx > 0 ? subx : SPHERE_DEFAULT_SUBX;
+          suby = suby > 0 ? suby : SPHERE_DEFAULT_SUBY;
+          mesh_create_sphere(m, 1.0f, subx, suby, mtl_id, face_nrms | is_emissive, invert_nrms);
+          logc("Generated uvsphere with %i triangles.", m->tri_cnt);
+        } else if(type == OT_CYLINDER) {
+          subx = subx > 0 ? subx : CYLINDER_DEFAULT_SUBX;
+          suby = suby > 0 ? suby : CYLINDER_DEFAULT_SUBY;
+          mesh_create_cylinder(m, 1.0f, 2.0f, subx, suby, !no_caps, mtl_id, face_nrms | is_emissive, invert_nrms);
+          logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
+        } else if(type == OT_BOX) {
+          subx = subx > 0 ? subx : BOX_DEFAULT_SUBX;
+          suby = suby > 0 ? suby : BOX_DEFAULT_SUBY;
+          mesh_create_box(m, subx, suby, mtl_id, invert_nrms);
+          logc("Generated box with %i triangles.", m->tri_cnt);
+        } else if(type == OT_QUAD) {
+          subx = subx > 0 ? subx : QUAD_DEFAULT_SUBX;
+          suby = suby > 0 ? suby : QUAD_DEFAULT_SUBY;
+          mesh_create_quad(m, subx, suby, mtl_id, invert_nrms);
+          logc("Generated quad with %i triangles.", m->tri_cnt);
+        } else {
+          logc("Invalid mesh %i (unknown object type) of scene %i found. Skipping.", i, j);
+        }
+      }
+      scene_attach_mesh(s, m, is_emissive);
+      logc("Added mesh %i to scene %i with emissive %i", i, j, is_emissive);
+    }
+  }
+
+  // Read instances
+  for(uint8_t j=0; j<*scene_cnt; j++) {
+    scene *s = &(*scenes)[j];
+    for(uint16_t i=0; i<s->max_inst_cnt; i++) {
+      uint16_t mesh_id;
+      p = ie_read(&mesh_id, p, sizeof(mesh_id));
+      vec3 scale;
+      p = ie_read(&scale, p, sizeof(scale));
+      float rot[4];
+      p = ie_read(&rot, p, 4 * sizeof(*rot));
+      vec3 trans;
+      p = ie_read(&trans, p, sizeof(trans));
+      // Create node transformation
+      mat4 sm, rm, tm, final;
+      mat4_scale(sm, scale);
+      mat4_from_quat(rm, rot[0], rot[1], rot[2], rot[3]);
+      mat4_trans(tm, trans);
+      mat4_mul(final, rm, sm);
+      mat4_mul(final, tm, final);
+      scene_add_inst(s, mesh_id, NO_MTL_OVERRIDE, final);
+      logc("Added inst %i to scene %i with mesh id %i and translation %f,%f,%f",
+          i, j, mesh_id, s->inst_info[i].transform[3], s->inst_info[i].transform[7],  s->inst_info[i].transform[11]);
+    }
+  }
+
+  // Finalize the scene data (blas and ltris)
+  logc("-------- Finalizing scenes (blas and ltri creation)");
+  for(uint8_t j=0; j<*scene_cnt; j++)
+    scene_finalize(&(*scenes)[j]);
+ 
+  return 0;
 }

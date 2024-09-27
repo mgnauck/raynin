@@ -3,18 +3,18 @@ const PATH_TO_SCENES = "scenes/";
 const SCENES_TO_LOAD = [
   "bernstein.gltf",
   "big-triangle.gltf",
-  //"donuts.gltf",
-  //"layers-of-spheres.gltf",
-  //"only-god-forgives.gltf",
-  //"purple-motion.gltf",
-  //"red-skybox.gltf",
-  //"schellen.gltf",
-  //"sphere-grid.gltf",
-  //"triangle-cave.gltf",
-  //"yellow-blue-hangar.gltf",
-  //"yellow-donut-cubes.gltf",
+  "donuts.gltf",
+  "layers-of-spheres.gltf",
+  "only-god-forgives.gltf",
+  "purple-motion.gltf",
+  "red-skybox.gltf",
+  "schellen.gltf",
+  "sphere-grid.gltf",
+  "triangle-cave.gltf",
+  "yellow-blue-hangar.gltf",
+  "yellow-donut-cubes.gltf",
 ];
-const EXPORT_BIN_TO_DISK = false;
+const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 
 const FULLSCREEN = false;
