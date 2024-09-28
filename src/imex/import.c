@@ -15,8 +15,8 @@
 #include "ieutil.h"
 
 // Make silent
-//#undef logc
-//#define logc(...) ((void)0)
+#undef logc
+#define logc(...) ((void)0)
 
 typedef struct mesh_ref {
   int32_t   mesh_idx;     // Render mesh index
@@ -456,6 +456,9 @@ void process_loaded_emesh_data(emesh *m, gltf_data *d, gltf_mesh *gm, const uint
       continue;
     }
 
+    if(ind_acc->comp_type == 5125)
+      logc("#### WARN: Index buffer with 32 bit indices are currently unsupported because target buffer is 16 bit only.");
+
     gltf_accessor *pos_acc = &d->accessors[p->pos_idx];
     if(pos_acc->data_type != DT_VEC3) {
       logc("#### WARN: Expected position buffer with data type VEC3. Ignoring primitive.");
@@ -675,7 +678,7 @@ uint8_t import_gltf_ex(escene *s, const char *gltf, size_t gltf_sz, const uint8_
 
   // Initialize a default camera if there is no other camera in the scene
   if(data.cam_node_cnt == 0)
-    s->cams[0] = (ecam){ .eye = (vec3){ 0.0f, 5.0f, 10.0f }, .tgt = (vec3){ 0.0f, 0.0f, 0.0f }, .vert_fov = 45.0f };
+    escene_add_cam(s, (vec3){ 0.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f }, 45.0f);
 
   // Add nodes as scene instances
   logc("-------- Processing nodes and creating instances:");
@@ -699,7 +702,70 @@ uint8_t import_gltf_ex(escene *s, const char *gltf, size_t gltf_sz, const uint8_
   return 0;
 }
 
-uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_t bin_sz)
+void import_bin_mesh_data(mesh *m, uint16_t mtl_id, bool invert_nrms, uint32_t vcnt, uint16_t icnt, uint32_t vofs, uint32_t nofs, uint32_t iofs, const uint8_t *bin)
+{
+  mesh_init(m, icnt / 3);
+  float inv = invert_nrms ? -1.0 : 1.0;
+  for(uint16_t j=0; j<icnt / 3; j++) {
+    uint16_t i0, i1, i2;
+    ie_read(&i0, &bin[iofs + ((j * 3 + 0) * sizeof(uint16_t))], sizeof(i0));
+    ie_read(&i1, &bin[iofs + ((j * 3 + 1) * sizeof(uint16_t))], sizeof(i1));
+    ie_read(&i2, &bin[iofs + ((j * 3 + 2) * sizeof(uint16_t))], sizeof(i2));
+
+    tri *t = &m->tris[j];
+    ie_read(&t->v0, &bin[vofs + i0 * sizeof(vec3)], sizeof(t->v0));
+    ie_read(&t->v1, &bin[vofs + i1 * sizeof(vec3)], sizeof(t->v1));
+    ie_read(&t->v2, &bin[vofs + i2 * sizeof(vec3)], sizeof(t->v2));
+
+    vec3 n0, n1, n2;
+    ie_read(&n0, &bin[nofs + i0 * sizeof(vec3)], sizeof(n0));
+    ie_read(&n1, &bin[nofs + i1 * sizeof(vec3)], sizeof(n1));
+    ie_read(&n2, &bin[nofs + i2 * sizeof(vec3)], sizeof(n2));
+
+    m->tri_nrms[j] = (tri_nrm){
+      .mtl = mtl_id,
+      .n0 = vec3_scale(n0, inv),
+      .n1 = vec3_scale(n1, inv),
+      .n2 = vec3_scale(n2, inv) };
+  }
+
+  logc("Imported mesh data with %i triangles.", m->tri_cnt);
+}
+
+void create_bin_generated_mesh(mesh *m, obj_type type, uint16_t mtl_id, uint8_t subx, uint8_t suby, bool face_nrms, bool invert_nrms, bool no_caps, bool is_emissive, float in_radius)
+{
+  if(type == OT_TORUS) {
+    subx = subx > 0 ? subx : TORUS_DEFAULT_SUB_INNER;
+    suby = suby > 0 ? suby : TORUS_DEFAULT_SUB_OUTER;
+    in_radius = in_radius > 0.0 ? in_radius : TORUS_DEFAULT_INNER_RADIUS;
+    mesh_create_torus(m, in_radius, TORUS_DEFAULT_OUTER_RADIUS, subx, suby, mtl_id, face_nrms | is_emissive, invert_nrms);
+    logc("Generated torus with %i triangles.", m->tri_cnt);
+  } else if(type == OT_SPHERE) {
+    subx = subx > 0 ? subx : SPHERE_DEFAULT_SUBX;
+    suby = suby > 0 ? suby : SPHERE_DEFAULT_SUBY;
+    mesh_create_sphere(m, 1.0f, subx, suby, mtl_id, face_nrms | is_emissive, invert_nrms);
+    logc("Generated uvsphere with %i triangles.", m->tri_cnt);
+  } else if(type == OT_CYLINDER) {
+    subx = subx > 0 ? subx : CYLINDER_DEFAULT_SUBX;
+    suby = suby > 0 ? suby : CYLINDER_DEFAULT_SUBY;
+    mesh_create_cylinder(m, 1.0f, 2.0f, subx, suby, !no_caps, mtl_id, face_nrms | is_emissive, invert_nrms);
+    logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
+  } else if(type == OT_BOX) {
+    subx = subx > 0 ? subx : BOX_DEFAULT_SUBX;
+    suby = suby > 0 ? suby : BOX_DEFAULT_SUBY;
+    mesh_create_box(m, subx, suby, mtl_id, invert_nrms);
+    logc("Generated box with %i triangles.", m->tri_cnt);
+  } else if(type == OT_QUAD) {
+    subx = subx > 0 ? subx : QUAD_DEFAULT_SUBX;
+    suby = suby > 0 ? suby : QUAD_DEFAULT_SUBY;
+    mesh_create_quad(m, subx, suby, mtl_id, invert_nrms);
+    logc("Generated quad with %i triangles.", m->tri_cnt);
+  } else {
+    logc("Invalid mesh (unknown object type) found. Skipping.");
+  }
+}
+
+uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
 {
   logc("Trying to load %i bytes of scene(s) data", bin_sz);
 
@@ -770,6 +836,7 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_
   for(uint8_t j=0; j<*scene_cnt; j++) {
     scene *s = &(*scenes)[j];
     for(uint16_t i=0; i<s->max_mesh_cnt; i++) {
+      logc("Importing mesh %i of scene %i", i, j);
       uint16_t mtl_id;
       p = ie_read(&mtl_id, p, sizeof(mtl_id));
       uint8_t type_flags;
@@ -792,9 +859,9 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_
         p = ie_read(&indices_ofs, p, sizeof(indices_ofs));
         uint16_t index_cnt;
         p = ie_read(&index_cnt, p, sizeof(index_cnt));
-        //
-        // TODO Read vertices/normals/indices and generate tri data
-        //
+        import_bin_mesh_data(m, mtl_id, invert_nrms, vertex_cnt, index_cnt, vertices_ofs, normals_ofs, indices_ofs, bin);
+        logc("Added loaded mesh %i of scene %i: mtl %i, emissive %i, invert nrms %i, vert cnt %i, ind cnt %i, vert ofs %i, nrm ofs %i, ind ofs %i",
+            i, j, mtl_id, is_emissive, invert_nrms, vertex_cnt, index_cnt, vertices_ofs, normals_ofs, indices_ofs);
       } else {
         uint8_t subx;
         p = ie_read(&subx, p, sizeof(subx));
@@ -802,38 +869,11 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_
         p = ie_read(&suby, p, sizeof(suby));
         float in_radius = 0.0;
         //p = ie_read(&in_radius, p, sizeof(in_radius));
-        if(type == OT_TORUS) {
-          subx = subx > 0 ? subx : TORUS_DEFAULT_SUB_INNER;
-          suby = suby > 0 ? suby : TORUS_DEFAULT_SUB_OUTER;
-          in_radius = in_radius > 0.0 ? in_radius : TORUS_DEFAULT_INNER_RADIUS;
-          mesh_create_torus(m, in_radius, TORUS_DEFAULT_OUTER_RADIUS, subx, suby, mtl_id, face_nrms | is_emissive, invert_nrms);
-          logc("Generated torus with %i triangles.", m->tri_cnt);
-        } else if(type == OT_SPHERE) {
-          subx = subx > 0 ? subx : SPHERE_DEFAULT_SUBX;
-          suby = suby > 0 ? suby : SPHERE_DEFAULT_SUBY;
-          mesh_create_sphere(m, 1.0f, subx, suby, mtl_id, face_nrms | is_emissive, invert_nrms);
-          logc("Generated uvsphere with %i triangles.", m->tri_cnt);
-        } else if(type == OT_CYLINDER) {
-          subx = subx > 0 ? subx : CYLINDER_DEFAULT_SUBX;
-          suby = suby > 0 ? suby : CYLINDER_DEFAULT_SUBY;
-          mesh_create_cylinder(m, 1.0f, 2.0f, subx, suby, !no_caps, mtl_id, face_nrms | is_emissive, invert_nrms);
-          logc("Generated uvcylinder with %i triangles.", m->tri_cnt);
-        } else if(type == OT_BOX) {
-          subx = subx > 0 ? subx : BOX_DEFAULT_SUBX;
-          suby = suby > 0 ? suby : BOX_DEFAULT_SUBY;
-          mesh_create_box(m, subx, suby, mtl_id, invert_nrms);
-          logc("Generated box with %i triangles.", m->tri_cnt);
-        } else if(type == OT_QUAD) {
-          subx = subx > 0 ? subx : QUAD_DEFAULT_SUBX;
-          suby = suby > 0 ? suby : QUAD_DEFAULT_SUBY;
-          mesh_create_quad(m, subx, suby, mtl_id, invert_nrms);
-          logc("Generated quad with %i triangles.", m->tri_cnt);
-        } else {
-          logc("Invalid mesh %i (unknown object type) of scene %i found. Skipping.", i, j);
-        }
+        create_bin_generated_mesh(m, type, mtl_id, subx, suby, face_nrms, invert_nrms, no_caps, is_emissive, in_radius);
+        logc("Added generated mesh %i of scene %i: mtl %i, type %i, emissive %i, invert nrms %i, face nrms %i, no caps %i",
+            i, j, mtl_id, type, is_emissive, invert_nrms, face_nrms, no_caps);
       }
       scene_attach_mesh(s, m, is_emissive);
-      logc("Added mesh %i to scene %i with emissive %i", i, j, is_emissive);
     }
   }
 
@@ -863,9 +903,11 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin, size_
   }
 
   // Finalize the scene data (blas and ltris)
-  logc("-------- Finalizing scenes (blas and ltri creation)");
-  for(uint8_t j=0; j<*scene_cnt; j++)
-    scene_finalize(&(*scenes)[j]);
- 
+  for(uint8_t j=0; j<*scene_cnt; j++) {
+    scene *s = &(*scenes)[j];
+    scene_finalize(s);
+    logc("-------- Completed import of scene %i with %i meshes, %i materials, %i cameras, %i instances", j, s->mesh_cnt, s->mtl_cnt, s->cam_cnt, s->inst_cnt);
+  }
+
   return 0;
 }

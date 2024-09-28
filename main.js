@@ -937,7 +937,7 @@ async function loadSceneBin(binPath)
   let bin = await (await fetch(binPath)).arrayBuffer();
   let binPtr = wa.malloc(bin.byteLength);
   wa.memUint8.set(new Uint8Array(bin), binPtr);
-  return wa.load_scenes_bin(binPtr, bin.byteLength) == 0;
+  return wa.load_scenes_bin(binPtr) == 0;
 }
 
 async function main()

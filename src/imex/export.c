@@ -51,7 +51,7 @@ uint8_t export_bin(escene *scenes, uint8_t scene_cnt, uint8_t **bin, size_t *bin
       if(em->type == OT_MESH) {
         em->normals_ofs = p - *bin;
         p = ie_write(p, em->normals, em->vertex_cnt * sizeof(*em->normals));
-        logc("Wrote %i normals starting at ofs: %i until ofs: %i for scene: %j and mesh: %i", em->vertex_cnt, em->normals_ofs, p - *bin, j, i);
+        logc("Wrote %i normals starting at ofs: %i until ofs: %i for scene: %i and mesh: %i", em->vertex_cnt, em->normals_ofs, p - *bin, j, i);
       }
     }
   }
@@ -85,7 +85,8 @@ uint8_t export_bin(escene *scenes, uint8_t scene_cnt, uint8_t **bin, size_t *bin
     p = ie_write(p, &es->mesh_cnt, sizeof(es->mesh_cnt));
     p = ie_write(p, &es->inst_cnt, sizeof(es->inst_cnt));
     p = ie_write(p, &es->bg_col, sizeof(es->bg_col));
-    logc("Wrote scene data for scene %i until ofs: %i", j, p - *bin);
+    logc("Wrote scene data for scene %i until ofs: %i with %i mtls, %i cams, %i meshes %i mtls, %f/%f/%f bg col",
+        j, p - *bin, es->mtl_cnt, es->cam_cnt, es->mesh_cnt, es->inst_cnt, es->bg_col.x, es->bg_col.y, es->bg_col.z);
   }
 
   // Write materials

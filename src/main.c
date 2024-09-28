@@ -15,28 +15,26 @@
 #include "sys/sutil.h"
 #include "util/vec3.h"
 
-#define MAX_SCENES 20
+// Import from JS
+extern void set_ltri_cnt(uint32_t n);
 
-// Scenes
 scene     *scenes = NULL;
 uint8_t   scene_cnt = 0;
 uint8_t   active_scene_id = 0;
 scene     *active_scene = NULL;
-
-// Export scenes
-escene    escenes[MAX_SCENES];
-uint8_t   escene_cnt = 0;
-
-// Camera
 uint32_t  active_cam = 0;
-bool      orbit_cam = false;
 
-// Import from JS
-extern void set_ltri_cnt(uint32_t n);
+//#define TINY_BUILD
+#ifndef TINY_BUILD
 extern void toggle_converge();
 extern void toggle_filter();
 extern void toggle_reprojection();
 extern void save_binary(const void *ptr, uint32_t sz);
+
+// Export scenes
+#define MAX_SCENES 20
+escene    escenes[MAX_SCENES];
+uint8_t   escene_cnt = 0;
 
 __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
@@ -72,9 +70,6 @@ void key_down(unsigned char key, float move_vel)
       break;
     case 'l':
       cam->foc_angle += 0.1f;
-      break;
-    case 'o':
-      orbit_cam = !orbit_cam;
       break;
     case 'u':
       active_scene->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f }, active_scene->bg_col);
@@ -280,17 +275,6 @@ uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *b
 }
 
 __attribute__((visibility("default")))
-uint8_t load_scenes_bin(uint8_t *bin, size_t bin_sz)
-{
-  if(import_bin(&scenes, &scene_cnt, bin, bin_sz) == 0) {
-    logc("Loaded %i scenes", scene_cnt);
-    return 0;
-  }
-
-  return 1;
-}
-
-__attribute__((visibility("default")))
 uint8_t export_scenes()
 {
   if(escene_cnt > 0) {
@@ -307,6 +291,13 @@ uint8_t export_scenes()
   }
 
   return 1;
+}
+#endif
+
+__attribute__((visibility("default")))
+uint8_t load_scenes_bin(uint8_t *bin)
+{
+  return import_bin(&scenes, &scene_cnt, bin);
 }
 
 __attribute__((visibility("default")))
@@ -329,43 +320,33 @@ void init()
   // Allocated space for scene resources on GPU
   renderer_gpu_alloc(max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
 
+#ifndef TINY_BUILD
   logc("Allocated gpu resources for max %i tris, %i ltris, %i mtls and %i insts",
       max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
+#endif
 
   // Initialize active scene
   active_scene = &scenes[active_scene_id];
 }
 
-float last_change = 0.0;
 
 __attribute__((visibility("default")))
 void update(float time, bool converge)
 {
+  /*
+  static float last_change = 0.0;
   if(time - last_change > 4.0) {
     active_scene_id = (active_scene_id + 1) % scene_cnt;
     active_scene = &scenes[active_scene_id];
     scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
     last_change = time;
-  }
-
-  // Update camera
-  if(active_scene->tlas_nodes && orbit_cam) {
-    cam *cam = scene_get_active_cam(active_scene);
-    vec3 gmin = vec3_min(active_scene->tlas_nodes[0].lmin, active_scene->tlas_nodes[0].rmin);
-    vec3 gmax = vec3_max(active_scene->tlas_nodes[0].lmax, active_scene->tlas_nodes[0].rmax);
-    //vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.6f);
-    vec3  e = vec3_scale(vec3_sub(gmax, gmin), 0.4f);
-    //vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 0.25f + e.y + e.y * sinf(time * 0.35f), e.z * cosf(time * 0.5f) };
-    vec3 pos = (vec3){ e.x * sinf(time * 0.25f), 20.0f, e.z * cosf(time * 0.25f) };
-    //cam_set(cam, pos, vec3_neg(pos));
-    cam_set(cam, pos, vec3_add((vec3){0.0f, 24.0, 0.0f}, vec3_neg(pos)));
-    scene_set_dirty(active_scene, RT_CAM);
-  }
+  }*/
 
   renderer_update(active_scene, converge);
   set_ltri_cnt(active_scene->ltri_cnt);
 }
 
+#ifndef TINY_BUILD
 __attribute__((visibility("default")))
 void release()
 {
@@ -375,3 +356,4 @@ void release()
   scenes = NULL;
   scene_cnt = 0;
 }
+#endif
