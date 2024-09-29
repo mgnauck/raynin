@@ -1,4 +1,4 @@
-const LOAD_FROM_GLTF = false;
+const LOAD_FROM_GLTF = true;
 const PATH_TO_SCENES = "scenes/new/";
 const SCENES_TO_LOAD = [
   "good_1.gltf",
@@ -12,8 +12,7 @@ const SCENES_TO_LOAD = [
   "good_9.gltf",
   "good_10.gltf",
 ];
-/*
-const PATH_TO_SCENES = "scenes/old/";
+/*const PATH_TO_SCENES = "scenes/old/";
 const SCENES_TO_LOAD = [
   "bernstein.gltf",
   "big-triangle.gltf",
