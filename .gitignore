@@ -3,5 +3,6 @@
 /scenes
 *.swp
 *.wasm
+*.map
 main
 src/scene_data.h

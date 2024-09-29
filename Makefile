@@ -13,7 +13,7 @@ LD=wasm-ld
 DBGFLAGS=-DNDEBUG
 CFLAGS=--target=wasm32 -mbulk-memory -std=c2x -nostdlib -Os -ffast-math -msimd128 -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable
 #CFLAGS+=-DSILENT
-LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=134217728 -z stack-size=8388608 --print-map
+LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=134217728 -z stack-size=8388608 --Map=$(WASM_OUT).map
 WOPTFLAGS=-Oz --enable-bulk-memory --enable-simd
 
 .PHONY: clean
