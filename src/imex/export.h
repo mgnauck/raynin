@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define EXPORT_NORMALS
+//#define EXPORT_NORMALS
 //#define EXPORT_TRIS
 
 typedef struct escene escene;

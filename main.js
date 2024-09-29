@@ -30,6 +30,7 @@ const SCENES_TO_LOAD = [
 ];*/
 const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
+const DO_NOT_LOAD_FROM_JS = true;
 
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
@@ -1007,33 +1008,37 @@ async function main()
   await wa.instantiate();
 
   // Load scenes
-  let t0 = performance.now();
-  if(LOAD_FROM_GLTF) {
-    for(let i=0; i<SCENES_TO_LOAD.length; i++) {
-      console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
-      if(!await loadSceneGltf(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
-        alert("Failed to load scene");
+  if(!DO_NOT_LOAD_FROM_JS) {
+    let t0 = performance.now();
+    if(LOAD_FROM_GLTF) {
+      for(let i=0; i<SCENES_TO_LOAD.length; i++) {
+        console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
+        if(!await loadSceneGltf(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
+          alert("Failed to load scene");
+          return;
+        }
+      }
+    } else {
+      if(!await loadSceneBin(PATH_TO_SCENES + EXPORT_FILENAME)) {
+        alert("Failed to load scenes");
         return;
       }
     }
-  } else {
-    if(!await loadSceneBin(PATH_TO_SCENES + EXPORT_FILENAME)) {
-      alert("Failed to load scenes");
-      return;
-    }
-  }
-  console.log("Loaded and generated scenes in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
+    console.log("Loaded and generated scenes in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
-  // Save exported scene to file via download
-  if(EXPORT_BIN_TO_DISK) {
-    if(wa.export_scenes() > 0) {
-      alert("Failed to make a binary export of the available scenes");
-      return;
+    // Save exported scene to file via download
+    if(EXPORT_BIN_TO_DISK) {
+      if(wa.export_scenes() > 0) {
+        alert("Failed to make a binary export of the available scenes");
+        return;
+      }
     }
   }
 
   // Init gpu resources and prepare scene
+  t0 = performance.now();
   wa.init();
+  console.log("Initialized data and GPU in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
   // Shader modules and pipelines
   if(SM_BLIT.includes("END_blit_wgsl")) {

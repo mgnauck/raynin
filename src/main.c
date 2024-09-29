@@ -15,6 +15,14 @@
 #include "sys/sutil.h"
 #include "util/vec3.h"
 
+//#define NO_CONTROL
+//#define TINY_BUILD
+//#define LOAD_EMBEDDED_DATA
+
+#ifdef LOAD_EMBEDDED_DATA
+#include "scene_data.h"
+#endif
+
 // Import from JS
 extern void set_ltri_cnt(uint32_t n);
 
@@ -24,18 +32,21 @@ uint8_t   active_scene_id = 0;
 scene     *active_scene = NULL;
 uint32_t  active_cam = 0;
 
-//#define TINY_BUILD
-#ifndef TINY_BUILD
+#ifndef NO_CONTROL
 extern void toggle_converge();
 extern void toggle_filter();
 extern void toggle_reprojection();
 extern void save_binary(const void *ptr, uint32_t sz);
+#endif
 
+#ifndef TINY_BUILD
 // Export scenes
 #define MAX_SCENES 20
 escene    escenes[MAX_SCENES];
 uint8_t   escene_cnt = 0;
+#endif
 
+#ifndef NO_CONTROL
 __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
 {
@@ -121,7 +132,9 @@ void mouse_move(int32_t dx, int32_t dy, float look_vel)
 
   scene_set_dirty(active_scene, RT_CAM);
 }
+#endif
 
+#ifndef TINY_BUILD
 void init_scene_riow(scene *s)
 {
 #define RIOW_SIZE   22
@@ -297,12 +310,20 @@ uint8_t export_scenes()
 __attribute__((visibility("default")))
 uint8_t load_scenes_bin(uint8_t *bin)
 {
+#ifndef LOAD_EMBEDDED_DATA
   return import_bin(&scenes, &scene_cnt, bin);
+#else
+  return 0;
+#endif
 }
 
 __attribute__((visibility("default")))
 void init()
 {
+#ifdef LOAD_EMBEDDED_DATA
+  import_bin(&scenes, &scene_cnt, scene_data);
+#endif
+
   // Find max resource sizes among the different scenes
   uint32_t max_tri_cnt = 0;
   uint32_t max_ltri_cnt = 0;
@@ -335,12 +356,13 @@ void update(float time, bool converge)
 {
   /*
   static float last_change = 0.0;
-  if(time - last_change > 4.0) {
+  if(time - last_change > 2.0) {
     active_scene_id = (active_scene_id + 1) % scene_cnt;
     active_scene = &scenes[active_scene_id];
     scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
     last_change = time;
-  }*/
+  }
+  */
 
   renderer_update(active_scene, converge);
   set_ltri_cnt(active_scene->ltri_cnt);

@@ -4,3 +4,4 @@
 *.swp
 *.wasm
 main
+src/scene_data.h
