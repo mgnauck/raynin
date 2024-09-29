@@ -422,13 +422,6 @@ uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
       continue;
     }
 
-    if(jsoneq(s, key, "steps") == 0) {
-      m->steps = atoi(toktostr(s, &t[j + 1]));
-      logc("steps: %i", m->suby);
-      j += 2;
-      continue;
-    }
-
     if(jsoneq(s, key, "innerradius") == 0) {
       m->in_radius = atof(toktostr(s, &t[j + 1]));
       logc("inner radius: %i", m->in_radius);
@@ -453,6 +446,14 @@ uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
     if(jsoneq(s, key, "invertnormals") == 0) {
       m->invert_nrms = true;
       logc("invertnormals: %i", m->invert_nrms);
+      j += 2;
+      continue;
+    }
+
+    if(jsoneq(s, key, "share") == 0) {
+      // Share id 0 is reserved for not set
+      m->share_id = 1 + atoi(toktostr(s, &t[j + 1]));
+      logc("share id: %i", m->share_id);
       j += 2;
       continue;
     }
@@ -551,11 +552,11 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
   m->prim_cnt = 0;
   m->subx = 0;
   m->suby = 0;
-  m->steps = 0;
   m->in_radius = 0.0f;
   m->no_caps = false;
   m->face_nrms = false;
   m->invert_nrms = false;
+  m->share_id = 0;
 
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {

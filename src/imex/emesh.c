@@ -2,6 +2,7 @@
 #include "../sys/sutil.h"
 #include "../sys/log.h"
 #include "../util/vec3.h"
+#include "export.h"
 #include "ieutil.h"
 
 void emesh_init(emesh *m, uint32_t vertex_cnt, uint16_t index_cnt)
@@ -28,13 +29,28 @@ uint32_t emesh_calc_size(const emesh *m)
   sz += sizeof(m->type);
 
   if(m->type == OT_MESH) {
+#ifndef EXPORT_TRIS
     sz += sizeof(m->vertex_cnt);
-    sz += sizeof(m->vertices_ofs);
-    sz += sizeof(m->normals_ofs);
-    sz += sizeof(m->indices_ofs);
     sz += sizeof(m->index_cnt);
+    sz += sizeof(m->vertices_ofs);
+  #ifdef EXPORT_NORMALS
+    sz += sizeof(m->normals_ofs);
+  #endif
+    sz += sizeof(m->indices_ofs);
+  #ifdef EXPORT_NORMALS
+    // Vertices, normals, indices
     sz += m->vertex_cnt * (sizeof(*m->vertices) + sizeof(*m->normals))
       + m->index_cnt * sizeof(*m->indices);
+  #else
+    // Vertices, indices
+    sz += m->vertex_cnt * sizeof(*m->vertices) + m->index_cnt * sizeof(*m->indices);
+  #endif
+#else
+    // Vertices as tris
+    sz += sizeof(m->index_cnt);
+    sz += sizeof(m->vertices_ofs);
+    sz += m->index_cnt * sizeof(*m->vertices);
+#endif
   } else {
     sz += sizeof(m->subx);
     sz += sizeof(m->suby);
@@ -50,12 +66,22 @@ uint8_t *emesh_write_primitive(uint8_t *dst, const emesh *m)
   dst = ie_write(dst, &m->type, sizeof(m->type)); // flags << 4 | type
 
   if(m->type == OT_MESH) {
-    dst = ie_write(dst, &m->vertex_cnt, sizeof(m->vertex_cnt)); // u32
-    dst = ie_write(dst, &m->vertices_ofs, sizeof(m->vertices_ofs)); // u32
-    dst = ie_write(dst, &m->normals_ofs, sizeof(m->normals_ofs)); // u32
-    dst = ie_write(dst, &m->indices_ofs, sizeof(m->indices_ofs)); // u32
+#ifndef EXPORT_TRIS
+    // Vertices get exported as vertice array (indexed)
+    dst = ie_write(dst, &m->vertex_cnt, sizeof(m->vertex_cnt)); // u16
     dst = ie_write(dst, &m->index_cnt, sizeof(m->index_cnt)); // u16
+    dst = ie_write(dst, &m->vertices_ofs, sizeof(m->vertices_ofs)); // u32
+  #ifdef EXPORT_NORMALS
+    dst = ie_write(dst, &m->normals_ofs, sizeof(m->normals_ofs)); // u32
+  #endif
+    dst = ie_write(dst, &m->indices_ofs, sizeof(m->indices_ofs)); // u32
     //logc("Wrote mesh with %i vcnt, %i vofs, %i nofs, %i iofs, %i icnt", m->vertex_cnt, m->vertices_ofs, m->normals_ofs, m->indices_ofs, m->index_cnt);
+#else
+    // Vertices get exported as tris (not indexed)
+    dst = ie_write(dst, &m->index_cnt, sizeof(m->index_cnt)); // u16
+    dst = ie_write(dst, &m->vertices_ofs, sizeof(m->vertices_ofs)); // u32
+    //logc("Wrote mesh with %i vcnt, %i vofs", m->vertex_cnt, m->vertices_ofs);
+#endif
   } else {
     dst = ie_write(dst, &m->subx, sizeof(m->subx));
     dst = ie_write(dst, &m->suby, sizeof(m->suby));

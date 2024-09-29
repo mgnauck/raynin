@@ -280,7 +280,7 @@ uint8_t export_scenes()
   if(escene_cnt > 0) {
     uint8_t *bin;
     size_t bin_sz;
-    if(export_bin(escenes, escene_cnt, &bin, &bin_sz) == 0) {
+    if(export_bin(&bin, &bin_sz, escenes, escene_cnt) == 0) {
       save_binary(bin, bin_sz);
       free(bin);
       for(uint8_t i=0; i<escene_cnt; i++)

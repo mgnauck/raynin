@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define SILENT
+//#define SILENT
 #ifndef SILENT
   #define logc(...) log_msg(__FILE__, __LINE__, __VA_ARGS__)
 #else

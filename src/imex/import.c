@@ -11,6 +11,7 @@
 #include "ecam.h"
 #include "emesh.h"
 #include "escene.h"
+#include "export.h"
 #include "gltf.h"
 #include "ieutil.h"
 
@@ -411,7 +412,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
 
 void process_loaded_emesh_data(emesh *m, gltf_data *d, gltf_mesh *gm, const uint8_t *bin)
 {
-  *m = (emesh){ .mtl_id = 0xffff, .type = ((gm->invert_nrms ? 1 : 0) << 5) | (OT_MESH & 0xf), .share_id = 0 }; // TODO Share id
+  *m = (emesh){ .mtl_id = 0xffff, .type = ((gm->invert_nrms ? 1 : 0) << 5) | (OT_MESH & 0xf), .share_id = gm->share_id };
 
   // Sum vertex/normal/index count from gltf mesh primitives
   uint32_t index_cnt = 0;
@@ -512,7 +513,6 @@ void process_generated_emesh_data(emesh *m, gltf_mesh *gm)
     .type = (flags << 4) | (get_mesh_type(gm->name) & 0xf),
     .subx = gm->subx,
     .suby = gm->suby,
-    .share_id = 0,  // TODO share id
     .in_radius = gm->in_radius,
   };
 
@@ -531,8 +531,8 @@ void process_generated_emesh_data(emesh *m, gltf_mesh *gm)
     logc("Found something unexpected while processing mesh data");
   }
 
-  logc("mtl id: %i, subx: %i, suby: %i, share id: %i, face nrms: %i, invert nrms: %i, no caps: %i, inner radius: %f",
-      m->mtl_id, m->subx, m->suby, m->share_id, flags & 0x1, flags >> 1, flags >> 2, m->in_radius);
+  logc("mtl id: %i, subx: %i, suby: %i, face nrms: %i, invert nrms: %i, no caps: %i, inner radius: %f",
+      m->mtl_id, m->subx, m->suby, flags & 0x1, flags >> 1, flags >> 2, m->in_radius);
 }
 
 void process_emesh_node(escene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx, int32_t *render_mesh_ids)
@@ -702,6 +702,30 @@ uint8_t import_gltf_ex(escene *s, const char *gltf, size_t gltf_sz, const uint8_
   return 0;
 }
 
+#ifdef EXPORT_TRIS
+void import_bin_mesh_data_tris(mesh *m, uint16_t mtl_id, bool invert_nrms, uint32_t vcnt, uint32_t vofs, const uint8_t *bin)
+{
+  mesh_init(m, vcnt / 3);
+  float inv = invert_nrms ? -1.0 : 1.0;
+  for(uint16_t j=0; j<vcnt / 3; j++) {
+    tri *t = &m->tris[j];
+    ie_read(&t->v0, &bin[vofs + ((j * 3 + 0) * sizeof(vec3))], sizeof(t->v0));
+    ie_read(&t->v1, &bin[vofs + ((j * 3 + 1) * sizeof(vec3))], sizeof(t->v1));
+    ie_read(&t->v2, &bin[vofs + ((j * 3 + 2) * sizeof(vec3))], sizeof(t->v2));
+
+    vec3 n0, n1, n2;
+    n0 = n1 = n2 = vec3_unit(vec3_cross(vec3_sub(t->v2, t->v1), vec3_sub(t->v0, t->v1)));
+
+    m->tri_nrms[j] = (tri_nrm){
+      .mtl = mtl_id,
+      .n0 = vec3_scale(n0, inv),
+      .n1 = vec3_scale(n1, inv),
+      .n2 = vec3_scale(n2, inv) };
+  }
+
+  logc("Imported mesh data with %i triangles.", m->tri_cnt);
+}
+#else
 void import_bin_mesh_data(mesh *m, uint16_t mtl_id, bool invert_nrms, uint32_t vcnt, uint16_t icnt, uint32_t vofs, uint32_t nofs, uint32_t iofs, const uint8_t *bin)
 {
   mesh_init(m, icnt / 3);
@@ -718,9 +742,13 @@ void import_bin_mesh_data(mesh *m, uint16_t mtl_id, bool invert_nrms, uint32_t v
     ie_read(&t->v2, &bin[vofs + i2 * sizeof(vec3)], sizeof(t->v2));
 
     vec3 n0, n1, n2;
+#ifdef EXPORT_NORMALS
     ie_read(&n0, &bin[nofs + i0 * sizeof(vec3)], sizeof(n0));
     ie_read(&n1, &bin[nofs + i1 * sizeof(vec3)], sizeof(n1));
     ie_read(&n2, &bin[nofs + i2 * sizeof(vec3)], sizeof(n2));
+#else
+    n0 = n1 = n2 = vec3_unit(vec3_cross(vec3_sub(t->v2, t->v1), vec3_sub(t->v0, t->v1)));
+#endif
 
     m->tri_nrms[j] = (tri_nrm){
       .mtl = mtl_id,
@@ -731,6 +759,7 @@ void import_bin_mesh_data(mesh *m, uint16_t mtl_id, bool invert_nrms, uint32_t v
 
   logc("Imported mesh data with %i triangles.", m->tri_cnt);
 }
+#endif
 
 void create_bin_generated_mesh(mesh *m, obj_type type, uint16_t mtl_id, uint8_t subx, uint8_t suby, bool face_nrms, bool invert_nrms, bool no_caps, bool is_emissive, float in_radius)
 {
@@ -849,19 +878,31 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
       bool no_caps = (flags >> 2) > 0;
       mesh *m = scene_acquire_mesh(s);
       if(type == OT_MESH) {
-        uint32_t vertex_cnt;
+#ifndef EXPORT_TRIS
+        uint16_t vertex_cnt;
         p = ie_read(&vertex_cnt, p, sizeof(vertex_cnt));
-        uint32_t vertices_ofs;
-        p = ie_read(&vertices_ofs, p, sizeof(vertices_ofs));
-        uint32_t normals_ofs;
-        p = ie_read(&normals_ofs, p, sizeof(normals_ofs));
-        uint32_t indices_ofs;
-        p = ie_read(&indices_ofs, p, sizeof(indices_ofs));
         uint16_t index_cnt;
         p = ie_read(&index_cnt, p, sizeof(index_cnt));
+        uint32_t vertices_ofs;
+        p = ie_read(&vertices_ofs, p, sizeof(vertices_ofs));
+        uint32_t normals_ofs = 0;
+  #ifdef EXPORT_NORMALS
+        p = ie_read(&normals_ofs, p, sizeof(normals_ofs));
+  #endif
+        uint32_t indices_ofs;
+        p = ie_read(&indices_ofs, p, sizeof(indices_ofs));
         import_bin_mesh_data(m, mtl_id, invert_nrms, vertex_cnt, index_cnt, vertices_ofs, normals_ofs, indices_ofs, bin);
         logc("Added loaded mesh %i of scene %i: mtl %i, emissive %i, invert nrms %i, vert cnt %i, ind cnt %i, vert ofs %i, nrm ofs %i, ind ofs %i",
             i, j, mtl_id, is_emissive, invert_nrms, vertex_cnt, index_cnt, vertices_ofs, normals_ofs, indices_ofs);
+#else
+        uint16_t vertex_cnt;
+        p = ie_read(&vertex_cnt, p, sizeof(vertex_cnt));
+        uint32_t vertices_ofs;
+        p = ie_read(&vertices_ofs, p, sizeof(vertices_ofs));
+        import_bin_mesh_data_tris(m, mtl_id, invert_nrms, vertex_cnt, vertices_ofs, bin);
+        logc("Added loaded mesh %i of scene %i: mtl %i, emissive %i, invert nrms %i, vert cnt %i, vert ofs %i",
+            i, j, mtl_id, is_emissive, invert_nrms, vertex_cnt, vertices_ofs);
+#endif
       } else {
         uint8_t subx;
         p = ie_read(&subx, p, sizeof(subx));
