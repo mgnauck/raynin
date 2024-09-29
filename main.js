@@ -30,7 +30,7 @@ const SCENES_TO_LOAD = [
 ];*/
 const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
-const DO_NOT_LOAD_FROM_JS = true;
+const DO_NOT_LOAD_FROM_JS = true && !LOAD_FROM_GLTF;
 
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
