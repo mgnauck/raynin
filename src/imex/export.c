@@ -1,12 +1,12 @@
 #include "export.h"
+#include "../base/log.h"
+#include "../base/walloc.h"
+#include "../scene/mtl.h"
 #include "ecam.h"
 #include "einst.h"
 #include "emesh.h"
 #include "escene.h"
 #include "ieutil.h"
-#include "../scene/mtl.h"
-#include "../sys/log.h"
-#include "../sys/sutil.h"
 
 // Make silent
 #undef logc

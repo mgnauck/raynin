@@ -1,5 +1,5 @@
 #include "tri.h"
-#include "../sys/mutil.h"
+#include "../base/math.h"
 
 float tri_calc_area(vec3 v0, vec3 v1, vec3 v2)
 {

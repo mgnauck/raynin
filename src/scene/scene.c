@@ -1,8 +1,8 @@
 #include "scene.h"
+#include "../base/math.h"
+#include "../base/string.h"
+#include "../base/walloc.h"
 #include "../rend/bvh.h"
-#include "../sys/mutil.h"
-#include "../sys/sutil.h"
-#include "../sys/log.h"
 #include "../util/aabb.h"
 #include "cam.h"
 #include "inst.h"
@@ -348,8 +348,6 @@ void scene_set_inst_state(scene *s, uint16_t inst_id, uint32_t state)
   // If something gets disabled, tlas and ltri rebuild might be necessary
   if(state & IS_DISABLED)
     s->inst_info[inst_id].state |= IS_TRANS_DIRTY | IS_MTL_DIRTY;
-
-  ///logc("Set inst state for %d", inst_id);
 }
 
 void scene_clr_inst_state(scene *s, uint16_t inst_id, uint32_t state)
@@ -359,8 +357,6 @@ void scene_clr_inst_state(scene *s, uint16_t inst_id, uint32_t state)
   // If something gets enabled, tlas and ltri rebuild might be necessary
   if(state & IS_DISABLED)
     s->inst_info[inst_id].state |= IS_TRANS_DIRTY | IS_MTL_DIRTY;
-
-  ///logc("Cleared inst state for %d", inst_id);
 }
 
 uint32_t scene_get_inst_state(scene *s, uint16_t inst_id)

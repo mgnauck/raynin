@@ -1,7 +1,7 @@
 #include "vec3.h"
 #include <stddef.h>
-#include "../sys/log.h"
-#include "../sys/mutil.h"
+#include "../base/math.h"
+#include "../base/log.h"
 
 void vec3_set(vec3 *v, uint8_t idx, float val)
 {

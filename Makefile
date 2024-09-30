@@ -8,10 +8,13 @@ SHADER_EXCLUDES=vm,m,m1,m2,m3
 LOADER_JS=main
 OUT=index.html
 
+#PLAYER_CONFIG=-DPROJECT_DATA -DPLAYER_ONLY -DBUMP_ALLOCATOR -DNO_LOG -DSKIP_RESET_STATE_ON_VOICE_START
+PLAYER_CONFIG=-DPROJECT_DATA -DPLAYER_ONLY -DBUMP_ALLOCATOR -DSKIP_RESET_STATE_ON_VOICE_START
+PLAYER_FEATURES = -DSUPPORT_NOTE -DSUPPORT_OSC -DSUPPORT_NOISE -DSUPPORT_NOISE2 -DSUPPORT_ADSR -DSUPPORT_TRANSPOSE -DSUPPORT_MUL -DSUPPORT_CLAMP -DSUPPORT_SCALE -DSUPPORT_MIX -DSUPPORT_FILTER -DSUPPORT_DELAY -DSUPPORT_REVERB -DSUPPORT_DIST -DSUPPORT_OUT
 CC=clang
 LD=wasm-ld
 DBGFLAGS=-DNDEBUG
-CFLAGS=--target=wasm32 -mbulk-memory -std=c2x -nostdlib -Os -ffast-math -msimd128 -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable
+CFLAGS=--target=wasm32 -mbulk-memory -std=c2x -nostdlib -Os -ffast-math -msimd128 -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable $(PLAYER_CONFIG) $(PLAYER_FEATURES)
 #CFLAGS+=-DSILENT
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=134217728 -z stack-size=8388608 --Map=$(WASM_OUT).map
 WOPTFLAGS=-Oz --enable-bulk-memory --enable-simd

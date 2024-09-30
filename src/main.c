@@ -1,5 +1,8 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include "base/math.h"
+#include "base/log.h"
+#include "base/walloc.h"
 #include "imex/escene.h"
 #include "imex/export.h"
 #include "imex/import.h"
@@ -10,9 +13,6 @@
 #include "scene/mesh.h"
 #include "scene/mtl.h"
 #include "scene/scene.h"
-#include "sys/log.h"
-#include "sys/mutil.h"
-#include "sys/sutil.h"
 #include "util/vec3.h"
 
 //#define NO_CONTROL
@@ -135,7 +135,7 @@ void mouse_move(int32_t dx, int32_t dy, float look_vel)
 #endif
 
 #ifndef TINY_BUILD
-void init_scene_riow(scene *s)
+/*void init_scene_riow(scene *s)
 {
 #define RIOW_SIZE   22
 #define LIGHT_CNT   3
@@ -251,7 +251,7 @@ void init_scene_riow(scene *s)
   }
 
   scene_finalize(s);
-}
+}*/
 
 __attribute__((visibility("default")))
 uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz, bool prepare_for_export)

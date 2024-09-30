@@ -1,6 +1,7 @@
 #include "escene.h"
+#include "../base/walloc.h"
+#include "../base/string.h"
 #include "../scene/mtl.h"
-#include "../sys/sutil.h"
 #include "ecam.h"
 #include "einst.h"
 #include "emesh.h"

@@ -2,7 +2,6 @@
 #include <float.h>
 #include "../scene/inst.h"
 #include "../scene/tri.h"
-#include "../sys/sutil.h"
 #include "../util/aabb.h"
 
 static uint32_t find_best_node(uint32_t idx, aabb *aabbs, uint32_t *node_indices, uint32_t node_indices_cnt)

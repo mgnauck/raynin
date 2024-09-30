@@ -1,5 +1,5 @@
 #include "ieutil.h"
-#include "../sys/sutil.h"
+#include "../base/string.h"
 
 const uint8_t *ie_read(void *dest, const uint8_t *src, size_t sz)
 {

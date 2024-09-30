@@ -1,7 +1,8 @@
 #include "gltf.h"
-#include "../sys/log.h"
-#include "../sys/mutil.h"
-#include "../sys/sutil.h"
+#include "../base/log.h"
+#include "../base/math.h"
+#include "../base/string.h"
+#include "../base/walloc.h"
 
 #define JSMN_PARENT_LINKS
 #include "../ext/jsmn.h"

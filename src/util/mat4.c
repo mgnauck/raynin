@@ -1,8 +1,9 @@
 #include "mat4.h"
 #include <stdint.h>
-#include "../sys/log.h"
-#include "../sys/mutil.h"
-#include "../sys/sutil.h"
+#include "../base/math.h"
+#include "../base/log.h"
+#include "../base/string.h"
+#include "../base/walloc.h"
 
 void mat4_identity(mat4 d)
 {

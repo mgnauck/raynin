@@ -1,6 +1,6 @@
 #include "emesh.h"
-#include "../sys/sutil.h"
-#include "../sys/log.h"
+#include "../base/log.h"
+#include "../base/walloc.h"
 #include "../util/vec3.h"
 #include "export.h"
 #include "ieutil.h"

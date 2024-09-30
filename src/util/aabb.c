@@ -1,6 +1,6 @@
 #include "aabb.h"
 #include <float.h>
-#include "../sys/mutil.h"
+#include "../base/math.h"
 
 aabb aabb_init()
 {
