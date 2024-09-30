@@ -11,10 +11,11 @@
 
 typedef enum inst_state {
   IS_DISABLED     = 1,
-  IS_TRANS_DIRTY  = 2,
-  IS_MTL_DIRTY    = 4,
-  IS_EMISSIVE     = 8,
-  IS_WAS_EMISSIVE = 16
+  IS_INVISIBLE    = 2,
+  IS_TRANS_DIRTY  = 4,
+  IS_MTL_DIRTY    = 8,
+  IS_EMISSIVE     = 16,
+  IS_WAS_EMISSIVE = 32
 } inst_state;
 
 // Additional CPU side data for instances

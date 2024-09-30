@@ -45,9 +45,9 @@ uint16_t escene_add_cam(escene *s, vec3 eye, vec3 tgt, float vert_fov)
   return s->cam_cnt++;
 }
 
-uint16_t escene_add_inst(escene *s, uint16_t mesh_id, vec3 scale, float *rot, vec3 trans)
+uint16_t escene_add_inst(escene *s, uint16_t mesh_id, uint16_t flags, vec3 scale, float *rot, vec3 trans)
 {
-  s->instances[s->inst_cnt] = (einst){ .mesh_id = mesh_id, .scale = scale, .trans = trans };
+  s->instances[s->inst_cnt] = (einst){ .mesh_id = (flags << 16) | mesh_id, .scale = scale, .trans = trans };
   memcpy(&s->instances[s->inst_cnt].rot, rot, 4 * sizeof(*rot));
   return s->inst_cnt++;
 }

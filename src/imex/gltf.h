@@ -69,6 +69,7 @@ typedef struct gltf_node {
   char          name[NAME_STR_LEN];
   int32_t       mesh_idx;
   int32_t       cam_idx;
+  bool          invisible;    // Custom value (invisible)
   vec3          scale;
   float         rot[4];       // Quaternion xyzw
   vec3          trans;

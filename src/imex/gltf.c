@@ -233,10 +233,30 @@ uint32_t read_mtls(gltf_data *data, const char *s, jsmntok_t *t)
   return j;
 }
 
+uint32_t read_node_extras(gltf_node *n, const char *s, jsmntok_t *t)
+{
+  uint32_t j = 1;
+  for(int i=0; i<t->size; i++) {
+    jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "invisible") == 0) {
+      n->invisible = true;
+      logc("invisible: %i", n->invisible);
+      j += 2;
+      continue;
+    }
+
+    j += ignore(s, key);
+  }
+
+  return j;
+}
+
 uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
 {
   n->mesh_idx = -1;
   n->cam_idx = -1;
+  n->invisible = false;
   n->trans = (vec3){ 0.0f, 0.0f, 0.0f };
   n->scale = (vec3){ 1.0f, 1.0f, 1.0f };
   memcpy(n->rot, (float[]){ 0.0f, 0.0f, 0.0f, 1.0f }, sizeof(n->rot));
@@ -244,6 +264,11 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
   uint32_t j = 1;
   for(int i=0; i<t->size; i++) {
     jsmntok_t *key = t + j;
+
+    if(jsoneq(s, key, "extras") == 0) {
+      j += 1 + read_node_extras(n, s, t + j + 1);
+      continue;
+    }
 
     if(jsoneq(s, key, "name") == 0) {
       char *name = toktostr(s, &t[j + 1]);

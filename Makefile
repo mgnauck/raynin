@@ -56,4 +56,4 @@ obj/%.o: src/%.c
 	$(CC) $(DBGFLAGS) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf obj $(OUT_DIR) $(WASM_OUT).wasm
+	rm -rf obj $(OUT_DIR) $(WASM_OUT).wasm $(WASM_OUT).map

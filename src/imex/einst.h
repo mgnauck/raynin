@@ -5,7 +5,7 @@
 #include "../util/vec3.h"
 
 typedef struct einst {
-  uint16_t  mesh_id;
+  uint32_t  mesh_id; // node flags << 16 | mesh_id
   vec3      scale;
   float     rot[4];
   vec3      trans;

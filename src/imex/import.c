@@ -209,14 +209,16 @@ void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx,
 
   // Get mesh data
   gltf_mesh *gm = &d->meshes[gn->mesh_idx];
-  int32_t mesh_idx = render_mesh_ids[node_idx];
+  int32_t mesh_id = render_mesh_ids[node_idx];
 
   // Create instance
-  if(mesh_idx >= 0) {
+  if(mesh_id >= 0) {
     // Mesh instance (mesh was either loaded or generated)
-    scene_add_inst(s, mesh_idx, -1, final);
+    uint16_t inst_id = scene_add_inst(s, mesh_id, NO_MTL_OVERRIDE, final);
+    if(gn->invisible)
+      scene_set_inst_state(s, inst_id, IS_INVISIBLE);
     logc("Created mesh instance of gltf mesh %i (%s) (render mesh %i) for node %i (%s).",
-        gn->mesh_idx, gm->name, mesh_idx, node_idx, gn->name);
+        gn->mesh_idx, gm->name, mesh_id, node_idx, gn->name);
   } else {
     logc("#### WARN: Node %i (%s) points at gltf mesh %i (%s) with invalid data. No instance will be created.",
         node_idx, gn->name, gn->mesh_idx, gm->name);
@@ -543,7 +545,8 @@ void process_emesh_node(escene *s, gltf_data *d, gltf_node *gn, uint32_t node_id
 
   // Create instance
   if(mesh_idx >= 0) {
-    escene_add_inst(s, mesh_idx, gn->scale, gn->rot, gn->trans);
+    uint16_t flags = gn->invisible > 0 ? 1 : 0;
+    escene_add_inst(s, mesh_idx, flags, gn->scale, gn->rot, gn->trans);
     logc("Created mesh instance of gltf mesh %i (%s) (render mesh %i) for node %i (%s).",
         gn->mesh_idx, gm->name, mesh_idx, node_idx, gn->name);
   } else {
@@ -922,8 +925,8 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
   for(uint8_t j=0; j<*scene_cnt; j++) {
     scene *s = &(*scenes)[j];
     for(uint16_t i=0; i<s->max_inst_cnt; i++) {
-      uint16_t mesh_id;
-      p = ie_read(&mesh_id, p, sizeof(mesh_id));
+      uint32_t mesh_id_flags;
+      p = ie_read(&mesh_id_flags, p, sizeof(mesh_id_flags));
       vec3 scale;
       p = ie_read(&scale, p, sizeof(scale));
       float rot[4];
@@ -937,7 +940,12 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
       mat4_trans(tm, trans);
       mat4_mul(final, rm, sm);
       mat4_mul(final, tm, final);
-      scene_add_inst(s, mesh_id, NO_MTL_OVERRIDE, final);
+      // Add instance
+      uint16_t mesh_id = mesh_id_flags & 0xffff;
+      uint16_t flags = mesh_id_flags >> 16; // Only invisible flag for now
+      uint16_t inst_id = scene_add_inst(s, mesh_id, NO_MTL_OVERRIDE, final);
+      if(flags)
+        scene_set_inst_state(s, inst_id, IS_INVISIBLE);
       logc("Added inst %i to scene %i with mesh id %i and translation %f,%f,%f",
           i, j, mesh_id, s->inst_info[i].transform[3], s->inst_info[i].transform[7],  s->inst_info[i].transform[11]);
     }
