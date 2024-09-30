@@ -264,7 +264,7 @@ cam *scene_get_cam(scene *s, uint16_t cam_id)
   return &s->cams[cam_id];
 }
 
-uint16_t scene_add_inst(scene *s, uint16_t mesh_id, uint16_t mtl_id, mat4 transform)
+uint16_t scene_add_inst(scene *s, uint16_t mesh_id, uint16_t mtl_id, uint32_t flags, mat4 transform)
 {
   inst_info *info = &s->inst_info[s->inst_cnt];
   info->mesh_id = mesh_id;
@@ -279,6 +279,9 @@ uint16_t scene_add_inst(scene *s, uint16_t mesh_id, uint16_t mtl_id, mat4 transf
 
   // Tri ofs and blas node ofs * 2
   inst->data = s->meshes[mesh_id].ofs;
+
+  // Flags (gpu payload)
+  inst->flags = flags;
 
   // Set transform and mtl override id to instance
   scene_upd_inst_trans(s, s->inst_cnt, transform);
@@ -330,6 +333,12 @@ void scene_upd_inst_mtl(scene *s, uint16_t inst_id, uint16_t mtl_id)
   }
 
   s->inst_info[inst_id].state |= IS_MTL_DIRTY;
+}
+
+void scene_upd_inst_flags(scene *s, uint16_t inst_id, uint32_t flags)
+{
+  s->instances[inst_id].flags = flags;
+  scene_set_dirty(s, RT_INST);
 }
 
 void scene_set_inst_state(scene *s, uint16_t inst_id, uint32_t state)

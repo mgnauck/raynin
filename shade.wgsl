@@ -26,7 +26,7 @@ struct Mtl
   invTransform:     mat3x4f,
   id:               u32,            // (mtl override id << 16) | (inst id & 0xffff)
   data:             u32,            // See comment on data in inst.h
-  pad0:             u32,
+  flags:            u32,            // Inst flags
   pad1:             u32
 }*/
 

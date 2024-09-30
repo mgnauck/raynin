@@ -56,10 +56,11 @@ void      scene_set_active_cam(scene *s, uint16_t cam_id);
 cam       *scene_get_active_cam(scene *s);
 cam       *scene_get_cam(scene *s, uint16_t cam_id);
 
-uint16_t  scene_add_inst(scene *s, uint16_t mesh_id, uint16_t mtl_id, mat4 transform); // mtl_id == 0xffff means no mtl override
+uint16_t  scene_add_inst(scene *s, uint16_t mesh_id, uint16_t mtl_id, uint32_t flags, mat4 transform); // mtl_id == 0xffff means no mtl override
 
 void      scene_upd_inst_trans(scene *s, uint16_t inst_id, mat4 transform);
 void      scene_upd_inst_mtl(scene *s, uint16_t inst_id, uint16_t mtl_id);
+void      scene_upd_inst_flags(scene *s, uint16_t inst_id, uint32_t flags);
 
 // Mainly for IS_DISABLED state updates for now. Everything else is done via scene_upd*().
 void      scene_set_inst_state(scene *s, uint16_t inst_id, uint32_t state);

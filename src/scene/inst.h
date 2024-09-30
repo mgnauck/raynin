@@ -11,12 +11,15 @@
 
 typedef enum inst_state {
   IS_DISABLED     = 1,
-  IS_INVISIBLE    = 2,
-  IS_TRANS_DIRTY  = 4,
-  IS_MTL_DIRTY    = 8,
-  IS_EMISSIVE     = 16,
-  IS_WAS_EMISSIVE = 32
+  IS_TRANS_DIRTY  = 2,
+  IS_MTL_DIRTY    = 4,
+  IS_EMISSIVE     = 8,
+  IS_WAS_EMISSIVE = 16
 } inst_state;
+
+typedef enum inst_flags {
+  IF_INVISIBLE    = 1,  // Instance is active but invisible, i.e. lights
+} inst_flags;
 
 // Additional CPU side data for instances
 typedef struct inst_info {
@@ -37,7 +40,7 @@ typedef struct inst {
   float       inv_transform[12];
   uint32_t    id;     // (mtl override id << 16) | (inst id & 0xffff)
   uint32_t    data;   // See notes above
-  uint32_t    pad0;
+  uint32_t    flags;  // Inst flags (gpu payload, see above)
   uint32_t    pad1;
 } inst;
 

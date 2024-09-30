@@ -14,7 +14,7 @@
   invTransform:     mat3x4f,
   id:               u32,            // (mtl override id << 16) | (inst id & 0xffff)
   data:             u32,            // See comment on data in inst.h
-  pad0:             u32,
+  flags:            u32,            // Inst flags
   pad1:             u32
 }*/
 
@@ -53,6 +53,9 @@
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
 const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0
+
+// Instance flags (see inst_flags)
+const IF_INVISIBLE        = 0x1;
 
 // General constants
 const EPS                 = 0.0001;
@@ -269,14 +272,19 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
 
 fn intersectInst(ori: vec3f, dir: vec3f, instOfs: u32, hit: ptr<function, vec4f>)
 {
+  // Inst id, inst data, inst flags
+  let data = instances[instOfs + 3];
+
+  // Do not intersect further if instance is invisible anyway
+  if((bitcast<u32>(data.z) & IF_INVISIBLE) > 0) {
+    return;
+  }
+
   // Inst inverse transform
   let m = mat4x4f(  instances[instOfs + 0],
                     instances[instOfs + 1],
                     instances[instOfs + 2],
                     vec4f(0.0, 0.0, 0.0, 1.0));
-
-  // Inst id + inst data
-  let data = instances[instOfs + 3];
 
   // Transform ray to inst object space
   let oriObj = (vec4f(ori, 1.0) * m).xyz;

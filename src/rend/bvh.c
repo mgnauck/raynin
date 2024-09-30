@@ -123,7 +123,7 @@ void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt)
 
   // Construct a leaf node for each instance
   for(uint32_t i=0; i<inst_cnt; i++) {
-    if((instances[i].state & (IS_DISABLED | IS_INVISIBLE)) == 0) {
+    if((instances[i].state & IS_DISABLED) == 0) {
       aabb *a = &aabbs[node_idx];
       a->min = instances[i].box.min;
       a->max = instances[i].box.max;
