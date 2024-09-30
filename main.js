@@ -2,15 +2,15 @@ const LOAD_FROM_GLTF = true;
 const PATH_TO_SCENES = "scenes/new/";
 const SCENES_TO_LOAD = [
   "good_1.gltf",
-  //"good_2.gltf",
-  //"good_3.gltf",
-  //"good_4.gltf",
-  //"good_5.gltf",
-  //"good_6.gltf",
-  //"good_7.gltf",
-  //"good_8.gltf",
-  //"good_9.gltf",
-  //"good_10.gltf",
+  "good_2.gltf",
+  "good_3.gltf",
+  "good_4.gltf",
+  "good_5.gltf",
+  "good_6.gltf",
+  "good_7.gltf",
+  "good_8.gltf",
+  "good_9.gltf",
+  "good_10.gltf",
 ];//*/
 /*const PATH_TO_SCENES = "scenes/old/";
 const SCENES_TO_LOAD = [
