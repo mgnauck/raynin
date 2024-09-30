@@ -1,5 +1,5 @@
 OUT_DIR=output
-SRC=$(shell find src/ -type f -name '*.c')
+SRC=$(shell find -L src/ -type f -name '*.c')
 OBJ=$(patsubst src/%.c,obj/%.o,$(SRC))
 WASM_OUT=intro
 SHADER=$(shell find ./ -maxdepth 1 -type f -name '*.wgsl')
