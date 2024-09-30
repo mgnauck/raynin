@@ -6,3 +6,6 @@
 *.map
 main
 src/scene_data.h
+src/audio
+src/base
+src/project
