@@ -13,6 +13,8 @@
 #include "scene/mesh.h"
 #include "scene/mtl.h"
 #include "scene/scene.h"
+#include "sync/sync.h"
+#include "sync/sync_types.h"
 #include "util/vec3.h"
 
 //#define NO_CONTROL
@@ -30,7 +32,8 @@ scene     *scenes = NULL;
 uint8_t   scene_cnt = 0;
 uint8_t   active_scene_id = 0;
 scene     *active_scene = NULL;
-uint32_t  active_cam = 0;
+uint16_t  active_cam_id = 0;
+track     intro;
 
 #ifndef NO_CONTROL
 extern void toggle_converge();
@@ -97,14 +100,14 @@ void key_down(unsigned char key, float move_vel)
       scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
       break;
     case 'n':
-      active_cam = active_cam > 0 ? active_cam - 1 : active_scene->cam_cnt - 1;
-      scene_set_active_cam(active_scene, active_cam);
-      logc("Setting cam %i of %i cams active", active_cam, active_scene->cam_cnt);
+      active_cam_id = active_cam_id > 0 ? active_cam_id - 1 : active_scene->cam_cnt - 1;
+      scene_set_active_cam(active_scene, active_cam_id);
+      logc("Setting cam %i of %i cams active", active_cam_id, active_scene->cam_cnt);
       break;
     case 'm':
-      active_cam = (active_cam + 1) % active_scene->cam_cnt;
-      scene_set_active_cam(active_scene, active_cam);
-      logc("Setting cam %i of %i cams active", active_cam, active_scene->cam_cnt);
+      active_cam_id = (active_cam_id + 1) % active_scene->cam_cnt;
+      scene_set_active_cam(active_scene, active_cam_id);
+      logc("Setting cam %i of %i cams active", active_cam_id, active_scene->cam_cnt);
       break;
    case ' ':
       toggle_converge();
@@ -135,124 +138,6 @@ void mouse_move(int32_t dx, int32_t dy, float look_vel)
 #endif
 
 #ifndef TINY_BUILD
-/*void init_scene_riow(scene *s)
-{
-#define RIOW_SIZE   22
-#define LIGHT_CNT   3
-#define MESH_CNT    2 + LIGHT_CNT
-#define INST_CNT    (RIOW_SIZE * RIOW_SIZE + 4 + 3)
-#define MTL_CNT     INST_CNT
-
-  scene_init(s, MESH_CNT, MTL_CNT, 1, INST_CNT);
-
-  cam *c = scene_get_active_cam(s);
-  *c = (cam){ .vert_fov = 20.0f, .foc_dist = 11.0f, .foc_angle = 0.0f };
-  cam_set(c, (vec3){ 13.0f, 2.0f, 3.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
-
-  uint16_t mtl_id = 0;
-  mtl m;
-  mesh *mesh;
-  mat4 transform, translation, rotation, scale;
-
-  // Light meshes (need to be unique)
-  uint16_t lid = 0;
-  m = mtl_init((vec3){ 1.16f, 1.16f, 1.16f });
-  m.emissive = 1.0f;
-  mtl_id = scene_add_mtl(s, &m);
-  mesh = scene_acquire_mesh(s);
-  mesh_create_quad(mesh, 0, 1, mtl_id, false);
-  lid = scene_attach_mesh(s, mesh, true);
-  for(uint8_t i=1; i<LIGHT_CNT; i++) {
-    mesh = scene_acquire_mesh(s);
-    mesh_create_quad(mesh, 1, 1, mtl_id, false);
-    scene_attach_mesh(s, mesh, true);
-  }
-
-  // Sphere mesh
-  uint16_t sid = 0;
-  mesh = scene_acquire_mesh(s);
-  mesh_create_sphere(mesh, 1.0f, 20, 20, mtl_id, false, false);
-  sid = scene_attach_mesh(s, mesh, false);
-
-  // Floor mesh
-  uint16_t fid = 0;
-  m = mtl_init((vec3){ 0.25f, 0.25f, 0.25f });
-  m.metallic = 0.0f;
-  m.roughness = 1.0f;
-  mtl_id = scene_add_mtl(s, &m);
-  mesh = scene_acquire_mesh(s);
-  mesh_create_quad(mesh, 10, 10, mtl_id, false);
-  fid = scene_attach_mesh(s, mesh, false);
-
-  // Light instances
-  for(uint8_t i=0; i<LIGHT_CNT; i++) {
-    mat4_scale_u(scale, 2.5f);
-    mat4_rot_x(rotation, PI);
-    mat4_mul(transform, scale, rotation);
-    mat4_trans(translation, (vec3){ 0.0f, 5.0f, -10.0f + (i * 10.0f) });
-    //mat4_trans(translation, (vec3){ 0.0f, 5.0f, (i * 10.0f) });
-    mat4_mul(transform, translation, transform);
-    scene_add_inst(s, lid + i, NO_MTL_OVERRIDE, 0, transform);
-  }
-
-  // Floor instance
-  mat4_scale_u(scale, 12.0f);
-  scene_add_inst(s, fid, NO_MTL_OVERRIDE, 0, scale);
-
-  // Reflecting sphere (black)
-  mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
-  mat4_trans(translation, (vec3){ 4.0f, 1.0f, 0.0f });
-  mat4_mul(translation, translation, scale);
-  m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
-  m.ior = 2.3f;
-  m.roughness = 0.0f;
-  mtl_id = scene_add_mtl(s, &m);
-  scene_add_inst(s, sid, mtl_id, 0, translation);
-
-  // Reflecting sphere (white)
-  mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
-  mat4_trans(translation, (vec3){ 0.0f, 1.0f, 0.0f });
-  mat4_mul(translation, translation, scale);
-  m = mtl_init((vec3){ 1.0f, 1.0f, 1.0f });
-  m.ior = 1.5f;
-  m.roughness = 0.075f;
-  mtl_id = scene_add_mtl(s, &m);
-  scene_add_inst(s, sid, mtl_id, 0, translation);
-
-  // Metallic sphere
-  mat4_scale(scale, (vec3){ 1.0, 1.0, 1.0 });
-  mat4_trans(translation, (vec3){ -4.0f, 1.0f, 0.0f });
-  mat4_mul(translation, translation, scale);
-  m = mtl_init((vec3){ 0.98f, 0.85f, 0.72f });
-  m.metallic = 1.0f;
-  m.roughness = 0.5f;
-  mtl_id = scene_add_mtl(s, &m);
-  scene_add_inst(s, sid, mtl_id, 0, translation);
-
-  mat4_scale_u(scale, 0.2f);
-
-  for(int a=-RIOW_SIZE/2; a<RIOW_SIZE/2; a++) {
-    for(int b=-RIOW_SIZE/2; b<RIOW_SIZE/2; b++) {
-      vec3 center = { (float)a + 0.9f * pcg_randf(), 0.2f, (float)b + 0.9f * pcg_randf() };
-      if(vec3_len(vec3_add(center, (vec3){ -4.0f, -0.2f, 0.0f })) > 0.9f) {
-        m = mtl_init(vec3_rand());
-        m.roughness = 0.075f;
-        if(pcg_randf() < 0.4f) {
-          m.refractive = 1.0f;
-          m.roughness = pcg_randf();
-          m.ior = 1.01 + pcg_randf();
-        }
-        mtl_id = scene_add_mtl(s, &m);
-        mat4_trans(translation, center);
-        mat4_mul(transform, translation, scale);
-        scene_add_inst(s, sid, mtl_id, 0, transform);
-      }
-    }
-  }
-
-  scene_finalize(s);
-}*/
-
 __attribute__((visibility("default")))
 uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz, bool prepare_for_export)
 {
@@ -263,8 +148,6 @@ uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *b
 
   // Scene to load
   scene *s = scenes + scene_cnt;
-
-  //init_scene_riow(s);
 
   // Import scene from given GLTF for rendering
   if(import_gltf(s, gltf, gltf_sz, bin, bin_sz) == 0)
@@ -308,6 +191,13 @@ uint8_t export_scenes()
 #endif
 
 __attribute__((visibility("default")))
+void add_event(uint16_t row, uint8_t id, float value, uint8_t blend_type)
+{
+  // Event specified from JS
+  sync_add_event(&intro, row, id, value, blend_type);
+}
+
+__attribute__((visibility("default")))
 uint8_t load_scenes_bin(uint8_t *bin)
 {
 #ifndef LOAD_EMBEDDED_DATA
@@ -318,11 +208,15 @@ uint8_t load_scenes_bin(uint8_t *bin)
 }
 
 __attribute__((visibility("default")))
-void init()
+void init(uint16_t bpm, uint8_t rows_per_beat, uint16_t event_cnt)
 {
 #ifdef LOAD_EMBEDDED_DATA
+  // Load our scenes
   import_bin(&scenes, &scene_cnt, scene_data);
 #endif
+
+  // Init the sync track
+  sync_init_track(&intro, event_cnt, bpm, rows_per_beat);
 
   // Find max resource sizes among the different scenes
   uint32_t max_tri_cnt = 0;
@@ -350,20 +244,39 @@ void init()
   active_scene = &scenes[active_scene_id];
 }
 
+void process_events(const track *track, float time)
+{
+  if(track->event_cnt == 0)
+    return;
+
+  // Set the active scene (SCN_ID)
+  active_scene_id = (uint8_t)sync_get_value(track, SCN_ID, time);
+  if(active_scene_id >= 0 && active_scene_id < scene_cnt)
+    active_scene = &scenes[active_scene_id];
+  else {
+    logc("#### ERROR Sync track requested unavailable scene");
+    active_scene_id = 0;
+  }
+
+  // Set active cam (CAM_ID)
+  uint16_t cam_id = (uint16_t)sync_get_value(track, CAM_ID, time);
+  if(cam_id >= 0 && cam_id < active_scene->cam_cnt) {
+    scene_set_active_cam(active_scene, cam_id);
+  } else
+    logc("#### ERROR Sync track requested unavailable camera");
+
+  /*float eye_z = sync_get_value(track, CAM_EYE_Z, time);
+  if(eye_z != BROKEN_EVENT) {
+    cam *cam = scene_get_active_cam(active_scene);
+    vec3 tgt = vec3_add(cam->eye, cam->fwd);
+    cam_set(cam, vec3_add(cam->eye, (vec3){ 0.0, 0.0, eye_z }), tgt);
+  }*/
+}
 
 __attribute__((visibility("default")))
 void update(float time, bool converge)
 {
-  /*
-  static float last_change = 0.0;
-  if(time - last_change > 2.0) {
-    active_scene_id = (active_scene_id + 1) % scene_cnt;
-    active_scene = &scenes[active_scene_id];
-    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
-    last_change = time;
-  }
-  */
-
+  process_events(&intro, time);
   renderer_update(active_scene, converge);
   set_ltri_cnt(active_scene->ltri_cnt);
 }
@@ -372,10 +285,10 @@ void update(float time, bool converge)
 __attribute__((visibility("default")))
 void release()
 {
+  sync_release_track(&intro);
+
   for(uint8_t i=0; i<scene_cnt; i++)
     scene_release(&scenes[i]);
   free(scenes);
-  scenes = NULL;
-  scene_cnt = 0;
 }
 #endif

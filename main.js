@@ -1,3 +1,18 @@
+// Sync track
+const PLAY_SYNC_TRACK = false;
+const BPM = 120;
+const ROWS_PER_BEAT = 4;
+const TRACK = [
+  // Row, event id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
+   0, 0, 0.0, 0,
+   5, 0, 1.0, 0,
+  10, 0, 2.0, 0,
+  15, 0, 3.0, 0,
+  18, 7, 0.0, 1,
+  100, 7, 10.0, 1,
+];
+
+// Scene loading/export
 const LOAD_FROM_GLTF = true;
 const PATH_TO_SCENES = "scenes/new/";
 const SCENES_TO_LOAD = [
@@ -27,13 +42,12 @@ const SCENES_TO_LOAD = [
   "yellow-blue-hangar.gltf",
   "yellow-donut-cubes.gltf",
 ];//*/
-const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
+const EXPORT_BIN_TO_DISK = false && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 const DO_NOT_LOAD_FROM_JS = false && !LOAD_FROM_GLTF;
 
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
-
 const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
@@ -1036,8 +1050,16 @@ async function main()
 
   // Init gpu resources and prepare scene
   t0 = performance.now();
-  wa.init();
+  wa.init(BPM, ROWS_PER_BEAT, TRACK.length / 4);
   console.log("Initialized data and GPU in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
+
+  // Provide event track to wasm
+  if(PLAY_SYNC_TRACK) {
+    for(let i=0; i<TRACK.length / 4; i++) {
+      let e = i << 2;
+      wa.add_event(TRACK[e + 0], TRACK[e + 1], TRACK[e + 2], TRACK[e + 3]);
+    }
+  }
 
   // Shader modules and pipelines
   if(SM_BLIT.includes("END_blit_wgsl")) {
