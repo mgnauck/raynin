@@ -51,6 +51,9 @@ const ASPECT = 16.0 / 9.0;
 const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
+const ENABLE_RENDER = true;
+const ENABLE_AUDIO = true;
+
 const SPP = 1;
 const MAX_BOUNCES = 5; // Max is 15 (encoded in bits 0-3 in frame data)
 
@@ -228,8 +231,64 @@ function Wasm(module)
   }
 }
 
-function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
-{
+function deferred() {
+  let res, rej;
+  let p = new Promise((resolve, reject) => { res = resolve; rej = reject; });
+  return { promise: p, resolve: res, reject: rej, signal: async () => res() };
+}
+
+function Audio(module) {
+  this.module = module;
+  this.initEvent = deferred();
+  this.startTime = 0;
+
+  this.initialize = async function (sequence) {
+    console.log("Audio: Initialize...");
+
+    this.audioContext = new AudioContext;
+    await this.audioContext.resume();
+
+    // add audio processor
+    // TODO add embedded handling
+
+    // Load audio worklet script from file
+    await this.audioContext.audioWorklet.addModule('audio.js');
+  
+    // defaults are in:1, out:1, channels:2
+    this.audioWorklet = new AudioWorkletNode(this.audioContext, 'a', { outputChannelCount: [2] });
+    this.audioWorklet.connect(this.audioContext.destination);
+
+    // event handling
+    this.audioWorklet.port.onmessage = async (event) => {
+      if ('r' in event.data) {
+        // synth is ready
+        this.initEvent.signal();
+      }
+    };
+
+    // send wasm
+    this.audioWorklet.port.postMessage({ 'w': this.module, s: sequence });
+
+    // wait initialization to complete
+    await this.initEvent.promise;
+  }
+
+  this.currentTime = function () {
+    return (performance.now() - this.startTime) / 1000;
+  }
+
+  this.play = async function () {
+    console.log(`Audio: Play.`);
+
+    // send message to start rendering
+    this.audioWorklet.port.postMessage({ p: true });
+
+    // reset timer (TODO timer drift compensation)
+    this.startTime = performance.now();
+  }
+}
+
+function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) {
   res.buf = [];
   res.bindGroups = [];
   res.pipelineLayouts = [];
@@ -926,7 +985,7 @@ async function render(time)
   requestAnimationFrame(render);
 }
 
-function startRender()
+async function startRender()
 {
   if(FULLSCREEN)
     canvas.requestFullscreen();
@@ -941,8 +1000,13 @@ function startRender()
   // Prepare for rendering
   wa.update(0, false);
 
-  installEventHandler();
-  requestAnimationFrame(render);
+  if (ENABLE_AUDIO)
+    await audio.play();
+
+  if (ENABLE_RENDER) {
+    installEventHandler();
+    requestAnimationFrame(render);
+  }
 }
 
 async function loadSceneGltf(gltfPath, prepareForExport)
@@ -1091,6 +1155,10 @@ async function main()
     createPipeline(PL_BLIT0, SM_BLIT, "vm", "m");
     createPipeline(PL_BLIT1, SM_BLIT, "vm", "m1");
   }
+
+  // Initialize audio
+  audio = new Audio(module);
+  await audio.initialize(0);
 
   // Start
   if(FULLSCREEN)
