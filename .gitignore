@@ -9,3 +9,4 @@ src/scene_data.h
 src/audio
 src/base
 src/project
+.DS_Store
