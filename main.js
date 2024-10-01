@@ -281,6 +281,7 @@ function Audio(module) {
     console.log(`Audio: Play.`);
 
     // send message to start rendering
+    await this.audioContext.resume();
     this.audioWorklet.port.postMessage({ p: true });
 
     // reset timer (TODO timer drift compensation)
