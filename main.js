@@ -246,11 +246,10 @@ function Audio(module) {
     console.log("Audio: Initialize...");
 
     this.audioContext = new AudioContext;
-    await this.audioContext.resume();
+    //await this.audioContext.resume();
 
     // add audio processor
     // TODO add embedded handling
-
     // Load audio worklet script from file
     await this.audioContext.audioWorklet.addModule('audio.js');
   
@@ -1162,10 +1161,7 @@ async function main()
   await audio.initialize(0);
 
   // Start
-  if(FULLSCREEN)
-    document.addEventListener("click", startRender, { once: true });
-  else
-    startRender();
+  document.addEventListener("click", startRender, { once: true });
 }
 
 main();
