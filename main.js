@@ -144,6 +144,7 @@ const WG_SIZE_Y       = 16;
 let canvas, context, device;
 let wa, res = {};
 let wasmModule;
+let last;
 let frames = 0;
 let samples = 0;
 let ltriCount = 0;
@@ -917,30 +918,12 @@ function blit(commandEncoder)
   passEncoder.end();
 }
 
-let start = undefined;
-let last = undefined;
-let frameTimeAvg = undefined;
-let updateDisplay = true;
-
 async function render(time)
 {
-  if(start === undefined)
-    start = time;
-  let frameTime = 0;
-  if(last !== undefined)
-    frameTime = time - last;
-  last = time;
-
-  if(frameTimeAvg === undefined)
-    frameTimeAvg = frameTime;
-  frameTimeAvg = 0.8 * frameTimeAvg + 0.2 * frameTime;
-
-  /*if(updateDisplay)*/ {
-    //document.title = `${frameTimeAvg.toFixed(2)} / ${(1000.0 / frameTimeAvg).toFixed(2)}`;
-    document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)}`;
-    updateDisplay = false;
-    //setTimeout(() => { updateDisplay = true; }, 100);
-  }
+  // FPS
+  let frameTime = performance.now() - last;
+  document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)}`;
+  last = performance.now();
 
   // Initialize config data
   device.queue.writeBuffer(res.buf[BUF_CFG], 0,
@@ -984,7 +967,7 @@ async function render(time)
   requestAnimationFrame(render);
 }
 
-async function startRender()
+async function start()
 {
   if(FULLSCREEN)
     canvas.requestFullscreen();
@@ -1165,7 +1148,7 @@ async function main()
   button.disabled = false;
   button.textContent = "Click to start";
 
-  document.addEventListener("click", startRender, { once: true });
+  document.addEventListener("click", start, { once: true });
 }
 
 main();
