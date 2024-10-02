@@ -1,33 +1,73 @@
-// Sync track
 const ENABLE_RENDER = true;
-const ENABLE_AUDIO = true;
-const PLAY_SYNC_TRACK = true;
-const START_AT_SEQUENCE = 0;
-const BPM = 120;
+const ENABLE_AUDIO = false;
+const BPM = 125;
 const ROWS_PER_BEAT = 4;
-const TRACK = [
-// Row, event id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
-0,    5, -123.132,  0, // CAM_POS_X
-0,    6,   58.441,  0, // CAM_POS_Y
-0,    7,  -77.679,  0, // CAM_POS_Z
-0,    8,   -0.830,  0, // CAM_DIR_X
-0,    9,    0.342,  0, // CAM_DIR_Y
-0,   10,   -0.440,  0, // CAM_DIR_Z
 
-10,    5,  -44.418,  0, // CAM_POS_X
-10,    6,   28.942,  0, // CAM_POS_Y
-10,    7,  -35.311,  0, // CAM_POS_Z
-10,    8,   -0.857,  0, // CAM_DIR_X
-10,    9,    0.251,  0, // CAM_DIR_Y
-10,   10,   -0.449,  0, // CAM_DIR_Z
+// Sync track
+const PLAY_SYNC_TRACK = true;
+const LOOP_SYNC_TRACK = true;
+const START_AT_SEQUENCE = 0;
+const TRACK = [
+// Row, ev id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
+
+   0,    0,        0,  0, // SCN_ID
+
+   0,    5, -123.132,  3, // CAM_POS_X
+   0,    6,   58.441,  3, // CAM_POS_Y
+   0,    7,  -77.679,  3, // CAM_POS_Z
+   0,    8,   -0.830,  3, // CAM_DIR_X
+   0,    9,    0.342,  3, // CAM_DIR_Y
+   0,   10,   -0.440,  3, // CAM_DIR_Z
+
+  20,    5,  -44.418,  0, // CAM_POS_X
+  20,    6,   28.942,  0, // CAM_POS_Y
+  20,    7,  -35.311,  0, // CAM_POS_Z
+  20,    8,   -0.857,  0, // CAM_DIR_X
+  20,    9,    0.251,  0, // CAM_DIR_Y
+  20,   10,   -0.449,  0, // CAM_DIR_Z
+
+  21,    5,  100.730,  1, // CAM_POS_X
+  21,    6,   29.493,  1, // CAM_POS_Y
+  21,    7, -148.642,  1, // CAM_POS_Z
+  21,    8,    0.280,  1, // CAM_DIR_X
+  21,    9,   -0.143,  1, // CAM_DIR_Y
+  21,   10,   -0.949,  1, // CAM_DIR_Z
+
+  40,    5, -204.534,  0, // CAM_POS_X
+  40,    6,   29.493,  0, // CAM_POS_Y
+  40,    7, -245.393,  0, // CAM_POS_Z
+  40,    8,   -0.380,  0, // CAM_DIR_X
+  40,    9,   -0.129,  0, // CAM_DIR_Y
+  40,   10,   -0.916,  0, // CAM_DIR_Z
+
+  40,    0,        1,  0, // SCN_ID
+
+  40,    5,   75.875,  0, // CAM_POS_X
+  40,    6,   32.381,  0, // CAM_POS_Y
+  40,    7,   55.307,  0, // CAM_POS_Z
+  40,    8,    0.690,  0, // CAM_DIR_X
+  40,    9,    0.214,  0, // CAM_DIR_Y
+  40,   10,    0.691,  0, // CAM_DIR_Z
+
+  40,   11,   90.712,  1, // CAM_FOV
+  44,   11,   45.712,  1, // CAM_FOV
+  48,   11,   80.712,  0, // CAM_FOV
+
+  48,    5,   75.875,  2, // CAM_POS_X
+  48,    6,   32.381,  2, // CAM_POS_Y
+  48,    7,   55.307,  2, // CAM_POS_Z
+  48,    8,    0.690,  2, // CAM_DIR_X
+  48,    9,    0.214,  2, // CAM_DIR_Y
+  48,   10,    0.691,  2, // CAM_DIR_Z
+
+  80,    5,  -86.000,  0, // CAM_POS_X
+  80,    6,   16.038,  0, // CAM_POS_Y
+  80,    7,   40.622,  0, // CAM_POS_Z
+  80,    8,   -0.737,  0, // CAM_DIR_X
+  80,    9,   -0.044,  0, // CAM_DIR_Y
+  80,   10,    0.674,  0, // CAM_DIR_Z
+
 ];
-/*const TRACK = [
-  // Row, event id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
-  0, 0, 0.0, 0,
-  5, 0, 1.0, 0,
-  10, 0, 2.0, 0,
-  15, 0, 3.0, 0,
-];*/
 
 // Scene loading/export
 const LOAD_FROM_GLTF = true;
@@ -160,7 +200,7 @@ const WG_SIZE_Y = 16;
 let canvas, context, device;
 let wa, res = {};
 let wasmModule;
-let last;
+let startTime = undefined, last;
 let frames = 0;
 let samples = 0;
 let ltriCount = 0;
@@ -261,16 +301,16 @@ function Audio(module) {
     this.audioContext = new AudioContext;
     //await this.audioContext.resume();
 
-    // add audio processor
+    // Add audio processor
     // TODO add embedded handling
     // Load audio worklet script from file
     await this.audioContext.audioWorklet.addModule('audio.js');
 
-    // defaults are in:1, out:1, channels:2
+    // Defaults are in:1, out:1, channels:2
     this.audioWorklet = new AudioWorkletNode(this.audioContext, 'a', { outputChannelCount: [2] });
     this.audioWorklet.connect(this.audioContext.destination);
 
-    // event handling
+    // Event handling
     this.audioWorklet.port.onmessage = async (event) => {
       if ('s' in event.data) {
         // synth is ready
@@ -283,7 +323,7 @@ function Audio(module) {
     // send wasm
     this.audioWorklet.port.postMessage({ 'w': this.module, s: sequence });
 
-    // wait for initialization to complete
+    // Wait for initialization to complete
     await this.initEvent.promise;
   }
 
@@ -294,11 +334,11 @@ function Audio(module) {
   this.play = async function () {
     console.log(`Audio: Play.`);
 
-    // send message to start rendering
+    // Send message to start rendering
     await this.audioContext.resume();
     this.audioWorklet.port.postMessage({ p: true });
 
-    // reset timer (TODO timer drift compensation)
+    // Reset timer (TODO timer drift compensation)
     this.startTime = performance.now();
 
     console.log(`Audio: Time is ${this.currentTime().toFixed(2)}`);
@@ -934,6 +974,9 @@ function blit(commandEncoder) {
 }
 
 async function render(time) {
+  if(startTime === undefined)
+    startTime = time;
+
   // FPS
   let frameTime = performance.now() - last;
   document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)}`;
@@ -975,8 +1018,14 @@ async function render(time) {
   res.accumIdx = 1 - res.accumIdx;
 
   // Update scene and renderer for next frame
-  wa.update(ENABLE_AUDIO ? audio.currentTime() : ((time - start) / 1000, converge), converge);
+  let finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge);
   frames++;
+  
+  if(finished > 0 && LOOP_SYNC_TRACK) {
+    //audio.reset(START_AT_SEQUENCE);
+    frames = 0;
+    startTime = undefined;
+  }
 
   requestAnimationFrame(render);
 }

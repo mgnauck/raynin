@@ -114,7 +114,7 @@ void key_down(unsigned char key, float move_vel)
       break;
    case ' ':
       logc("---> scene:");
-      logc("   r, %4i, %11i, %2i, // SCN_ID", SCN_ID, active_scene_id, BT_STEP);
+      logc("   r, %4i, %8i, %2i, // SCN_ID", SCN_ID, active_scene_id, BT_STEP);
       logc("<----");
       logc("---> camera:");
       logc("   r, %4i, %8.3f, %2i, // CAM_POS_X\n   r, %4i, %8.3f, %2i, // CAM_POS_Y\n   r, %4i, %8.3f, %2i, // CAM_POS_Z",
@@ -122,8 +122,8 @@ void key_down(unsigned char key, float move_vel)
       logc("   r, %4i, %8.3f, %2i, // CAM_DIR_X\n   r, %4i, %8.3f, %2i, // CAM_DIR_Y\n   r, %4i, %8.3f, %2i, // CAM_DIR_Z",
           CAM_DIR_X, cam->fwd.x, BT_STEP, CAM_DIR_Y, cam->fwd.y, BT_STEP, CAM_DIR_Z, cam->fwd.z, BT_STEP);
       logc("   r, %4i, %8.3f, %2i, // CAM_FOV", CAM_FOV, cam->vert_fov, BT_STEP);
-      logc("   r, %4i, %8.3f, %2i, // CAM_FOC_DIST", CAM_FOC_DIST, cam->foc_dist, BT_STEP);
-      logc("   r, %4i, %8.3f, %2i, // CAM_FOC_ANGLE", CAM_FOC_ANGLE, cam->foc_angle, BT_STEP);
+      //logc("   r, %4i, %8.3f, %2i, // CAM_FOC_DIST", CAM_FOC_DIST, cam->foc_dist, BT_STEP);
+      //logc("   r, %4i, %8.3f, %2i, // CAM_FOC_ANGLE", CAM_FOC_ANGLE, cam->foc_angle, BT_STEP);
       logc("<----");
       break;
    case 'f':
@@ -207,7 +207,6 @@ uint8_t export_scenes()
 __attribute__((visibility("default")))
 void add_event(uint16_t row, uint8_t id, float value, uint8_t blend_type)
 {
-  // Event specified from JS
   sync_add_event(&intro, row, id, value, blend_type);
 }
 
@@ -260,35 +259,50 @@ void init(uint16_t bpm, uint8_t rows_per_beat, uint16_t event_cnt)
 
 void process_events(const track *track, float time)
 {
-  if(track->event_cnt == 0)
-    return;
-
   // Set the active scene (SCN_ID)
-  /*active_scene_id = (uint8_t)sync_get_value(track, SCN_ID, time);
-  if(active_scene_id >= 0 && active_scene_id < scene_cnt)
-    active_scene = &scenes[active_scene_id];
-  else {
+  uint8_t id = (uint8_t)sync_get_value(track, SCN_ID, time);
+  if(id >= 0 && id < scene_cnt) {
+    if(id != active_scene_id) {
+      active_scene_id = id;
+      active_scene = &scenes[active_scene_id];
+      scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
+    }
+  } else
     logc("#### ERROR Sync track requested unavailable scene");
-    active_scene_id = 0;
-  }*/
 
-  // Camera
-  float px = sync_get_value(track, CAM_POS_X, time);
-  float py = sync_get_value(track, CAM_POS_Y, time);
-  float pz = sync_get_value(track, CAM_POS_Z, time);
-  float dx = sync_get_value(track, CAM_DIR_X, time);
-  float dy = sync_get_value(track, CAM_DIR_Y, time);
-  float dz = sync_get_value(track, CAM_DIR_Z, time);
+  // Camera pos/dir
+  if(sync_is_active(track, CAM_POS_X, time)) {
+    float px = sync_get_value(track, CAM_POS_X, time);
+    float py = sync_get_value(track, CAM_POS_Y, time);
+    float pz = sync_get_value(track, CAM_POS_Z, time);
+    float dx = sync_get_value(track, CAM_DIR_X, time);
+    float dy = sync_get_value(track, CAM_DIR_Y, time);
+    float dz = sync_get_value(track, CAM_DIR_Z, time);
+    cam *cam = scene_get_active_cam(active_scene);
+    cam_set(cam, (vec3){ px, py, pz }, (vec3){ dx, dy, dz });
+    scene_set_dirty(active_scene, RT_CAM);
+  }
+
+  // Camera fov 
   cam *cam = scene_get_active_cam(active_scene);
-  cam_set(cam, (vec3){ px, py, pz }, (vec3){ dx, dy, dz });
+  float fov = sync_get_value(track, CAM_FOV, time);
+  if(fov != EVENT_INACTIVE) {
+    cam->vert_fov = fov;
+    scene_set_dirty(active_scene, RT_CAM);
+  }
 }
 
 __attribute__((visibility("default")))
-void update(float time, bool converge)
+bool update(float time, bool converge)
 {
-  process_events(&intro, time);
+  bool finished = sync_is_finished(&intro, time);
+  if(!finished)
+    process_events(&intro, time);
+
   renderer_update(active_scene, converge);
   set_ltri_cnt(active_scene->ltri_cnt);
+
+  return finished;
 }
 
 #ifndef TINY_BUILD
