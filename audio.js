@@ -53,8 +53,18 @@ class AudioProcessor extends AudioWorkletProcessor {
                     await WebAssembly.compile(event.data.w),
                     importObjects);
 
+                let tunePtr = null;
+                if ('t' in event.data) {
+                    const tuneData = event.data.t;
+                    tunePtr = this.#engine.exports.malloc(tuneData.byteLength);
+                    const memory = new Uint8Array(this.#engine.exports.memory.buffer);
+                    memory.set(new Uint8Array(tuneData), tunePtr);
+
+                    console.log(`Audio[Worklet]: Received tune with ${tuneData.byteLength} bytes`);
+                }
+
                 // init the project
-                this.#engine.exports.projectInit(sampleRate, event.data.s);
+                this.#engine.exports.projectInit(sampleRate, event.data.s, tunePtr);
             }
             else if (event.data.p) {
                 this.#play = true;
