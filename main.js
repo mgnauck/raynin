@@ -13,6 +13,10 @@ const TRACK = [
   15, 0, 3.0, 0,
 ];
 
+// Audio loading
+const LOAD_AUDIO_FROM_FILE = true;
+const AUDIO_TO_LOAD = "tunes/tune.bkpo"
+
 // Scene loading/export
 const LOAD_FROM_GLTF = true;
 const PATH_TO_SCENES = "scenes/new/";
@@ -239,7 +243,7 @@ function Audio(module) {
   this.startTime = 0;
   this.playTime = 0;
 
-  this.initialize = async function (sequence) {
+  this.initialize = async function (sequence, file) {
     console.log("Audio: Initialize...");
 
     this.audioContext = new AudioContext;
@@ -264,8 +268,23 @@ function Audio(module) {
       }
     };
 
-    // send wasm
-    this.audioWorklet.port.postMessage({ 'w': this.module, s: sequence });
+    // load song from external file if specified
+    if (file) {
+      console.info(`Audio: Loading external tune ${file}`);
+      const tuneFile = await fetch(file);
+      if (!tuneFile.ok) {
+        alert(`The external tune in ${file} wasn't found.`);
+        return;
+      }
+      const tuneBuffer = await (tuneFile).arrayBuffer();
+
+      // send wasm + tune
+      this.audioWorklet.port.postMessage({ 'w': this.module, s: sequence, t: tuneBuffer });
+    }
+    else {
+      // send wasm
+      this.audioWorklet.port.postMessage({ 'w': this.module, s: sequence });
+    }
 
     // wait for initialization to complete
     await this.initEvent.promise;
@@ -920,7 +939,7 @@ function blit(commandEncoder) {
 async function render(time) {
   // FPS
   let frameTime = performance.now() - last;
-  document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)}`;
+  document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)} `;
   last = performance.now();
 
   // Initialize config data
@@ -979,7 +998,10 @@ async function start() {
   // Initialize audio
   if (ENABLE_AUDIO) {
     audio = new Audio(wasmModule);
-    await audio.initialize(START_AT_SEQUENCE);
+    if (LOAD_AUDIO_FROM_FILE)
+      await audio.initialize(START_AT_SEQUENCE, AUDIO_TO_LOAD);
+    else
+      await audio.initialize(START_AT_SEQUENCE);
   }
 
   // Prepare for rendering

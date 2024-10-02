@@ -1,6 +1,7 @@
 /obj
 /output
 /scenes
+/tunes
 *.swp
 *.wasm
 *.map
