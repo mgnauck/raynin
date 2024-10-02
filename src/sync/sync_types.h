@@ -2,14 +2,16 @@
 #define SYNC_TYPES
 
 #define SCN_ID         0 // Selected scene
-#define CAM_ID         1 // Selected camera
 
-#define CAM_EYE_X      5 // Cam eye pos (look from)
-#define CAM_EYE_Y      6
-#define CAM_EYE_Z      7
-#define CAM_TGT_X      8 // Cam target (look at)
-#define CAM_TGT_Y      9
-#define CAM_TGT_Z     10
+#define CAM_POS_X      5 // Position
+#define CAM_POS_Y      6
+#define CAM_POS_Z      7
+#define CAM_DIR_X      8 // Direction
+#define CAM_DIR_Y      9
+#define CAM_DIR_Z     10
+#define CAM_FOV       11 // Field of view
+#define CAM_FOC_DIST  12 // Focus distance (DOF)
+#define CAM_FOC_ANGLE 13 // Focus angle (DOF)
 
 #define BG_COL_R      15 // Background color (0..1)
 #define BG_COL_G      16

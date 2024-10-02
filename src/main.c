@@ -109,8 +109,22 @@ void key_down(unsigned char key, float move_vel)
       scene_set_active_cam(active_scene, active_cam_id);
       logc("Setting cam %i of %i cams active", active_cam_id, active_scene->cam_cnt);
       break;
-   case ' ':
+   case 'c':
       toggle_converge();
+      break;
+   case ' ':
+      logc("---> scene:");
+      logc("   r, %4i, %11i, %2i, // SCN_ID", SCN_ID, active_scene_id, BT_STEP);
+      logc("<----");
+      logc("---> camera:");
+      logc("   r, %4i, %8.3f, %2i, // CAM_POS_X\n   r, %4i, %8.3f, %2i, // CAM_POS_Y\n   r, %4i, %8.3f, %2i, // CAM_POS_Z",
+          CAM_POS_X, cam->eye.x, BT_STEP, CAM_POS_Y, cam->eye.y, BT_STEP, CAM_POS_Z, cam->eye.z, BT_STEP);
+      logc("   r, %4i, %8.3f, %2i, // CAM_DIR_X\n   r, %4i, %8.3f, %2i, // CAM_DIR_Y\n   r, %4i, %8.3f, %2i, // CAM_DIR_Z",
+          CAM_DIR_X, cam->fwd.x, BT_STEP, CAM_DIR_Y, cam->fwd.y, BT_STEP, CAM_DIR_Z, cam->fwd.z, BT_STEP);
+      logc("   r, %4i, %8.3f, %2i, // CAM_FOV", CAM_FOV, cam->vert_fov, BT_STEP);
+      logc("   r, %4i, %8.3f, %2i, // CAM_FOC_DIST", CAM_FOC_DIST, cam->foc_dist, BT_STEP);
+      logc("   r, %4i, %8.3f, %2i, // CAM_FOC_ANGLE", CAM_FOC_ANGLE, cam->foc_angle, BT_STEP);
+      logc("<----");
       break;
    case 'f':
       toggle_filter();
@@ -250,28 +264,23 @@ void process_events(const track *track, float time)
     return;
 
   // Set the active scene (SCN_ID)
-  active_scene_id = (uint8_t)sync_get_value(track, SCN_ID, time);
+  /*active_scene_id = (uint8_t)sync_get_value(track, SCN_ID, time);
   if(active_scene_id >= 0 && active_scene_id < scene_cnt)
     active_scene = &scenes[active_scene_id];
   else {
     logc("#### ERROR Sync track requested unavailable scene");
     active_scene_id = 0;
-  }
-
-  // Set active cam (CAM_ID)
-  /*uint16_t cam_id = (uint16_t)sync_get_value(track, CAM_ID, time);
-  if(cam_id >= 0 && cam_id < active_scene->cam_cnt) {
-    scene_set_active_cam(active_scene, cam_id);
-  } else
-    logc("#### ERROR Sync track requested unavailable camera");
-    */
-
-  /*float eye_z = sync_get_value(track, CAM_EYE_Z, time);
-  if(eye_z != BROKEN_EVENT) {
-    cam *cam = scene_get_active_cam(active_scene);
-    vec3 tgt = vec3_add(cam->eye, cam->fwd);
-    cam_set(cam, vec3_add(cam->eye, (vec3){ 0.0, 0.0, eye_z }), tgt);
   }*/
+
+  // Camera
+  float px = sync_get_value(track, CAM_POS_X, time);
+  float py = sync_get_value(track, CAM_POS_Y, time);
+  float pz = sync_get_value(track, CAM_POS_Z, time);
+  float dx = sync_get_value(track, CAM_DIR_X, time);
+  float dy = sync_get_value(track, CAM_DIR_Y, time);
+  float dz = sync_get_value(track, CAM_DIR_Z, time);
+  cam *cam = scene_get_active_cam(active_scene);
+  cam_set(cam, (vec3){ px, py, pz }, (vec3){ dx, dy, dz });
 }
 
 __attribute__((visibility("default")))
