@@ -259,11 +259,12 @@ void process_events(const track *track, float time)
   }
 
   // Set active cam (CAM_ID)
-  uint16_t cam_id = (uint16_t)sync_get_value(track, CAM_ID, time);
+  /*uint16_t cam_id = (uint16_t)sync_get_value(track, CAM_ID, time);
   if(cam_id >= 0 && cam_id < active_scene->cam_cnt) {
     scene_set_active_cam(active_scene, cam_id);
   } else
     logc("#### ERROR Sync track requested unavailable camera");
+    */
 
   /*float eye_z = sync_get_value(track, CAM_EYE_Z, time);
   if(eye_z != BROKEN_EVENT) {

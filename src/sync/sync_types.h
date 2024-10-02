@@ -1,8 +1,8 @@
 #ifndef SYNC_TYPES
 #define SYNC_TYPES
 
-#define SCN_ID         0
-#define CAM_ID         1
+#define SCN_ID         0 // Selected scene
+#define CAM_ID         1 // Selected camera
 
 #define CAM_EYE_X      5 // Cam eye pos (look from)
 #define CAM_EYE_Y      6

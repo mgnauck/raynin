@@ -1,5 +1,8 @@
 // Sync track
+const ENABLE_RENDER = true;
+const ENABLE_AUDIO = true;
 const PLAY_SYNC_TRACK = false;
+const START_AT_SEQUENCE = 0;
 const BPM = 120;
 const ROWS_PER_BEAT = 4;
 const TRACK = [
@@ -8,8 +11,6 @@ const TRACK = [
    5, 0, 1.0, 0,
   10, 0, 2.0, 0,
   15, 0, 3.0, 0,
-  18, 7, 0.0, 1,
-  100, 7, 10.0, 1,
 ];
 
 // Scene loading/export
@@ -50,9 +51,6 @@ const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
 const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
-
-const ENABLE_RENDER = true;
-const ENABLE_AUDIO = true;
 
 const SPP = 1;
 const MAX_BOUNCES = 5; // Max is 15 (encoded in bits 0-3 in frame data)
@@ -145,6 +143,7 @@ const WG_SIZE_Y       = 16;
 
 let canvas, context, device;
 let wa, res = {};
+let wasmModule;
 let frames = 0;
 let samples = 0;
 let ltriCount = 0;
@@ -241,7 +240,7 @@ function Audio(module) {
   this.module = module;
   this.initEvent = deferred();
   this.startTime = 0;
-
+ 
   this.initialize = async function (sequence) {
     console.log("Audio: Initialize...");
 
@@ -979,7 +978,7 @@ async function render(time)
   res.accumIdx = 1 - res.accumIdx;
 
   // Update scene and renderer for next frame
-  wa.update((time - start) / 1000, converge);
+  wa.update(ENABLE_AUDIO ? audio.currentTime() : ((time - start) / 1000, converge), converge);
   frames++;
 
   requestAnimationFrame(render);
@@ -997,13 +996,19 @@ async function startRender()
     canvas.style.top = 0;
   }
 
+  // Initialize audio
+  if(ENABLE_AUDIO) {
+    audio = new Audio(wasmModule);
+    await audio.initialize(START_AT_SEQUENCE);
+  }
+
   // Prepare for rendering
   wa.update(0, false);
 
-  if (ENABLE_AUDIO)
+  if(ENABLE_AUDIO)
     await audio.play();
 
-  if (ENABLE_RENDER) {
+  if(ENABLE_RENDER) {
     installEventHandler();
     requestAnimationFrame(render);
   }
@@ -1056,7 +1061,7 @@ async function main()
   }
 
   // Canvas/context
-  document.body.innerHTML = "CLICK<canvas style='width:0;cursor:none'>";
+  document.body.innerHTML = "<button disabled>Loading..</button><canvas style='width:0;cursor:none'>";
   canvas = document.querySelector("canvas");
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
@@ -1071,17 +1076,16 @@ async function main()
   context.configure({ device, format: presentationFormat, alphaMode: "opaque" });
 
   // Load actual code
-  let module;
   if(WASM.includes("END_")) {
     // Load wasm from file
-    module = await (await fetch("intro.wasm")).arrayBuffer();
+    wasmModule = await (await fetch("intro.wasm")).arrayBuffer();
   } else {
     // When embedded, the wasm is deflated and base64 encoded. Undo in reverse.
-    module = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
-    module = await new Response(module.stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+    wasmModule = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
+    wasmNodule = await new Response(wasmModule.stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
   }
 
-  wa = new Wasm(module);
+  wa = new Wasm(wasmModule);
   await wa.instantiate();
 
   // Load scenes
@@ -1156,11 +1160,11 @@ async function main()
     createPipeline(PL_BLIT1, SM_BLIT, "vm", "m1");
   }
 
-  // Initialize audio
-  audio = new Audio(module);
-  await audio.initialize(0);
-
   // Start
+  let button = document.querySelector("button");
+  button.disabled = false;
+  button.textContent = "Click to start";
+
   document.addEventListener("click", startRender, { once: true });
 }
 
