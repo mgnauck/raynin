@@ -208,7 +208,7 @@ let startTime = undefined, last;
 let frames = 0;
 let samples = 0;
 let ltriCount = 0;
-let converge = false;
+let converge = true;
 let filter = true;
 let reproj = filter | false;
 

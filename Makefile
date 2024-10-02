@@ -21,20 +21,22 @@ WOPTFLAGS=-Oz --enable-bulk-memory --enable-simd
 
 .PHONY: clean
 
-$(OUT_DIR)/$(OUT): $(OUT_DIR)/$(LOADER_JS).3.js Makefile
+$(OUT_DIR)/$(OUT): $(OUT_DIR)/$(LOADER_JS).4.js Makefile
 	js-payload-compress --zopfli-iterations=100 $< $@ 
+	#rm $(OUT_DIR)/$(LOADER_JS).1.js
 
-$(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(LOADER_JS).2.js
+$(OUT_DIR)/$(LOADER_JS).4.js: $(OUT_DIR)/$(LOADER_JS).3.js
 	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=true --toplevel > $@
 
-$(OUT_DIR)/$(LOADER_JS).2.js: $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $(OUT_DIR)/$(LOADER_JS).1.js $(SHADER_MIN)
-	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $@
+$(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $(SHADER_MIN)
+	./embed.sh $(OUT_DIR)/$(LOADER_JS).2.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $@
 
 $(OUT_DIR)/%.wgsl.min: ./%.wgsl $(OUT_DIR)/$(LOADER_JS).1.js
 	@mkdir -p `dirname $@`
+	cp -u $(OUT_DIR)/$(LOADER_JS).1.js $(OUT_DIR)/$(LOADER_JS).2.js
 	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<)
 	@echo "$(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<):" `wc -c < $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<)` "bytes"
-	./embed.sh $(OUT_DIR)/$(LOADER_JS).1.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<) $(OUT_DIR)/$(LOADER_JS).1.js
+	./embed.sh $(OUT_DIR)/$(LOADER_JS).2.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<) $(OUT_DIR)/$(LOADER_JS).2.js
 
 $(OUT_DIR)/$(LOADER_JS).1.js: $(LOADER_JS).js $(SHADER)
 	@mkdir -p `dirname $@`
