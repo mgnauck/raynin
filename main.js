@@ -1,17 +1,33 @@
 // Sync track
 const ENABLE_RENDER = true;
-const ENABLE_AUDIO = false;
-const PLAY_SYNC_TRACK = false;
+const ENABLE_AUDIO = true;
+const PLAY_SYNC_TRACK = true;
 const START_AT_SEQUENCE = 0;
 const BPM = 120;
 const ROWS_PER_BEAT = 4;
 const TRACK = [
+// Row, event id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
+0,    5, -123.132,  0, // CAM_POS_X
+0,    6,   58.441,  0, // CAM_POS_Y
+0,    7,  -77.679,  0, // CAM_POS_Z
+0,    8,   -0.830,  0, // CAM_DIR_X
+0,    9,    0.342,  0, // CAM_DIR_Y
+0,   10,   -0.440,  0, // CAM_DIR_Z
+
+10,    5,  -44.418,  0, // CAM_POS_X
+10,    6,   28.942,  0, // CAM_POS_Y
+10,    7,  -35.311,  0, // CAM_POS_Z
+10,    8,   -0.857,  0, // CAM_DIR_X
+10,    9,    0.251,  0, // CAM_DIR_Y
+10,   10,   -0.449,  0, // CAM_DIR_Z
+];
+/*const TRACK = [
   // Row, event id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
   0, 0, 0.0, 0,
   5, 0, 1.0, 0,
   10, 0, 2.0, 0,
   15, 0, 3.0, 0,
-];
+];*/
 
 // Scene loading/export
 const LOAD_FROM_GLTF = true;
