@@ -6,12 +6,17 @@ void cam_calc_base(cam *c)
   c->up = vec3_unit(vec3_cross(c->fwd, c->right));
 }
 
-void cam_set(cam *c, vec3 look_from, vec3 look_at)
+void cam_set(cam *c, vec3 eye, vec3 fwd)
 {
-  c->eye = look_from;
-  c->fwd = vec3_unit(vec3_sub(look_from, look_at));
-  
+  c->eye = eye;
+  c->fwd = vec3_unit(fwd);
+
   cam_calc_base(c);
+}
+
+void cam_set_tgt(cam *c, vec3 look_from, vec3 look_at)
+{
+  cam_set(c, look_from, vec3_sub(look_from, look_at));
 }
 
 void cam_set_dir(cam *c, vec3 dir)

@@ -230,12 +230,13 @@ void process_cam_node(scene *s, gltf_data *d, gltf_node *gn)
   mat4 rot;
   mat4_from_quat(rot, gn->rot[0], gn->rot[1], gn->rot[2], gn->rot[3]);
   
-  vec3 dir = vec3_unit(mat4_mul_dir(rot, (vec3){ 0.0f, 0.0f, -1.0f }));
+  vec3 dir = vec3_unit(mat4_mul_dir(rot, (vec3){ 0.0f, 0.0f, 1.0f }));
  
   gltf_cam *gc = &d->cams[gn->cam_idx];
   cam *c = scene_get_cam(s, gn->cam_idx);
   *c = (cam){ .vert_fov = gc->vert_fov * 180.0f / PI, .foc_dist = 10.0f, .foc_angle = 0.0f };
-  cam_set(c, gn->trans, vec3_add(gn->trans, dir));
+  //cam_set_tgt(c, gn->trans, vec3_add(gn->trans, dir));
+  cam_set(c, gn->trans, dir);
 
   logc("Created camera %i from node (%s) pointing to gltf cam %i (%s).", gn->cam_idx, gn->name, gn->cam_idx, gc->name);
 }
@@ -383,7 +384,7 @@ uint8_t import_gltf(scene *s, const char *gltf, size_t gltf_sz, const uint8_t *b
   if(data.cam_node_cnt == 0) {
     cam *c = scene_get_active_cam(s);
     *c = (cam){ .vert_fov = 45.0f, .foc_dist = 10.0f, .foc_angle = 0.0f };
-    cam_set(c, (vec3){ 0.0f, 5.0f, 10.0f }, (vec3){ 0.0f, 0.0f, 0.0f });
+    cam_set(c, (vec3){ 0.0f, 0.0f, 10.0f }, (vec3){ 0.0f, 0.0f, -1.0f });
   }
 
   // Add nodes as scene instances
@@ -565,7 +566,8 @@ void process_ecam_node(escene *s, gltf_data *d, gltf_node *gn)
 
   gltf_cam *gc = &d->cams[gn->cam_idx];
 
-  escene_add_cam(s, gn->trans, vec3_add(gn->trans, dir), gc->vert_fov);
+  //escene_add_cam(s, gn->trans, vec3_add(gn->trans, dir), gc->vert_fov);
+  escene_add_cam(s, gn->trans, dir, gc->vert_fov);
 
   logc("Created camera %i from node (%s) pointing to gltf cam %i (%s).", gn->cam_idx, gn->name, gn->cam_idx, gc->name);
 }
@@ -818,9 +820,11 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
 
   // Read scene infos
   for(uint8_t j=0; j<*scene_cnt; j++) {
-    uint16_t mtl_cnt, cam_cnt, mesh_cnt, inst_cnt;
+    uint16_t mtl_cnt, cam_cnt = 1, mesh_cnt, inst_cnt; // There is at least one default cam in the scene
     p = ie_read(&mtl_cnt, p, sizeof(mtl_cnt));
+#ifdef EXPORT_CAMS
     p = ie_read(&cam_cnt, p, sizeof(cam_cnt));
+#endif
     p = ie_read(&mesh_cnt, p, sizeof(mesh_cnt));
     p = ie_read(&inst_cnt, p, sizeof(inst_cnt));
     scene *s = &(*scenes)[j];
@@ -849,21 +853,29 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
     }
   }
 
+#ifdef EXPORT_CAMS
   // Read cams
   for(uint8_t j=0; j<*scene_cnt; j++) {
     scene *s = &(*scenes)[j];
     for(uint16_t i=0; i<s->cam_cnt; i++) {
-      vec3 eye, tgt;
-      p = ie_read(&eye, p, sizeof(eye));
-      p = ie_read(&tgt, p, sizeof(tgt));
+      vec3 pos, dir;
+      p = ie_read(&pos, p, sizeof(pos));
+      p = ie_read(&dir, p, sizeof(dir));
       float vert_fov;
       p = ie_read(&vert_fov, p, sizeof(vert_fov));
       cam *c = scene_get_cam(s, i);
       *c = (cam){ .vert_fov = vert_fov * 180.0f / PI, .foc_dist = 10.0 };
-      cam_set(c, eye, tgt);
+      cam_set(c, pos, dir);
       logc("Added cam %i to scene %i with vert fov %f", i, j, c->vert_fov);
     }
   }
+#else
+  // Set a default cam
+  cam *c = scene_get_cam(s, 0);
+  *c = (cam){ .vert_fov = 45.0f * 180.0f / PI, .foc_dist = 10.0 };
+  cam_set(c, (vec3){ 0.0f, 0.0f, 10.0f }, (vec3){ 0.0f, 0.0f, -1.0f });
+  logc("Added default cam %i to scene %i with vert fov %f", i, j, c->vert_fov);
+#endif
 
   // Read meshes
   for(uint8_t j=0; j<*scene_cnt; j++) {

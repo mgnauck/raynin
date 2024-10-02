@@ -142,12 +142,16 @@ uint8_t export_bin(uint8_t **bin, size_t *bin_sz, escene *scenes, uint8_t scene_
   for(uint8_t j=0; j<scene_cnt; j++) {
     escene *es = &scenes[j];
     p = ie_write(p, &es->mtl_cnt, sizeof(es->mtl_cnt));
-    p = ie_write(p, &es->cam_cnt, sizeof(es->cam_cnt));
+    uint16_t cam_cnt = 0;
+#ifdef EXPORT_CAMS
+    cam_cnt = es->cam_cnt;
+    p = ie_write(p, &cam_cnt, sizeof(es->cam_cnt));
+#endif
     p = ie_write(p, &es->mesh_cnt, sizeof(es->mesh_cnt));
     p = ie_write(p, &es->inst_cnt, sizeof(es->inst_cnt));
     p = ie_write(p, &es->bg_col, sizeof(es->bg_col));
     logc("Wrote scene data for scene %i until ofs: %i with %i mtls, %i cams, %i meshes %i mtls, %f/%f/%f bg col",
-        j, p - *bin, es->mtl_cnt, es->cam_cnt, es->mesh_cnt, es->inst_cnt, es->bg_col.x, es->bg_col.y, es->bg_col.z);
+        j, p - *bin, es->mtl_cnt, cam_cnt, es->mesh_cnt, es->inst_cnt, es->bg_col.x, es->bg_col.y, es->bg_col.z);
   }
 
   // Write materials
@@ -165,6 +169,7 @@ uint8_t export_bin(uint8_t **bin, size_t *bin_sz, escene *scenes, uint8_t scene_
     }
   }
 
+#ifdef EXPORT_CAMS
   // Write cameras
   for(uint8_t j=0; j<scene_cnt; j++) {
     escene *es = &scenes[j];
@@ -173,6 +178,7 @@ uint8_t export_bin(uint8_t **bin, size_t *bin_sz, escene *scenes, uint8_t scene_
       logc("Wrote cam %i of scene %i until ofs: %i", i, j, p - *bin);
     }
   }
+#endif
 
   // Write meshes (primitive data)
   for(uint8_t j=0; j<scene_cnt; j++) {

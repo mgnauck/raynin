@@ -4,8 +4,8 @@
 #include "../util/vec3.h"
 
 typedef struct ecam {
-  vec3  eye;
-  vec3  tgt;
+  vec3  pos;
+  vec3  dir;
   float vert_fov;
 } ecam;
 

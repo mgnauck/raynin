@@ -1,8 +1,8 @@
 // Sync track
 const ENABLE_RENDER = true;
-const ENABLE_AUDIO = true;
+const ENABLE_AUDIO = false;
 const PLAY_SYNC_TRACK = false;
-const START_AT_SEQUENCE = 4;
+const START_AT_SEQUENCE = 0;
 const BPM = 120;
 const ROWS_PER_BEAT = 4;
 const TRACK = [

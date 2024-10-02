@@ -13,7 +13,8 @@ typedef struct cam {
   vec3  fwd;
 } cam;
 
-void cam_set(cam *c, vec3 look_from, vec3 look_at);
+void cam_set(cam *c, vec3 eye, vec3 fwd);
+void cam_set_tgt(cam *c, vec3 look_from, vec3 look_at);
 void cam_set_dir(cam *c, vec3 dir);
 
 #endif

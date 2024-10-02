@@ -109,8 +109,10 @@ void key_down(unsigned char key, float move_vel)
       scene_set_active_cam(active_scene, active_cam_id);
       logc("Setting cam %i of %i cams active", active_cam_id, active_scene->cam_cnt);
       break;
-   case ' ':
+   case 'c':
       toggle_converge();
+      break;
+   case ' ':
       break;
    case 'f':
       toggle_filter();

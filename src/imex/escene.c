@@ -40,9 +40,9 @@ uint16_t escene_add_mtl(escene *s, mtl *mtl)
   return s->mtl_cnt++;
 }
 
-uint16_t escene_add_cam(escene *s, vec3 eye, vec3 tgt, float vert_fov)
+uint16_t escene_add_cam(escene *s, vec3 pos, vec3 dir, float vert_fov)
 {
-  s->cams[s->cam_cnt] = (ecam){ .eye = eye, .tgt = tgt, .vert_fov = vert_fov };
+  s->cams[s->cam_cnt] = (ecam){ .pos = pos, .dir = dir, .vert_fov = vert_fov };
   return s->cam_cnt++;
 }
 
