@@ -1,8 +1,3 @@
-const ENABLE_RENDER = true;
-const ENABLE_AUDIO = false;
-const BPM = 125;
-const ROWS_PER_BEAT = 4;
-
 // Sync track
 const PLAY_SYNC_TRACK = true;
 const LOOP_SYNC_TRACK = true;
@@ -69,9 +64,19 @@ const TRACK = [
 
 ];
 
-// Audio loading
+// Audio
+const ENABLE_AUDIO = true;
 const LOAD_AUDIO_FROM_FILE = true;
 const AUDIO_TO_LOAD = "tunes/tune.bkpo"
+const BPM = 125;
+const ROWS_PER_BEAT = 4;
+
+// Rendering
+const ENABLE_RENDER = true;
+const FULLSCREEN = false;
+const ASPECT = 16.0 / 9.0;
+const WIDTH = 1280;
+const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 // Scene loading/export
 const LOAD_FROM_GLTF = true;
@@ -106,11 +111,6 @@ const SCENES_TO_LOAD = [
 const EXPORT_BIN_TO_DISK = false && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 const DO_NOT_LOAD_FROM_JS = false && !LOAD_FROM_GLTF;
-
-const FULLSCREEN = false;
-const ASPECT = 16.0 / 9.0;
-const WIDTH = 1280;
-const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 const SPP = 1;
 const MAX_BOUNCES = 5; // Max is 15 (encoded in bits 0-3 in frame data)
@@ -1040,7 +1040,7 @@ async function render(time) {
   let finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge);
   frames++;
   
-  if(finished > 0 && LOOP_SYNC_TRACK) {
+  if(finished > 0 && LOOP_SYNC_TRACK && !ENABLE_AUDIO) { // TODO Remove ENABLE_AUDIO once looping is supported
     //audio.reset(START_AT_SEQUENCE);
     frames = 0;
     startTime = undefined;
