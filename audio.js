@@ -84,8 +84,8 @@ class AudioProcessor extends AudioWorkletProcessor {
         this.#renderOffset = 0;
         this.#nextTick = 0;
 
-        // send ready message
-        this.port.postMessage({ r: true });
+        // send ready message including start time
+        this.port.postMessage({ s: this.#engine.exports.audioGetStartTime() });
     }
 
     process(inputs, outputs) {

@@ -268,7 +268,7 @@ function Audio(module) {
     // send wasm
     this.audioWorklet.port.postMessage({ 'w': this.module, s: sequence });
 
-    // wait initialization to complete
+    // wait for initialization to complete
     await this.initEvent.promise;
   }
 
@@ -285,6 +285,8 @@ function Audio(module) {
 
     // reset timer (TODO timer drift compensation)
     this.startTime = performance.now();
+
+    console.log(`Audio: Time is ${this.currentTime().toFixed(2)}`);
   }
 }
 
