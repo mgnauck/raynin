@@ -2,13 +2,13 @@
 const ENABLE_RENDER = true;
 const ENABLE_AUDIO = true;
 const PLAY_SYNC_TRACK = false;
-const START_AT_SEQUENCE = 0;
+const START_AT_SEQUENCE = 4;
 const BPM = 120;
 const ROWS_PER_BEAT = 4;
 const TRACK = [
   // Row, event id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
-   0, 0, 0.0, 0,
-   5, 0, 1.0, 0,
+  0, 0, 0.0, 0,
+  5, 0, 1.0, 0,
   10, 0, 2.0, 0,
   15, 0, 3.0, 0,
 ];
@@ -82,64 +82,64 @@ END_denoise_wgsl`;
 const SM_BLIT = `BEGIN_blit_wgsl
 END_blit_wgsl`;
 
-const BUF_CAM         =  0; // Accessed from WASM
-const BUF_MTL         =  1; // Accessed from WASM
-const BUF_INST        =  2; // Accessed from WASM
-const BUF_TRI         =  3; // Accessed from WASM
-const BUF_TNRM        =  4; // Accessed from WASM
-const BUF_LTRI        =  5; // Accessed from WASM
-const BUF_NODE        =  6; // Accessed from WASM
-const BUF_PATH0       =  7;
-const BUF_PATH1       =  8;
-const BUF_SRAY        =  9;
-const BUF_HIT         = 10;
-const BUF_ATTR        = 11; // Attribute buf (pos and nrm)
-const BUF_LATTR       = 12; // Last attribute buf (pos and nrm)
-const BUF_COL         = 13; // Separated direct and indirect illumination
-const BUF_MOM0        = 14; // Moments buffer (dir/indir)
-const BUF_MOM1        = 15; // Moments buffer (dir/indir)
-const BUF_HIS0        = 16; // History buffer (moments)
-const BUF_HIS1        = 17; // History buffer (moments)
-const BUF_ACC0        = 18; // Temporal accumulation buffer col + variance (dir/indir)
-const BUF_ACC1        = 19; // Temporal accumulation buffer col + variance (dir/indir)
-const BUF_ACC2        = 20; // Temporal accumulation buffer col + variance (dir/indir)
-const BUF_CFG         = 21; // Accessed from WASM
-const BUF_LCAM        = 22;
-const BUF_GRID        = 23;
+const BUF_CAM = 0; // Accessed from WASM
+const BUF_MTL = 1; // Accessed from WASM
+const BUF_INST = 2; // Accessed from WASM
+const BUF_TRI = 3; // Accessed from WASM
+const BUF_TNRM = 4; // Accessed from WASM
+const BUF_LTRI = 5; // Accessed from WASM
+const BUF_NODE = 6; // Accessed from WASM
+const BUF_PATH0 = 7;
+const BUF_PATH1 = 8;
+const BUF_SRAY = 9;
+const BUF_HIT = 10;
+const BUF_ATTR = 11; // Attribute buf (pos and nrm)
+const BUF_LATTR = 12; // Last attribute buf (pos and nrm)
+const BUF_COL = 13; // Separated direct and indirect illumination
+const BUF_MOM0 = 14; // Moments buffer (dir/indir)
+const BUF_MOM1 = 15; // Moments buffer (dir/indir)
+const BUF_HIS0 = 16; // History buffer (moments)
+const BUF_HIS1 = 17; // History buffer (moments)
+const BUF_ACC0 = 18; // Temporal accumulation buffer col + variance (dir/indir)
+const BUF_ACC1 = 19; // Temporal accumulation buffer col + variance (dir/indir)
+const BUF_ACC2 = 20; // Temporal accumulation buffer col + variance (dir/indir)
+const BUF_CFG = 21; // Accessed from WASM
+const BUF_LCAM = 22;
+const BUF_GRID = 23;
 
-const PL_GENERATE     =  0;
-const PL_INTERSECT    =  1;
-const PL_SHADE        =  2;
-const PL_SHADOW       =  3;
-const PL_CONTROL0     =  4;
-const PL_CONTROL1     =  5;
-const PL_CONTROL2     =  6;
-const PL_CONTROL3     =  7;
-const PL_DENOISE0     =  8;
-const PL_DENOISE1     =  9;
-const PL_DENOISE2     = 10;
-const PL_BLIT0        = 12;
-const PL_BLIT1        = 13;
+const PL_GENERATE = 0;
+const PL_INTERSECT = 1;
+const PL_SHADE = 2;
+const PL_SHADOW = 3;
+const PL_CONTROL0 = 4;
+const PL_CONTROL1 = 5;
+const PL_CONTROL2 = 6;
+const PL_CONTROL3 = 7;
+const PL_DENOISE0 = 8;
+const PL_DENOISE1 = 9;
+const PL_DENOISE2 = 10;
+const PL_BLIT0 = 12;
+const PL_BLIT1 = 13;
 
-const BG_GENERATE     =  0;
-const BG_INTERSECT0   =  1;
-const BG_INTERSECT1   =  2;
-const BG_SHADE0       =  3;
-const BG_SHADE1       =  4;
-const BG_SHADOW       =  5;
-const BG_CONTROL      =  6;
-const BG_DENOISE0     =  7;
-const BG_DENOISE1     =  8;
-const BG_DENOISE2     =  9;
-const BG_DENOISE3     = 10;
-const BG_DENOISE4     = 11;
-const BG_DENOISE5     = 12;
-const BG_BLIT0        = 13;
-const BG_BLIT1        = 14;
-const BG_BLIT2        = 15;
+const BG_GENERATE = 0;
+const BG_INTERSECT0 = 1;
+const BG_INTERSECT1 = 2;
+const BG_SHADE0 = 3;
+const BG_SHADE1 = 4;
+const BG_SHADOW = 5;
+const BG_CONTROL = 6;
+const BG_DENOISE0 = 7;
+const BG_DENOISE1 = 8;
+const BG_DENOISE2 = 9;
+const BG_DENOISE3 = 10;
+const BG_DENOISE4 = 11;
+const BG_DENOISE5 = 12;
+const BG_BLIT0 = 13;
+const BG_BLIT1 = 14;
+const BG_BLIT2 = 15;
 
-const WG_SIZE_X       = 16;
-const WG_SIZE_Y       = 16;
+const WG_SIZE_X = 16;
+const WG_SIZE_Y = 16;
 
 let canvas, context, device;
 let wa, res = {};
@@ -152,15 +152,13 @@ let converge = false;
 let filter = true;
 let reproj = filter | false;
 
-function handleMouseMoveEvent(e)
-{
+function handleMouseMoveEvent(e) {
   wa.mouse_move(e.movementX, e.movementY, CAM_LOOK_VELOCITY);
 }
 
-function installEventHandler()
-{
+function installEventHandler() {
   canvas.addEventListener("click", async () => {
-    if(!document.pointerLockElement)
+    if (!document.pointerLockElement)
       //await canvas.requestPointerLock({ unadjustedMovement: true });
       await canvas.requestPointerLock();
   });
@@ -170,19 +168,18 @@ function installEventHandler()
     e => wa.key_down((e.keyCode >= 65 && e.keyCode <= 90) ? e.keyCode + 32 : e.keyCode, CAM_MOVE_VELOCITY));
 
   document.addEventListener("pointerlockchange", () => {
-    if(document.pointerLockElement === canvas)
+    if (document.pointerLockElement === canvas)
       canvas.addEventListener("mousemove", handleMouseMoveEvent);
     else
       canvas.removeEventListener("mousemove", handleMouseMoveEvent);
   });
 }
 
-function Wasm(module)
-{
+function Wasm(module) {
   this.environment = {
     console: (level, addr, len) => {
       let s = "";
-      for(let i=0; i<len; i++)
+      for (let i = 0; i < len; i++)
         s += String.fromCharCode(this.memUint8[addr + i]);
       console.log(s);
     },
@@ -197,11 +194,11 @@ function Wasm(module)
     fracf: (v) => v % 1,
     atof: (addr) => {
       let s = "", c, i = 0;
-      while((c = String.fromCharCode(this.memUint8[addr + i])) != "\0") {
+      while ((c = String.fromCharCode(this.memUint8[addr + i])) != "\0") {
         s += c;
         i++;
       }
-      return parseFloat(s); 
+      return parseFloat(s);
     },
     // Cam, mtl, inst, tri, nrm, ltri, bvh node
     gpu_create_res: (c, m, i, t, n, l, b) => createGpuResources(c, m, i, t, n, l, b),
@@ -209,8 +206,8 @@ function Wasm(module)
     reset_samples: () => { samples = 0; },
     set_ltri_cnt: (n) => { ltriCount = n; },
     toggle_converge: () => { converge = !converge; },
-    toggle_filter: () => { filter = !filter; if(filter) reproj = true; samples = 0; res.accumIdx = 0; },
-    toggle_reprojection: () => { reproj = !reproj; if(!reproj) filter = false; samples = 0; res.accumIdx = 0; },
+    toggle_filter: () => { filter = !filter; if (filter) reproj = true; samples = 0; res.accumIdx = 0; },
+    toggle_reprojection: () => { reproj = !reproj; if (!reproj) filter = false; samples = 0; res.accumIdx = 0; },
     save_binary: (ptr, size) => {
       const blob = new Blob([wa.memUint8.slice(ptr, ptr + size)], { type: "" });
       const anchor = document.createElement('a');
@@ -223,8 +220,7 @@ function Wasm(module)
     }
   };
 
-  this.instantiate = async function()
-  {
+  this.instantiate = async function () {
     const res = await WebAssembly.instantiate(module, { env: this.environment });
     Object.assign(this, res.instance.exports);
     this.memUint8 = new Uint8Array(this.memory.buffer);
@@ -241,7 +237,8 @@ function Audio(module) {
   this.module = module;
   this.initEvent = deferred();
   this.startTime = 0;
- 
+  this.playTime = 0;
+
   this.initialize = async function (sequence) {
     console.log("Audio: Initialize...");
 
@@ -252,15 +249,17 @@ function Audio(module) {
     // TODO add embedded handling
     // Load audio worklet script from file
     await this.audioContext.audioWorklet.addModule('audio.js');
-  
+
     // defaults are in:1, out:1, channels:2
     this.audioWorklet = new AudioWorkletNode(this.audioContext, 'a', { outputChannelCount: [2] });
     this.audioWorklet.connect(this.audioContext.destination);
 
     // event handling
     this.audioWorklet.port.onmessage = async (event) => {
-      if ('r' in event.data) {
+      if ('s' in event.data) {
         // synth is ready
+        console.info(`Audio: Received start time ${event.data.s.toFixed(3)}`);
+        this.playTime = event.data.s;
         this.initEvent.signal();
       }
     };
@@ -273,7 +272,7 @@ function Audio(module) {
   }
 
   this.currentTime = function () {
-    return (performance.now() - this.startTime) / 1000;
+    return ((performance.now() - this.startTime) / 1000) + this.playTime;
   }
 
   this.play = async function () {
@@ -429,7 +428,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
 
   // Generate
   let bindGroupLayout = device.createBindGroupLayout({
-    entries: [ 
+    entries: [
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
@@ -449,7 +448,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
 
   // Intersect
   bindGroupLayout = device.createBindGroupLayout({
-    entries: [ 
+    entries: [
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
@@ -487,7 +486,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
 
   // Shade
   bindGroupLayout = device.createBindGroupLayout({
-    entries: [ 
+    entries: [
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
@@ -540,7 +539,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
 
   // Shadow
   bindGroupLayout = device.createBindGroupLayout({
-    entries: [ 
+    entries: [
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
@@ -748,35 +747,35 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
   // Render pass descriptor
 
   res.renderPassDescriptor =
-    { colorAttachments: [
-      { undefined, // view
+  {
+    colorAttachments: [
+      {
+        undefined, // view
         clearValue: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
         loadOp: "clear",
         storeOp: "store"
-      } ]
-    };
+      }]
+  };
 }
 
-function createPipeline(pipelineType, shaderCode, entryPoint0, entryPoint1)
-{
+function createPipeline(pipelineType, shaderCode, entryPoint0, entryPoint1) {
   let shaderModule = device.createShaderModule({ code: shaderCode });
 
-  if(entryPoint1 === undefined)
+  if (entryPoint1 === undefined)
     res.pipelines[pipelineType] = device.createComputePipeline({
-        layout: res.pipelineLayouts[pipelineType],
-        compute: { module: shaderModule, entryPoint: entryPoint0 }
-      });
+      layout: res.pipelineLayouts[pipelineType],
+      compute: { module: shaderModule, entryPoint: entryPoint0 }
+    });
   else
     res.pipelines[pipelineType] = device.createRenderPipeline({
-        layout: res.pipelineLayouts[pipelineType],
-        vertex: { module: shaderModule, entryPoint: entryPoint0 },
-        fragment: { module: shaderModule, entryPoint: entryPoint1, targets: [{ format: "bgra8unorm" }] },
-        primitive: { topology: "triangle-strip" }
-      });
+      layout: res.pipelineLayouts[pipelineType],
+      vertex: { module: shaderModule, entryPoint: entryPoint0 },
+      fragment: { module: shaderModule, entryPoint: entryPoint1, targets: [{ format: "bgra8unorm" }] },
+      primitive: { topology: "triangle-strip" }
+    });
 }
 
-function accumulateSample(commandEncoder)
-{
+function accumulateSample(commandEncoder) {
   // Copy path state and shadow ray buffer grid dimensions for indirect dispatch
   commandEncoder.copyBufferToBuffer(res.buf[BUF_CFG], 4 * 4, res.buf[BUF_GRID], 0, 8 * 4);
 
@@ -788,7 +787,7 @@ function accumulateSample(commandEncoder)
   passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
   let bindGroupPathState = 0;
-  for(let j=0; j<MAX_BOUNCES; j++) {
+  for (let j = 0; j < MAX_BOUNCES; j++) {
 
     // Intersect
     passEncoder.setBindGroup(0, res.bindGroups[BG_INTERSECT0 + bindGroupPathState]);
@@ -829,8 +828,7 @@ function accumulateSample(commandEncoder)
   passEncoder.end();
 }
 
-function reprojectAndFilter(commandEncoder)
-{
+function reprojectAndFilter(commandEncoder) {
   let passEncoder = commandEncoder.beginComputePass();
 
   // Reprojection and temporal accumulation
@@ -838,7 +836,7 @@ function reprojectAndFilter(commandEncoder)
   passEncoder.setPipeline(res.pipelines[PL_DENOISE0]);
   passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
 
-  if(filter) {
+  if (filter) {
 
     // Estimate variance
     passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE1 - res.accumIdx]);
@@ -901,13 +899,12 @@ function reprojectAndFilter(commandEncoder)
   commandEncoder.copyBufferToBuffer(res.buf[BUF_ATTR], 0, res.buf[BUF_LATTR], 0, WIDTH * HEIGHT * 4 * 4 * 2);
 }
 
-function blit(commandEncoder)
-{
+function blit(commandEncoder) {
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
-  
+
   passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
 
-  if(reproj) {
+  if (reproj) {
     //passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT0 + res.accumIdx : BG_BLIT1 - res.accumIdx]); // 3 or 5 filter iterations
     passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT2 : BG_BLIT1 - res.accumIdx]); // 2 or 4 filter iterations
     passEncoder.setPipeline(res.pipelines[PL_BLIT0]);
@@ -916,12 +913,11 @@ function blit(commandEncoder)
     passEncoder.setPipeline(res.pipelines[PL_BLIT1]);
   }
   passEncoder.draw(4);
-  
+
   passEncoder.end();
 }
 
-async function render(time)
-{
+async function render(time) {
   // FPS
   let frameTime = performance.now() - last;
   document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)}`;
@@ -935,23 +931,23 @@ async function render(time)
       // Path state grid dimensions + w = path cnt
       Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1, WIDTH * HEIGHT,
       // Shadow ray buffer grid dimensions + w = shadow ray cnt
-      0, 0, 0, 0 ]));
-      // Background color + w = ext ray cnt (is not written here, but belongs to the same buffer)
+      0, 0, 0, 0]));
+  // Background color + w = ext ray cnt (is not written here, but belongs to the same buffer)
 
   let commandEncoder = device.createCommandEncoder();
 
   // Reset accumulated direct and indirect illumination
-  if(samples == 0)
+  if (samples == 0)
     commandEncoder.clearBuffer(res.buf[BUF_COL]);
 
   // Pathtrace
-  for(let i=0; i<SPP; i++) {
+  for (let i = 0; i < SPP; i++) {
     accumulateSample(commandEncoder);
     samples++;
   }
 
   // SVGF
-  if(reproj || filter)
+  if (reproj || filter)
     reprojectAndFilter(commandEncoder);
 
   // Blit to canvas
@@ -969,9 +965,8 @@ async function render(time)
   requestAnimationFrame(render);
 }
 
-async function start()
-{
-  if(FULLSCREEN)
+async function start() {
+  if (FULLSCREEN)
     canvas.requestFullscreen();
   else {
     canvas.style.width = WIDTH;
@@ -982,7 +977,7 @@ async function start()
   }
 
   // Initialize audio
-  if(ENABLE_AUDIO) {
+  if (ENABLE_AUDIO) {
     audio = new Audio(wasmModule);
     await audio.initialize(START_AT_SEQUENCE);
   }
@@ -990,17 +985,16 @@ async function start()
   // Prepare for rendering
   wa.update(0, false);
 
-  if(ENABLE_AUDIO)
+  if (ENABLE_AUDIO)
     await audio.play();
 
-  if(ENABLE_RENDER) {
+  if (ENABLE_RENDER) {
     installEventHandler();
     requestAnimationFrame(render);
   }
 }
 
-async function loadSceneGltf(gltfPath, prepareForExport)
-{
+async function loadSceneGltf(gltfPath, prepareForExport) {
   // Create buffers with scene gltf text and binary data
   let gltf = await (await fetch(gltfPath)).arrayBuffer();
   let gltfPtr = wa.malloc(gltf.byteLength);
@@ -1014,18 +1008,16 @@ async function loadSceneGltf(gltfPath, prepareForExport)
   return wa.load_scene_gltf(gltfPtr, gltf.byteLength, gltfBinPtr, gltfBin.byteLength, prepareForExport) == 0;
 }
 
-async function loadSceneBin(binPath)
-{
+async function loadSceneBin(binPath) {
   let bin = await (await fetch(binPath)).arrayBuffer();
   let binPtr = wa.malloc(bin.byteLength);
   wa.memUint8.set(new Uint8Array(bin), binPtr);
   return wa.load_scenes_bin(binPtr) == 0;
 }
 
-async function main()
-{
+async function main() {
   // WebGPU
-  if(!navigator.gpu) {
+  if (!navigator.gpu) {
     alert("WebGPU is not supported on this browser.");
     return;
   }
@@ -1033,14 +1025,17 @@ async function main()
   //const adapter = await navigator.gpu.requestAdapter();
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: "low-power" });
   //const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
-  if(!adapter) {
+  if (!adapter) {
     alert("Can not use WebGPU. No GPU adapter available.");
     return;
   }
 
-  device = await adapter.requestDevice({ requiredLimits: {
-    maxStorageBuffersPerShaderStage: 10, maxStorageBufferBindingSize: 1073741824 } });
-  if(!device) {
+  device = await adapter.requestDevice({
+    requiredLimits: {
+      maxStorageBuffersPerShaderStage: 10, maxStorageBufferBindingSize: 1073741824
+    }
+  });
+  if (!device) {
     alert("Failed to request logical device.");
     return;
   }
@@ -1052,7 +1047,7 @@ async function main()
   canvas.height = HEIGHT;
 
   let presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-  if(presentationFormat !== "bgra8unorm") {
+  if (presentationFormat !== "bgra8unorm") {
     alert(`Expected canvas pixel format of bgra8unorm but was '${presentationFormat}'.`);
     return;
   }
@@ -1061,7 +1056,7 @@ async function main()
   context.configure({ device, format: presentationFormat, alphaMode: "opaque" });
 
   // Load actual code
-  if(WASM.includes("END_")) {
+  if (WASM.includes("END_")) {
     // Load wasm from file
     wasmModule = await (await fetch("intro.wasm")).arrayBuffer();
   } else {
@@ -1074,18 +1069,18 @@ async function main()
   await wa.instantiate();
 
   // Load scenes
-  if(!DO_NOT_LOAD_FROM_JS) {
+  if (!DO_NOT_LOAD_FROM_JS) {
     let t0 = performance.now();
-    if(LOAD_FROM_GLTF) {
-      for(let i=0; i<SCENES_TO_LOAD.length; i++) {
+    if (LOAD_FROM_GLTF) {
+      for (let i = 0; i < SCENES_TO_LOAD.length; i++) {
         console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
-        if(!await loadSceneGltf(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
+        if (!await loadSceneGltf(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
           alert("Failed to load scene");
           return;
         }
       }
     } else {
-      if(!await loadSceneBin(PATH_TO_SCENES + EXPORT_FILENAME)) {
+      if (!await loadSceneBin(PATH_TO_SCENES + EXPORT_FILENAME)) {
         alert("Failed to load scenes");
         return;
       }
@@ -1093,8 +1088,8 @@ async function main()
     console.log("Loaded and generated scenes in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
     // Save exported scene to file via download
-    if(EXPORT_BIN_TO_DISK) {
-      if(wa.export_scenes() > 0) {
+    if (EXPORT_BIN_TO_DISK) {
+      if (wa.export_scenes() > 0) {
         alert("Failed to make a binary export of the available scenes");
         return;
       }
@@ -1107,15 +1102,15 @@ async function main()
   console.log("Initialized data and GPU in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
   // Provide event track to wasm
-  if(PLAY_SYNC_TRACK) {
-    for(let i=0; i<TRACK.length / 4; i++) {
+  if (PLAY_SYNC_TRACK) {
+    for (let i = 0; i < TRACK.length / 4; i++) {
       let e = i << 2;
       wa.add_event(TRACK[e + 0], TRACK[e + 1], TRACK[e + 2], TRACK[e + 3]);
     }
   }
 
   // Shader modules and pipelines
-  if(SM_BLIT.includes("END_blit_wgsl")) {
+  if (SM_BLIT.includes("END_blit_wgsl")) {
     createPipeline(PL_GENERATE, await (await fetch("generate.wgsl")).text(), "m");
     createPipeline(PL_INTERSECT, await (await fetch("intersect.wgsl")).text(), "m");
     createPipeline(PL_SHADE, await (await fetch("shade.wgsl")).text(), "m");
