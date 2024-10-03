@@ -7,6 +7,7 @@
 #include "imex/export.h"
 #include "imex/import.h"
 #include "rend/bvh.h"
+#include "rend/postparams.h"
 #include "rend/renderer.h"
 #include "scene/cam.h"
 #include "scene/inst.h"
@@ -28,12 +29,14 @@
 // Import from JS
 extern void set_ltri_cnt(uint32_t n);
 
-scene     *scenes = NULL;
-uint8_t   scene_cnt = 0;
-uint8_t   active_scene_id = 0;
-scene     *active_scene = NULL;
-uint16_t  active_cam_id = 0;
-track     intro;
+scene         *scenes = NULL;
+uint8_t       scene_cnt = 0;
+uint8_t       active_scene_id = 0;
+scene         *active_scene = NULL;
+uint16_t      active_cam_id = 0;
+post_params   post;
+bool          active_post = false;
+track         intro;
 
 #ifndef NO_CONTROL
 extern void toggle_edit();
@@ -293,13 +296,22 @@ void process_events(const track *track, float time)
     cam->vert_fov = fov;
     scene_set_dirty(active_scene, RT_CAM);
   }
+
+  if(sync_is_active(track, FADE_COL_R, time)) {
+    post.fade_col.x = sync_get_value(track, FADE_COL_R, time);
+    post.fade_col.y = sync_get_value(track, FADE_COL_G, time);
+    post.fade_col.z = sync_get_value(track, FADE_COL_B, time);
+    post.fade_val = sync_get_value(track, FADE_VAL, time);
+    active_post = true;
+  } else
+    active_post = false;
 }
 
 __attribute__((visibility("default")))
 void init_gpu_data()
 {
   for(uint8_t i=0; i<scene_cnt; i++) {
-    renderer_update(&scenes[i], false);
+    renderer_update(&scenes[i], NULL, false);
     scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
   }
 }
@@ -311,7 +323,7 @@ bool update(float time, bool converge, bool run_track)
   if(run_track && !finished)
     process_events(&intro, time);
 
-  renderer_update(active_scene, converge);
+  renderer_update(active_scene, active_post ? &post : NULL, converge);
   set_ltri_cnt(active_scene->ltri_cnt);
 
   return finished;

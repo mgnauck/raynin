@@ -7,6 +7,12 @@ const TRACK = [
 
    0,    0,        0,  0, // SCN_ID
 
+   0,   20,      0.0,  0, // FADE_COL_R
+   0,   21,      0.0,  0, // FADE_COL_G
+   0,   22,      0.0,  0, // FADE_COL_B
+   0,   23,      1.0,  3, // FADE_VAL
+  15,   23,      0.0,  0, // FADE_VAL
+
    0,    5, -123.132,  3, // CAM_POS_X
    0,    6,   58.441,  3, // CAM_POS_Y
    0,    7,  -77.679,  3, // CAM_POS_Z
@@ -61,6 +67,9 @@ const TRACK = [
   80,    8,   -0.737,  0, // CAM_DIR_X
   80,    9,   -0.044,  0, // CAM_DIR_Y
   80,   10,    0.674,  0, // CAM_DIR_Z
+
+  60,   23,      0.0,  2, // FADE_VAL
+  80,   23,      1.0,  0, // FADE_VAL
 
 ];
 
@@ -165,8 +174,9 @@ const BUF_ACC0 = 18; // Temporal accumulation buffer col + variance (dir/indir)
 const BUF_ACC1 = 19; // Temporal accumulation buffer col + variance (dir/indir)
 const BUF_ACC2 = 20; // Temporal accumulation buffer col + variance (dir/indir)
 const BUF_CFG = 21; // Accessed from WASM
-const BUF_LCAM = 22;
-const BUF_GRID = 23;
+const BUF_POST = 22
+const BUF_LCAM = 23;
+const BUF_GRID = 24;
 
 const PL_GENERATE = 0;
 const PL_INTERSECT = 1;
@@ -519,6 +529,11 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
   });
 
+  res.buf[BUF_POST] = device.createBuffer({
+    size: 4 * 4,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+
   res.buf[BUF_LCAM] = device.createBuffer({
     size: camSz,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -813,36 +828,40 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
   // Blit
   bindGroupLayout = device.createBindGroupLayout({
     entries: [
-      { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
     ]
   });
 
   res.bindGroups[BG_BLIT0] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_POST] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ACC0] } },
     ]
   });
 
   res.bindGroups[BG_BLIT1] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ACC1] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_POST] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ACC1] } },
     ]
   });
 
   res.bindGroups[BG_BLIT2] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ACC2] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_POST] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 2, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 3, resource: { buffer: res.buf[BUF_ACC2] } },
     ]
   });
 

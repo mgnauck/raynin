@@ -14,10 +14,10 @@
   fadeVal: f32
 }*/
 
-//@group(0) @binding(0) var<uniform> postParams: vec4f;
-@group(0) @binding(0) var<storage, read> config: array<vec4u, 4>;
-@group(0) @binding(1) var<storage, read> colBuf: array<vec4f>;
-@group(0) @binding(2) var<storage, read> accumColBuf: array<vec4f>;
+@group(0) @binding(0) var<uniform> postParams: vec4f;
+@group(0) @binding(1) var<storage, read> config: array<vec4u, 4>;
+@group(0) @binding(2) var<storage, read> colBuf: array<vec4f>;
+@group(0) @binding(3) var<storage, read> accumColBuf: array<vec4f>;
 
 @vertex
 fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
@@ -79,7 +79,7 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
   fcol = pow(fcol, vec3f(0.4545));
   
   // Fade
-  //fcol = mix(vec3f(postParams.xyz), fcol, postParams.w);
+  fcol = mix(fcol, vec3f(postParams.xyz), postParams.w);
 
   return vec4f(fcol, 1.0);
 }
@@ -101,7 +101,7 @@ fn m1(@builtin(position) pos: vec4f) -> @location(0) vec4f
   fcol = pow(fcol, vec3f(0.4545));
   
   // Fade
-  //fcol = mix(vec3f(postParams.xyz), fcol, postParams.w);
+  fcol = mix(fcol, vec3f(postParams.xyz), postParams.w);
   
   return vec4f(pow(fcol, vec3f(0.4545)), 1.0);
 }

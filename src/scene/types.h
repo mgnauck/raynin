@@ -8,7 +8,7 @@ typedef enum res_type {
   RT_TRI      = 8,
   RT_LTRI     = 16,
   RT_INST     = 32,
-  RT_BLAS     = 64
+  RT_BLAS     = 64,
 } res_type;
 
 #endif
