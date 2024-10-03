@@ -74,10 +74,16 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
   let dcol = accumColBuf[        gidx].xyz;
   let icol = accumColBuf[w * h + gidx].xyz;
   var fcol = dcol + icol;
-  
+ 
+  // Famous vignette
+  var q = vec2f(pos.x / f32(w), pos.y / f32(h));
+  q *= vec2f(1.0) - q.yx;
+  fcol *= pow(q.x * q.y * 10.0, 0.25);
+
+  // Tone map/gamma
   fcol = filmicToneACES(fcol);
   fcol = pow(fcol, vec3f(0.4545));
-  
+ 
   // Fade
   fcol = mix(fcol, vec3f(postParams.xyz), postParams.w);
 
@@ -97,9 +103,15 @@ fn m1(@builtin(position) pos: vec4f) -> @location(0) vec4f
   let icol = colBuf[w * h + gidx].xyz;
   var fcol = (dcol + icol) / f32(frame.w);
 
+  // Famous vignette
+  var q = vec2f(pos.x / f32(w), pos.y / f32(h));
+  q *= vec2f(1.0) - q.yx;
+  fcol *= pow(q.x * q.y * 10.0, 0.25);
+
+  // Tone map/gamma
   fcol = filmicToneACES(fcol);
   fcol = pow(fcol, vec3f(0.4545));
-  
+ 
   // Fade
   fcol = mix(fcol, vec3f(postParams.xyz), postParams.w);
   
