@@ -352,6 +352,14 @@ function Audio(module) {
     return ((performance.now() - this.startTime) / 1000) + this.playTime;
   }
 
+  this.reset = function(sequence) {
+    console.log(`Audio: Reset to sequence ${sequence}`);
+    this.audioWorklet.port.postMessage({ r: sequence });
+
+    // Reset timer (TODO timer drift compensation)
+    this.startTime = performance.now();
+  }
+
   this.play = async function () {
     console.log(`Audio: Play.`);
 
@@ -1042,8 +1050,8 @@ async function render(time) {
   let finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge, editMode);
   frames++;
   
-  if(finished > 0 && LOOP_SYNC_TRACK && !ENABLE_AUDIO) { // TODO Remove ENABLE_AUDIO once looping is supported
-    //audio.reset(START_AT_SEQUENCE);
+  if(finished > 0 && LOOP_SYNC_TRACK) {
+    audio.reset(START_AT_SEQUENCE);
     frames = 0;
     startTime = undefined;
   }

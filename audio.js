@@ -6,8 +6,9 @@ class AudioProcessor extends AudioWorkletProcessor {
     #bufferRightPtr;
     #bufferLeft;
     #bufferRight;
-    #renderOffset;
-    #nextTick;
+    //#renderOffset;
+    //#nextTick;
+    #startSequence;
 
     constructor() {
         super();
@@ -64,10 +65,14 @@ class AudioProcessor extends AudioWorkletProcessor {
                 }
 
                 // init the project
-                this.#engine.exports.projectInit(sampleRate, event.data.s, tunePtr);
+                this.#startSequence = event.data.s;
+                this.#engine.exports.projectInit(sampleRate, this.#startSequence, tunePtr);
             }
-            else if (event.data.p) {
+            else if ('p' in event.data) {
                 this.#play = true;
+            }
+            else if ('r' in event.data) {
+                this.#engine.exports.projectReset(this.#startSequence);
             }
         };
     }
@@ -91,8 +96,8 @@ class AudioProcessor extends AudioWorkletProcessor {
         this.#bufferLeft = new Float32Array(memory.buffer, this.#bufferLeftPtr, renderQuantum);
         this.#bufferRight = new Float32Array(memory.buffer, this.#bufferRightPtr, renderQuantum);
 
-        this.#renderOffset = 0;
-        this.#nextTick = 0;
+        //this.#renderOffset = 0;
+        //this.#nextTick = 0;
 
         // send ready message including start time
         this.port.postMessage({ s: this.#engine.exports.audioGetStartTime() });
