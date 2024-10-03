@@ -23,7 +23,6 @@ WOPTFLAGS=-Oz --enable-bulk-memory --enable-simd
 
 $(OUT_DIR)/$(OUT): $(OUT_DIR)/$(LOADER_JS).4.js Makefile
 	js-payload-compress --zopfli-iterations=100 $< $@ 
-	#rm $(OUT_DIR)/$(LOADER_JS).1.js
 
 $(OUT_DIR)/$(LOADER_JS).4.js: $(OUT_DIR)/$(LOADER_JS).3.js
 	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=true --toplevel > $@
