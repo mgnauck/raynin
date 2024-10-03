@@ -15,6 +15,7 @@ typedef float mat4[16];
 
 void mat4_identity(mat4 m);
 void mat4_transpose(mat4 d, const mat4 m);
+void mat4_copy(mat4 dest, const mat4 src);
 
 void mat4_trans(mat4 dest, const vec3 v);
 
