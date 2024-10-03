@@ -216,7 +216,12 @@ void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx,
   if(mesh_id >= 0) {
     // Mesh instance (mesh was either loaded or generated)
     uint32_t flags = gn->invisible > 0 ? IF_INVISIBLE : 0;
-    scene_add_inst(s, mesh_id, NO_MTL_OVERRIDE, flags, final);
+    uint16_t inst_id = scene_add_inst(s, mesh_id, NO_MTL_OVERRIDE, flags, final);
+
+#if false
+    logc("[!!11] Inst id %d, Name: %s", inst_id, gn->name);
+#endif 
+
     logc("Created mesh instance of gltf mesh %i (%s) (render mesh %i) for node %i (%s).",
         gn->mesh_idx, gm->name, mesh_id, node_idx, gn->name);
   } else {
@@ -802,7 +807,7 @@ void create_bin_generated_mesh(mesh *m, obj_type type, uint16_t mtl_id, uint8_t 
 
 uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
 {
-  logc("Trying to load %i bytes of scene(s) data", bin_sz);
+  logc("Trying to load scene(s) data");
 
   // Read offset to scene data
   uint32_t ofs;

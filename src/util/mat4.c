@@ -20,6 +20,11 @@ void mat4_transpose(mat4 d, const mat4 m)
       d[4 * j + i] = m[4 * i + j];
 }
 
+void mat4_copy(mat4 dst, const mat4 src)
+{
+  memcpy(dst, src, 16 * sizeof(float));
+}
+
 void mat4_trans(mat4 d, const vec3 v)
 {
   d[ 0] = 1.0f; d[ 1] = 0.0f; d[ 2] = 0.0f; d[ 3] = v.x;
