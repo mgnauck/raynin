@@ -78,7 +78,7 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
   // Famous vignette
   var q = vec2f(pos.x / f32(w), pos.y / f32(h));
   q *= vec2f(1.0) - q.yx;
-  fcol *= pow(q.x * q.y * 10.0, 0.25);
+  fcol *= pow(q.x * q.y * 5.0, 0.1);
 
   // Tone map/gamma
   fcol = filmicToneACES(fcol);
@@ -106,7 +106,7 @@ fn m1(@builtin(position) pos: vec4f) -> @location(0) vec4f
   // Famous vignette
   var q = vec2f(pos.x / f32(w), pos.y / f32(h));
   q *= vec2f(1.0) - q.yx;
-  fcol *= pow(q.x * q.y * 10.0, 0.25);
+  fcol *= pow(q.x * q.y * 5.0, 0.1);
 
   // Tone map/gamma
   fcol = filmicToneACES(fcol);
