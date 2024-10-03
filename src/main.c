@@ -36,6 +36,7 @@ uint16_t  active_cam_id = 0;
 track     intro;
 
 #ifndef NO_CONTROL
+extern void toggle_edit();
 extern void toggle_converge();
 extern void toggle_filter();
 extern void toggle_reprojection();
@@ -112,18 +113,20 @@ void key_down(unsigned char key, float move_vel)
    case 'c':
       toggle_converge();
       break;
+   case 'p':
+      toggle_edit();
+      break;
    case ' ':
       logc("---> scene:");
       logc("   r, %4i, %8i, %2i, // SCN_ID", SCN_ID, active_scene_id, BT_STEP);
       logc("<----");
       logc("---> camera:");
-      logc("   r, %4i, %8.3f, %2i, // CAM_POS_X\n   r, %4i, %8.3f, %2i, // CAM_POS_Y\n   r, %4i, %8.3f, %2i, // CAM_POS_Z",
-          CAM_POS_X, cam->eye.x, BT_STEP, CAM_POS_Y, cam->eye.y, BT_STEP, CAM_POS_Z, cam->eye.z, BT_STEP);
-      logc("   r, %4i, %8.3f, %2i, // CAM_DIR_X\n   r, %4i, %8.3f, %2i, // CAM_DIR_Y\n   r, %4i, %8.3f, %2i, // CAM_DIR_Z",
-          CAM_DIR_X, cam->fwd.x, BT_STEP, CAM_DIR_Y, cam->fwd.y, BT_STEP, CAM_DIR_Z, cam->fwd.z, BT_STEP);
-      logc("   r, %4i, %8.3f, %2i, // CAM_FOV", CAM_FOV, cam->vert_fov, BT_STEP);
-      //logc("   r, %4i, %8.3f, %2i, // CAM_FOC_DIST", CAM_FOC_DIST, cam->foc_dist, BT_STEP);
-      //logc("   r, %4i, %8.3f, %2i, // CAM_FOC_ANGLE", CAM_FOC_ANGLE, cam->foc_angle, BT_STEP);
+      logc("   r, %4i, %8.3f, %2i, // CAM_POS_X\n   r, %4i, %8.3f, %2i, // CAM_POS_Y\n   r, %4i, %8.3f, %2i, // CAM_POS_Z\n"
+          "   r, %4i, %8.3f, %2i, // CAM_DIR_X\n   r, %4i, %8.3f, %2i, // CAM_DIR_Y\n   r, %4i, %8.3f, %2i, // CAM_DIR_Z\n"
+          "   r, %4i, %8.3f, %2i, // CAM_FOV",
+          CAM_POS_X, cam->eye.x, BT_STEP, CAM_POS_Y, cam->eye.y, BT_STEP, CAM_POS_Z, cam->eye.z, BT_STEP,
+          CAM_DIR_X, cam->fwd.x, BT_STEP, CAM_DIR_Y, cam->fwd.y, BT_STEP, CAM_DIR_Z, cam->fwd.z, BT_STEP,
+          CAM_FOV, cam->vert_fov, BT_STEP);
       logc("<----");
       break;
    case 'f':
@@ -293,10 +296,10 @@ void process_events(const track *track, float time)
 }
 
 __attribute__((visibility("default")))
-bool update(float time, bool converge)
+bool update(float time, bool converge, bool run_track)
 {
   bool finished = sync_is_finished(&intro, time);
-  if(!finished)
+  if(run_track && !finished)
     process_events(&intro, time);
 
   renderer_update(active_scene, converge);

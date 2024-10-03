@@ -211,6 +211,7 @@ let ltriCount = 0;
 let converge = true;
 let filter = true;
 let reproj = filter | false;
+let editMode = !PLAY_SYNC_TRACK;
 
 function handleMouseMoveEvent(e) {
   wa.mouse_move(e.movementX, e.movementY, CAM_LOOK_VELOCITY);
@@ -266,6 +267,7 @@ function Wasm(module) {
     reset_samples: () => { samples = 0; },
     set_ltri_cnt: (n) => { ltriCount = n; },
     toggle_converge: () => { converge = !converge; },
+    toggle_edit: () => { editMode = !editMode; },
     toggle_filter: () => { filter = !filter; if (filter) reproj = true; samples = 0; res.accumIdx = 0; },
     toggle_reprojection: () => { reproj = !reproj; if (!reproj) filter = false; samples = 0; res.accumIdx = 0; },
     save_binary: (ptr, size) => {
@@ -1037,7 +1039,7 @@ async function render(time) {
   res.accumIdx = 1 - res.accumIdx;
 
   // Update scene and renderer for next frame
-  let finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge);
+  let finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge, editMode);
   frames++;
   
   if(finished > 0 && LOOP_SYNC_TRACK && !ENABLE_AUDIO) { // TODO Remove ENABLE_AUDIO once looping is supported
@@ -1070,7 +1072,7 @@ async function start() {
   }
 
   // Prepare for rendering
-  wa.update(0, false);
+  wa.update(0, false, false);
 
   if (ENABLE_AUDIO)
     await audio.play();
@@ -1189,11 +1191,9 @@ async function main() {
   console.log("Initialized data and GPU in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
   // Provide event track to wasm
-  if (PLAY_SYNC_TRACK) {
-    for (let i = 0; i < TRACK.length / 4; i++) {
-      let e = i << 2;
-      wa.add_event(TRACK[e + 0], TRACK[e + 1], TRACK[e + 2], TRACK[e + 3]);
-    }
+  for (let i = 0; i < TRACK.length / 4; i++) {
+    let e = i << 2;
+    wa.add_event(TRACK[e + 0], TRACK[e + 1], TRACK[e + 2], TRACK[e + 3]);
   }
 
   // Shader modules and pipelines
