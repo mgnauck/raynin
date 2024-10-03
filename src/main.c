@@ -39,7 +39,7 @@ bool active_post = false;
 track intro;
 
 // animations
-#define ANIMATION_MAX_TRANSFORMS 50
+#define ANIMATION_MAX_TRANSFORMS 44
 float active_scene_time = 0.f;
 bool active_scene_changed = false;
 mat4 animation_transforms[ANIMATION_MAX_TRANSFORMS];
@@ -174,6 +174,10 @@ load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size
 
   // Scene to load
   scene *s = scenes + scene_cnt;
+
+#if false
+  logc("[!!11] Scene id: %d", scene_cnt);
+#endif 
 
   // Import scene from given GLTF for rendering
   if (import_gltf(s, gltf, gltf_sz, bin, bin_sz) == 0)
@@ -339,7 +343,14 @@ void handle_animations(float time)
   // marbles
 #define SCENE_MARBLES 4
 #define SCENE_MARBLES_SPHERE_OFFSET 41
-#define SCENE_MARBLES_SPHERE_COUNT 2
+#define SCENE_MARBLES_SPHERE_COUNT 3
+
+  uint8_t marble_sphere_offsets[44] =
+      {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+       18, 19, 20, 21, 22, 23, 24, 25, 26, 41, 42, 43, 44, 45, 46, 47,
+       48, 49, 50, 51, 52, 53, 54, 55, 56, 40};
+
+  uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
 
   if (active_scene_changed)
   {
@@ -351,35 +362,32 @@ void handle_animations(float time)
     // when activated grab a copy of all transformations required
     if (active_scene_changed)
     {
-      for (uint8_t i = 0; i < SCENE_MARBLES_SPHERE_COUNT; i++)
+      for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
       {
-        uint8_t offset = SCENE_MARBLES_SPHERE_OFFSET + i;
+        uint8_t offset = marble_sphere_offsets[i];
         inst_info *inst_info = &scene->inst_info[offset];
-        mat4_copy(animation_transforms[offset], inst_info->transform);
-        logc("offset: %d", offset);
-        mat4_logc(animation_transforms[offset]);
+        mat4_copy(animation_transforms[i], inst_info->transform);
+        mat4_logc(animation_transforms[i]);
       }
     }
 
     // TODO animate
     bool disabled = (((int)scene_time) % 2) > 0;
-    for (uint8_t i = 0; i < SCENE_MARBLES_SPHERE_COUNT; i++)
+    for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
     {
-      uint8_t offset = SCENE_MARBLES_SPHERE_OFFSET + i;
+      uint8_t offset = marble_sphere_offsets[i];
 
       mat4 transform;
-      mat4_copy(transform, animation_transforms[offset]);
+      mat4_copy(transform, animation_transforms[i]);
 
-      float scale = 1.f + sinf(75.f * time * PI / 180.f) * 0.5f;
+      float scale = 1.f + sinf(i + 75.f * time * PI / 180.f) * 0.5f;
       vec3 scale_vec = {scale, scale, scale};
       mat4 scale_mat;
       mat4_scale(scale_mat, scale_vec);
-
       mat4_mul(transform, transform, scale_mat);
 
       if (active_scene_changed)
       {
-        logc("offset: %d, scale: %f", offset, scale);
         mat4_logc(transform);
       }
 
@@ -387,11 +395,11 @@ void handle_animations(float time)
 
       if (disabled)
       {
-        scene_set_inst_state(scene, offset, IS_DISABLED);
+        // scene_set_inst_state(scene, offset, IS_DISABLED);
       }
       else
       {
-        scene_clr_inst_state(scene, offset, IS_DISABLED);
+        // scene_clr_inst_state(scene, offset, IS_DISABLED);
       }
     }
   }
@@ -414,11 +422,9 @@ __attribute__((visibility("default"))) bool update(float time, bool converge, bo
 {
   bool finished = sync_is_finished(&intro, time);
   if (run_track && !finished)
-  {
     process_events(&intro, time);
-    handle_animations(time);
-  }
 
+  handle_animations(time);
   renderer_update(active_scene, active_post ? &post : NULL, converge);
   set_ltri_cnt(active_scene->ltri_cnt);
 
