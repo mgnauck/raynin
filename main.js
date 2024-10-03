@@ -73,6 +73,7 @@ const ROWS_PER_BEAT = 4;
 
 // Rendering
 const ENABLE_RENDER = true;
+const ENABLE_PRERENDER = false;
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 9.0;
 const WIDTH = 1280;
@@ -213,6 +214,10 @@ let filter = true;
 let reproj = filter | false;
 let editMode = !PLAY_SYNC_TRACK;
 
+function sleep(delay) {
+  return new Promise((resolve) => { setTimeout(resolve, delay); } );
+}
+
 function handleMouseMoveEvent(e) {
   wa.mouse_move(e.movementX, e.movementY, CAM_LOOK_VELOCITY);
 }
@@ -220,8 +225,8 @@ function handleMouseMoveEvent(e) {
 function installEventHandler() {
   canvas.addEventListener("click", async () => {
     if (!document.pointerLockElement)
-      //await canvas.requestPointerLock({ unadjustedMovement: true });
-      await canvas.requestPointerLock();
+      await canvas.requestPointerLock({ unadjustedMovement: true });
+      //await canvas.requestPointerLock();
   });
 
   document.addEventListener("keydown",
@@ -1018,7 +1023,7 @@ function blit(commandEncoder) {
 }
 
 async function render(time) {
-  if(editMode || startTime === undefined)
+  if (editMode || startTime === undefined)
     startTime = time;
 
   // FPS
@@ -1053,26 +1058,29 @@ async function render(time) {
   if (reproj || filter)
     reprojectAndFilter(commandEncoder);
 
-  // Blit to canvas
-  blit(commandEncoder);
+  // Blit to canvasa
+  if (time != -303)
+    blit(commandEncoder);
 
   device.queue.submit([commandEncoder.finish()]);
 
-  // Toggle for next frame
-  res.accumIdx = 1 - res.accumIdx;
+  if (time != -303) {
+    // Toggle for next frame
+    res.accumIdx = 1 - res.accumIdx;
 
-  // Update scene and renderer for next frame
-  let finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge, !editMode);
-  frames++;
+    // Update scene and renderer for next frame
+    let finished = wa.update((ENABLE_AUDIO && time != -303) ? audio.currentTime() : (time - startTime) / 1000, converge, !editMode);
+    frames++;
   
-  if(finished > 0 && !editMode && LOOP_SYNC_TRACK) {
-    if(ENABLE_AUDIO)
-      audio.reset(START_AT_SEQUENCE);
-    frames = 0;
-    startTime = undefined;
-  }
+    if(finished > 0 && !editMode && LOOP_SYNC_TRACK) {
+      if(ENABLE_AUDIO)
+        audio.reset(START_AT_SEQUENCE);
+      frames = 0;
+      startTime = undefined;
+    }
 
-  requestAnimationFrame(render);
+    requestAnimationFrame(render);
+  }
 }
 
 async function start() {
@@ -1096,7 +1104,21 @@ async function start() {
   }
 
   // Prepare for rendering
-  wa.update(0, false, false);
+  wa.init_gpu_data();
+  wa.update(0, false, !editMode);
+
+  if (ENABLE_PRERENDER) {
+    // Prerender to warm shaders
+    for(let i=0; i<50; i++) {
+      render(-303);
+      startTime = undefined;
+      frames = 0;
+      samples = 0;
+      ltriCount = 0;
+      res.accumIdx = 0;
+      await sleep(50);
+    }
+  }
 
   if (ENABLE_AUDIO)
     await audio.play();

@@ -296,6 +296,15 @@ void process_events(const track *track, float time)
 }
 
 __attribute__((visibility("default")))
+void init_gpu_data()
+{
+  for(uint8_t i=0; i<scene_cnt; i++) {
+    renderer_update(&scenes[i], false);
+    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
+  }
+}
+
+__attribute__((visibility("default")))
 bool update(float time, bool converge, bool run_track)
 {
   bool finished = sync_is_finished(&intro, time);
