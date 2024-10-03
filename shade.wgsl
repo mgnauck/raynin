@@ -605,7 +605,8 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     if(writeAttr) {
     //if((pidx & 0xf) == 0) {
       // Hit background, path terminates, write attributes with values that do not hurt the filter
-      writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
+      //writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
+      writeAttributes(ori.xyz + 9999.0 * dir.xyz, -dir.xyz, (SHORT_MASK - 1) << 16, flags, pidx >> 8, ofs);
     }
     return;
   }
@@ -641,8 +642,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     }
     // Path terminates, write attributes if we did not do before
     if(writeAttr) {
-      writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
+      //writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
       //writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
+      //writeAttributes(vec3f(0.0), vec3f(0.0), (SHORT_MASK - 1) << 16, 0, pidx >> 8, ofs);
+      writeAttributes(pos, nrm, SHORT_MASK << 16, flags, pidx >> 8, ofs);
     }
     // Terminate ray after light hit (lights do not reflect)
     return;

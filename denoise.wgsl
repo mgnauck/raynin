@@ -210,7 +210,7 @@ fn checkReproj(pos4: vec4f, lpos4: vec4f, nrm4: vec4f, lnrm4: vec4f) -> bool
   return true;
 }
 
-fn getLastChecked(pix: vec2f, pos: vec4f, nrm: vec4f, res: vec2f, ldcol: ptr<function, vec4f>, licol: ptr<function, vec4f>, lmom: ptr<function, vec4f>) -> bool
+fn getLastChecked(pix: vec2f, pos: vec4f, nrm: vec4f, res: vec2f, ldcol: ptr<function, vec4f>, licol: ptr<function, vec4f>, lbcol: ptr<function, vec4f>, lmom: ptr<function, vec4f>) -> bool
 {
   if(all(pix >= vec2f(0.0)) && all(pix < res)) {
     let ofs = u32(res.x * res.y);
@@ -218,9 +218,10 @@ fn getLastChecked(pix: vec2f, pos: vec4f, nrm: vec4f, res: vec2f, ldcol: ptr<fun
     let lpos = lastAttrBuf[ofs + idx];
     let lnrm = lastAttrBuf[      idx];
     if(checkReproj(pos, lpos, nrm, lnrm)) {
-      *ldcol = accumColVarInBuf[      idx];
-      *licol = accumColVarInBuf[ofs + idx];
-      *lmom =     accumMomInBuf[      idx];
+      *ldcol = accumColVarInBuf[             idx];
+      *licol = accumColVarInBuf[       ofs + idx];
+      *lbcol = accumColVarInBuf[(ofs << 1) + idx]; // Bloom
+      *lmom =  accumMomInBuf[idx];
       return true;
     }
   }
@@ -300,11 +301,12 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let nrm4 = attrBuf[gidx];
 
   // Check if no hit
-  ignorePrev |= bitcast<u32>(nrm4.z) >> 16 == SHORT_MASK;
+  ignorePrev |= (bitcast<u32>(nrm4.z) >> 16) == SHORT_MASK;
 
   // Last direct/indirect illumination and moments
   var ldcol = vec4f(0.0);
   var licol = vec4f(0.0);
+  var lbcol = vec4f(0.0);
   var lmom  = vec4f(0.0);
 
   // Position in xyz and material flags in w
@@ -350,7 +352,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
 
   pix += vec2f(0.5, 0.5);
 
-  ignorePrev |= !ignorePrev && !getLastChecked(pix, pos4, nrm4, res, &ldcol, &licol, &lmom);
+  ignorePrev |= !ignorePrev && !getLastChecked(pix, pos4, nrm4, res, &ldcol, &licol, &lbcol, &lmom);
   //ignorePrev |= !ignorePrev && !getLastFilteredChecked(pix, pos4, nrm4, res, &ldcol, &licol, &lmom);
 
   // Read and increase age but keep upper bound
@@ -392,6 +394,13 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   // Temporal integration of direct and indirect illumination and store variance
   accumColVarOutBuf[      gidx] = vec4f(mix(ldcol.xyz, dcol, alpha.x), variance.x);
   accumColVarOutBuf[ofs + gidx] = vec4f(mix(licol.xyz, icol, alpha.y), variance.y);
+
+  //if(luminance(dcol + icol) > 0.5) {
+  if((bitcast<u32>(nrm4.z) >> 16) == SHORT_MASK) {
+    accumColVarOutBuf[(ofs << 1) + gidx] = vec4f(mix(lbcol.xyz, dcol + icol, ALPHA.x), 1.0);
+  } else {
+    accumColVarOutBuf[(ofs << 1) + gidx] = vec4f(0.0, 0.0, 0.0, 1.0);
+  }
 
   // Track age (already incremented)
   accumHisOutBuf[gidx] = age;
@@ -446,8 +455,9 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     let pos = attrBuf[ofs + gidx].xyz;
     let nrm = octToDir(nrm4.xy);
 
-    let colVarDir = accumColVarInBuf[      gidx];
-    let colVarInd = accumColVarInBuf[ofs + gidx];
+    let colVarDir = accumColVarInBuf[             gidx];
+    let colVarInd = accumColVarInBuf[       ofs + gidx];
+    let colBloom  = accumColVarInBuf[(ofs << 1) + gidx];
 
     // xy = moments direct illum, zw = moments indirect illum
     let mom = accumMomInBuf[gidx];
@@ -458,8 +468,9 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     // Apply center value directly
     var sumColVarDir  = colVarDir.xyz;
     var sumColVarInd  = colVarInd.xyz;
+    var sumColBloom   = colBloom.xyz;
     var sumMom        = mom; 
-    var sumWeight     = vec2f(1.0);
+    var sumWeight     = vec3f(1.0);
 
     for(var j=-1; j<=1; j++) {
       for(var i=-1; i<=1; i++) {
@@ -474,8 +485,9 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
         // xy = encoded nrm, z = mtl/inst id, w = last idx
         let qnrm4 = attrBuf[qidx];
 
-        let qcolVarDir = accumColVarInBuf[      qidx].xyz;
-        let qcolVarInd = accumColVarInBuf[ofs + qidx].xyz;
+        let qcolVarDir = accumColVarInBuf[             qidx].xyz;
+        let qcolVarInd = accumColVarInBuf[       ofs + qidx].xyz;
+        let qcolBloom  = accumColVarInBuf[(ofs << 1) + qidx].xyz;
 
         let qmom = accumMomInBuf[qidx];
 
@@ -485,15 +497,17 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
 
         sumColVarDir += qcolVarDir * weight.x;
         sumColVarInd += qcolVarInd * weight.y;
+        sumColBloom  += qcolBloom;
           
         sumMom += qmom * vec4f(weight.xx, weight.yy);
 
-        sumWeight += weight;
+        sumWeight += vec3f(weight, 1.0);
       }
     }
 
     sumColVarDir = select(colVarDir.xyz, sumColVarDir / sumWeight.x, sumWeight.x > EPS);
     sumColVarInd = select(colVarInd.xyz, sumColVarInd / sumWeight.y, sumWeight.y > EPS);
+    sumColBloom  = select(colBloom.xyz, sumColBloom / sumWeight.z, sumWeight.z > EPS);
     
     //sumWeight = max(sumWeight, vec2f(EPS));
     sumMom /= vec4f(sumWeight.xx, sumWeight.yy);
@@ -501,13 +515,15 @@ fn m1(@builtin(global_invocation_id) globalId: vec3u)
     // Calc boosted variance for first frames (until temporal kicks in)
     let variance = max(vec2f(0.0), vec2f(sumMom.yw - sumMom.xz * sumMom.xz)) * 4.0 / age;
 
-    accumColVarOutBuf[      gidx] = vec4f(sumColVarDir, variance.x);
-    accumColVarOutBuf[ofs + gidx] = vec4f(sumColVarInd, variance.y);
+    accumColVarOutBuf[             gidx] = vec4f(sumColVarDir, variance.x);
+    accumColVarOutBuf[       ofs + gidx] = vec4f(sumColVarInd, variance.y);
+    accumColVarOutBuf[(ofs << 1) + gidx] = vec4f(sumColBloom, 1.0);
 
   } else {
     // History is enough or no hit, pass through
-    accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
-    accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
+    accumColVarOutBuf[             gidx] = accumColVarInBuf[             gidx];
+    accumColVarOutBuf[       ofs + gidx] = accumColVarInBuf[       ofs + gidx];
+    accumColVarOutBuf[(ofs << 1) + gidx] = accumColVarInBuf[(ofs << 1) + gidx]; // Bloom
   }
 }
 
@@ -584,8 +600,9 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
 
   if(bitcast<u32>(nrm4.z) >> 16 == SHORT_MASK) {
     // No mtl, no hit
-    accumColVarOutBuf[      gidx] = accumColVarInBuf[      gidx];
-    accumColVarOutBuf[ofs + gidx] = accumColVarInBuf[ofs + gidx];
+    accumColVarOutBuf[             gidx] = accumColVarInBuf[             gidx];
+    accumColVarOutBuf[       ofs + gidx] = accumColVarInBuf[       ofs + gidx];
+    accumColVarOutBuf[(ofs << 1) + gidx] = accumColVarInBuf[(ofs << 1) + gidx]; // Bloom
     return;
   }
 
@@ -598,8 +615,9 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   let pos = attrBuf[ofs + gidx].xyz;
   let nrm = octToDir(nrm4.xy);
 
-  let colVarDir = accumColVarInBuf[      gidx];
-  let colVarInd = accumColVarInBuf[ofs + gidx];
+  let colVarDir = accumColVarInBuf[             gidx];
+  let colVarInd = accumColVarInBuf[       ofs + gidx];
+  let colBloom  = accumColVarInBuf[(ofs << 1) + gidx].xyz;
 
   let lumColDir = luminance(colVarDir.xyz);
   let lumColInd = luminance(colVarInd.xyz);
@@ -611,7 +629,8 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   // Apply center value directly
   var sumColVarDir = colVarDir;
   var sumColVarInd = colVarInd;
-  var sumWeight = vec2f(1.0);
+  var sumColBloom  = colBloom.xyz;
+  var sumWeight = vec3f(1.0);
 
   // 5x5 gaussian
   let kernelWeights = array<f32, 3>(1.0, 2.0 / 3.0, 1.0 / 6.0);
@@ -630,11 +649,13 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
       // xy = encoded nrm, z = mtl/inst id, w = last idx
       let qnrm4 = attrBuf[qidx];
 
-      let qcolVarDir = accumColVarInBuf[      qidx];
-      let qcolVarInd = accumColVarInBuf[ofs + qidx];
+      let qcolVarDir = accumColVarInBuf[             qidx];
+      let qcolVarInd = accumColVarInBuf[       ofs + qidx];
+      let qcolBloom  = accumColVarInBuf[(ofs << 1) + qidx].xyz;
 
       // Gaussian influenced by edge stopping weights
-      let weight = select(0.0, 1.0, qnrm4.z == nrm4.z) * kernelWeights[abs(i)] * kernelWeights[abs(j)] *
+      let kw = kernelWeights[abs(i)] * kernelWeights[abs(j)];
+      let weight = select(0.0, 1.0, qnrm4.z == nrm4.z) * kw *
         calcEdgeStoppingWeights(ofs, qidx, pos, nrm, octToDir(qnrm4.xy), lumColDir, lumColInd,
           luminance(qcolVarDir.xyz), luminance(qcolVarInd.xyz), lumVarDen.x, lumVarDen.y);
 
@@ -642,11 +663,13 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
       // as per section 4.3 of the paper (squared for variance)
       sumColVarDir += qcolVarDir * vec4f(weight.xxx, weight.x * weight.x);
       sumColVarInd += qcolVarInd * vec4f(weight.yyy, weight.y * weight.y);
+      sumColBloom  += qcolBloom * kw;
 
-      sumWeight += weight;
+      sumWeight += vec3f(weight, kw);
     }
   }
   
-  accumColVarOutBuf[      gidx] = select(colVarDir, sumColVarDir / vec4f(sumWeight.xxx, sumWeight.x * sumWeight.x), sumWeight.x > EPS);
-  accumColVarOutBuf[ofs + gidx] = select(colVarInd, sumColVarInd / vec4f(sumWeight.yyy, sumWeight.y * sumWeight.y), sumWeight.y > EPS);
+  accumColVarOutBuf[             gidx] = select(colVarDir, sumColVarDir / vec4f(sumWeight.xxx, sumWeight.x * sumWeight.x), sumWeight.x > EPS);
+  accumColVarOutBuf[       ofs + gidx] = select(colVarInd, sumColVarInd / vec4f(sumWeight.yyy, sumWeight.y * sumWeight.y), sumWeight.y > EPS);
+  accumColVarOutBuf[(ofs << 1) + gidx] = vec4f(select(colBloom, sumColBloom / sumWeight.z, sumWeight.z > EPS), 1.0);
 }

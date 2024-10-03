@@ -235,8 +235,8 @@ function handleMouseMoveEvent(e) {
 function installEventHandler() {
   canvas.addEventListener("click", async () => {
     if (!document.pointerLockElement)
-      await canvas.requestPointerLock({ unadjustedMovement: true });
-      //await canvas.requestPointerLock();
+      //await canvas.requestPointerLock({ unadjustedMovement: true });
+      await canvas.requestPointerLock();
   });
 
   document.addEventListener("keydown",
@@ -510,17 +510,17 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
   });
 
   res.buf[BUF_ACC0] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
+    size: WIDTH * HEIGHT * 4 * 4 * 3,
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_ACC1] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
+    size: WIDTH * HEIGHT * 4 * 4 * 3,
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_ACC2] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
+    size: WIDTH * HEIGHT * 4 * 4 * 3,
     usage: GPUBufferUsage.STORAGE
   });
 
