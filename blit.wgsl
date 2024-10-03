@@ -9,6 +9,12 @@
   bgColor:          vec4f           // w = ext ray cnt
 }*/
 
+/*struct PostParams {
+  fadeCol: vec3f,
+  fadeVal: f32
+}*/
+
+//@group(0) @binding(0) var<uniform> postParams: vec4f;
 @group(0) @binding(0) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(1) var<storage, read> colBuf: array<vec4f>;
 @group(0) @binding(2) var<storage, read> accumColBuf: array<vec4f>;
@@ -45,6 +51,17 @@ fn octToDir(oct: vec2f) -> vec3f
   return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
 }
 
+// https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
+fn filmicToneACES(x: vec3f) -> vec3f
+{
+  let a = 2.51;
+  let b = 0.03;
+  let c = 2.43;
+  let d = 0.59;
+  let e = 0.14;
+  return saturate(x * (a * x + vec3(b)) / (x * (c * x + vec3(d)) + vec3(e)));
+}
+
 // Accumulated direct and indirect illumination
 @fragment
 fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
@@ -53,9 +70,18 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
   let w = frame.x >> 16;
   let h = frame.y >> 16;
   let gidx = w * u32(pos.y) + u32(pos.x);
+  
   let dcol = accumColBuf[        gidx].xyz;
   let icol = accumColBuf[w * h + gidx].xyz;
-  return vec4f(pow(dcol + icol, vec3f(0.4545)), 1.0);
+  var fcol = dcol + icol;
+  
+  fcol = filmicToneACES(fcol);
+  fcol = pow(fcol, vec3f(0.4545));
+  
+  // Fade
+  //fcol = mix(vec3f(postParams.xyz), fcol, postParams.w);
+
+  return vec4f(fcol, 1.0);
 }
 
 // No reprojection/no filter, just pass through from direct/indirect illumination buffer
@@ -66,7 +92,16 @@ fn m1(@builtin(position) pos: vec4f) -> @location(0) vec4f
   let w = frame.x >> 16;
   let h = frame.y >> 16;
   let gidx = w * u32(pos.y) + u32(pos.x);
+  
   let dcol = colBuf[        gidx].xyz;
   let icol = colBuf[w * h + gidx].xyz;
-  return vec4f(pow((dcol + icol) / f32(frame.w), vec3f(0.4545)), 1.0);
+  var fcol = (dcol + icol) / f32(frame.w);
+
+  fcol = filmicToneACES(fcol);
+  fcol = pow(fcol, vec3f(0.4545));
+  
+  // Fade
+  //fcol = mix(vec3f(postParams.xyz), fcol, postParams.w);
+  
+  return vec4f(pow(fcol, vec3f(0.4545)), 1.0);
 }
