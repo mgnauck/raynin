@@ -267,7 +267,16 @@ function Wasm(module) {
     reset_samples: () => { samples = 0; },
     set_ltri_cnt: (n) => { ltriCount = n; },
     toggle_converge: () => { converge = !converge; },
-    toggle_edit: () => { editMode = !editMode; },
+    toggle_edit: () => {
+      editMode = !editMode;
+      if(!editMode) {
+        startTime = undefined;
+        if(ENABLE_AUDIO) {
+          audio.suspend();
+          audio.reset(START_AT_SEQUENCE);
+        }
+      }
+    },
     toggle_filter: () => { filter = !filter; if (filter) reproj = true; samples = 0; res.accumIdx = 0; },
     toggle_reprojection: () => { reproj = !reproj; if (!reproj) filter = false; samples = 0; res.accumIdx = 0; },
     save_binary: (ptr, size) => {
@@ -353,11 +362,17 @@ function Audio(module) {
   }
 
   this.reset = function(sequence) {
-    console.log(`Audio: Reset to sequence ${sequence}`);
+    //console.log(`Audio: Reset to sequence ${sequence}`);
     this.audioWorklet.port.postMessage({ r: sequence });
 
     // Reset timer (TODO timer drift compensation)
     this.startTime = performance.now();
+  }
+
+  this.suspend = async function() {
+    console.log(`Audio: Suspend`);
+    await this.audioContext.suspend();
+    this.audioWorklet.port.postMessage({ p: false });
   }
 
   this.play = async function () {
@@ -1003,7 +1018,7 @@ function blit(commandEncoder) {
 }
 
 async function render(time) {
-  if(startTime === undefined)
+  if(editMode || startTime === undefined)
     startTime = time;
 
   // FPS
@@ -1047,11 +1062,12 @@ async function render(time) {
   res.accumIdx = 1 - res.accumIdx;
 
   // Update scene and renderer for next frame
-  let finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge, editMode);
+  let finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge, !editMode);
   frames++;
   
-  if(finished > 0 && LOOP_SYNC_TRACK) {
-    audio.reset(START_AT_SEQUENCE);
+  if(finished > 0 && !editMode && LOOP_SYNC_TRACK) {
+    if(ENABLE_AUDIO)
+      audio.reset(START_AT_SEQUENCE);
     frames = 0;
     startTime = undefined;
   }

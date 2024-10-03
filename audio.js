@@ -44,6 +44,7 @@ class AudioProcessor extends AudioWorkletProcessor {
                         reset_samples: () => { },
                         set_ltri_cnt: (n) => { },
                         toggle_converge: () => { },
+                        toggle_edit: () => { },
                         toggle_filter: () => { },
                         toggle_reprojection: () => { },
                         save_binary: (ptr, size) => { }
