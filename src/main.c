@@ -178,7 +178,7 @@ uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *b
 
 #if false
   logc("[!!11] Scene id: %d", scene_cnt);
-#endif 
+#endif
 
   // Import scene from given GLTF for rendering
   if (import_gltf(s, gltf, gltf_sz, bin, bin_sz) == 0)
@@ -357,16 +357,18 @@ void handle_animations(float time)
   scene *scene = active_scene;
 
 // DISABLED
-#if false
+#if true
   // marbles
 #define SCENE_MARBLES 4
-#define SCENE_MARBLES_SPHERE_OFFSET 41
-#define SCENE_MARBLES_SPHERE_COUNT 3
 
-  uint8_t marble_sphere_offsets[44] =
-      {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
-       18, 19, 20, 21, 22, 23, 24, 25, 26, 41, 42, 43, 44, 45, 46, 47,
-       48, 49, 50, 51, 52, 53, 54, 55, 56, 40};
+  // TODO: 'Sphere.009' does not exist as a node
+  uint8_t marble_sphere_offsets[43] =
+      {41, 42, 0, 1, 43, 2, 44, 3,
+       5, 4, 6, 45, 8, 7, 46, 9,
+       10, 47, 48, 11, 12, 49, 13, 14,
+       15, 50, 17, 16, 18, 51, 52, 19,
+       20, 21, 53, 22, 23, 24, 54, 55,
+       25, 56, 26};
 
   uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
 
@@ -385,7 +387,6 @@ void handle_animations(float time)
         uint8_t offset = marble_sphere_offsets[i];
         inst_info *inst_info = &scene->inst_info[offset];
         mat4_copy(animation_transforms[i], inst_info->transform);
-        mat4_logc(animation_transforms[i]);
       }
     }
 
@@ -398,27 +399,26 @@ void handle_animations(float time)
       mat4 transform;
       mat4_copy(transform, animation_transforms[i]);
 
-      float scale = 1.f + sinf(i + 75.f * time * PI / 180.f) * 0.5f;
+      float scale = 1.f + sinf(i * 0.8f + 5.f * time) * 0.2f;
       vec3 scale_vec = {scale, scale, scale};
       mat4 scale_mat;
       mat4_scale(scale_mat, scale_vec);
       mat4_mul(transform, transform, scale_mat);
 
-      if (active_scene_changed)
-      {
-        mat4_logc(transform);
-      }
-
       scene_upd_inst_trans(scene, offset, transform);
 
+// TODO on/off for emissive objects? 
+#if false
       if (disabled)
       {
-        // scene_set_inst_state(scene, offset, IS_DISABLED);
+        scene_set_inst_state(scene, offset, IS_DISABLED);
       }
       else
       {
-        // scene_clr_inst_state(scene, offset, IS_DISABLED);
+        scene_clr_inst_state(scene, offset, IS_DISABLED);
       }
+#endif 
+
     }
   }
 #endif
