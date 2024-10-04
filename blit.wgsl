@@ -74,8 +74,12 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
   let dcol = accumColBuf[        gidx].xyz;
   let icol = accumColBuf[w * h + gidx].xyz;
   var fcol = dcol + icol;
+
+  // Add bloom
+  let bcol = accumColBuf[((w * h) << 1) + gidx].xyz;
+  fcol += bcol * 0.5;
  
-  // Famous vignette
+  // Vignette
   var q = vec2f(pos.x / f32(w), pos.y / f32(h));
   q *= vec2f(1.0) - q.yx;
   fcol *= pow(q.x * q.y * 5.0, 0.1);
@@ -103,7 +107,11 @@ fn m1(@builtin(position) pos: vec4f) -> @location(0) vec4f
   let icol = colBuf[w * h + gidx].xyz;
   var fcol = (dcol + icol) / f32(frame.w);
 
-  // Famous vignette
+  // Add bloom
+  //let bcol = accumColBuf[((w * h) << 1) + gidx].xyz;
+  //fcol += bcol * 0.5;
+ 
+  // Vignette
   var q = vec2f(pos.x / f32(w), pos.y / f32(h));
   q *= vec2f(1.0) - q.yx;
   fcol *= pow(q.x * q.y * 5.0, 0.1);

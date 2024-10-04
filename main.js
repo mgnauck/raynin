@@ -1,7 +1,7 @@
 // Sync track
 const PLAY_SYNC_TRACK = true;
-const LOOP_SYNC_TRACK = true;
-const START_AT_SEQUENCE = 10;
+const LOOP_SYNC_TRACK = false;
+const START_AT_SEQUENCE = 0;
 const TRACK = [
   // Row, ev id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
 
@@ -10,91 +10,91 @@ const TRACK = [
  0,    0,        0,  0, // SCN_ID
 
  //KEY1
- 0,    5,   10.988,  1, // CAM_POS_X
- 0,    6,   14.184,  1, // CAM_POS_Y
- 0,    7,  -48.448,  1, // CAM_POS_Z
- 0,    8,    0.296,  1, // CAM_DIR_X
- 0,    9,    0.000,  1, // CAM_DIR_Y
- 0,   10,   -0.955,  1, // CAM_DIR_Z
+ 0,    5,  -11.925,  1, // CAM_POS_X
+ 0,    6,   15.160,  1, // CAM_POS_Y
+ 0,    7,  -46.780,  1, // CAM_POS_Z
+ 0,    8,   -0.285,  1, // CAM_DIR_X
+ 0,    9,   -0.003,  1, // CAM_DIR_Y
+ 0,   10,   -0.958,  1, // CAM_DIR_Z
 
  //KEY2
 
- 127,    5,   -4.512,  0, // CAM_POS_X
- 127,    6,   13.760,  0, // CAM_POS_Y
- 127,    7,  -46.087,  0, // CAM_POS_Z
- 127,    8,   -0.276,  0, // CAM_DIR_X
- 127,    9,   -0.015,  0, // CAM_DIR_Y
- 127,   10,   -0.961,  0, // CAM_DIR_Z
+ 127,    5,   10.068,  0, // CAM_POS_X
+ 127,    6,   15.160,  0, // CAM_POS_Y
+ 127,    7,  -47.049,  0, // CAM_POS_Z
+ 127,    8,    0.296,  0, // CAM_DIR_X
+ 127,    9,    0.022,  0, // CAM_DIR_Y
+ 127,   10,   -0.955,  0, // CAM_DIR_Z
 
  // ************************ SCENE 1 ************************
 
  128,    0,        1,  0, // SCN_ID
-
- //KEY1
- 128,    5,   10.994,  1, // CAM_POS_X
- 128,    6,   16.431,  1, // CAM_POS_Y
- 128,    7,   56.957,  1, // CAM_POS_Z
- 128,    8,    0.010,  1, // CAM_DIR_X
- 128,    9,   -0.111,  1, // CAM_DIR_Y
- 128,   10,    0.994,  1, // CAM_DIR_Z
-
  128,   11,   40.312,  0, // CAM_FOV
 
+ //KEY1
+ 128,    5,    2.609,  2, // CAM_POS_X
+ 128,    6,    3.591,  2, // CAM_POS_Y
+ 128,    7,     18.0,  2, // CAM_POS_Z
+ 128,    8,   -0.004,  2, // CAM_DIR_X
+ 128,    9,   -0.074,  2, // CAM_DIR_Y
+ 128,   10,    0.997,  2, // CAM_DIR_Z
+
+
  //KEY2
- 166,    5,   10.671,  0, // CAM_POS_X
- 166,    6,   17.351,  0, // CAM_POS_Y
- 166,    7,   42.533,  0, // CAM_POS_Z
- 166,    8,    0.020,  0, // CAM_DIR_X
- 166,    9,   -0.051,  0, // CAM_DIR_Y
- 166,   10,    0.998,  0, // CAM_DIR_Z
+ 191,    5,    2.609,  0, // CAM_POS_X
+ 191,    6,    3.591,  0, // CAM_POS_Y
+ 191,    7,     10.0,  0, // CAM_POS_Z
+ 191,    8,   -0.001,  0, // CAM_DIR_X
+ 191,    9,   -0.110,  0, // CAM_DIR_Y
+ 191,   10,    0.994,  0, // CAM_DIR_Z
 
  //KEY1
- 167,    5,  -10.177,  1, // CAM_POS_X
- 167,    6,   21.400,  1, // CAM_POS_Y
- 167,    7,   35.347,  1, // CAM_POS_Z
- 167,    8,    0.029,  1, // CAM_DIR_X
- 167,    9,    0.037,  1, // CAM_DIR_Y
- 167,   10,    0.999,  1, // CAM_DIR_Z
+ 192,    5,   -2.547,  1, // CAM_POS_X
+ 192,    6,    3.132,  1, // CAM_POS_Y
+ 192,    7,    9.538,  1, // CAM_POS_Z
+ 192,    8,    0.037,  1, // CAM_DIR_X
+ 192,    9,    0.032,  1, // CAM_DIR_Y
+ 192,   10,    0.999,  1, // CAM_DIR_Z
 
  //KEY2
- 215,    5,    14.275,  0, // CAM_POS_X
- 215,    6,   21.400,  0, // CAM_POS_Y
- 215,    7,   34.925,  0, // CAM_POS_Z
- 215,    8,    0.014,  0, // CAM_DIR_X
- 215,    9,    0.032,  0, // CAM_DIR_Y
- 215,   10,    0.999,  0, // CAM_DIR_Z
+ 223,    5,    6.972,  0, // CAM_POS_X
+ 223,    6,    3.132,  0, // CAM_POS_Y
+ 223,    7,    9.189,  0, // CAM_POS_Z
+ 223,    8,    0.037,  0, // CAM_DIR_X
+ 223,    9,    0.032,  0, // CAM_DIR_Y
+ 223,   10,    0.999,  0, // CAM_DIR_Z
 
  //KEY1
- 216,    5,   28.961,  1, // CAM_POS_X
- 216,    6,   16.155,  1, // CAM_POS_Y
- 216,    7,  -37.911,  1, // CAM_POS_Z
- 216,    8,    0.070,  1, // CAM_DIR_X
- 216,    9,   -0.016,  1, // CAM_DIR_Y
- 216,   10,   -0.997,  1, // CAM_DIR_Z
+ 224,    5,    7.040,  1, // CAM_POS_X
+ 224,    6,    2.502,  1, // CAM_POS_Y
+ 224,    7,   -7.298,  1, // CAM_POS_Z
+ 224,    8,   -0.012,  1, // CAM_DIR_X
+ 224,    9,   -0.040,  1, // CAM_DIR_Y
+ 224,   10,   -0.999,  1, // CAM_DIR_Z
 
  //KEY2
- 277,    5,   14.539,  0, // CAM_POS_X
- 277,    6,   16.155,  0, // CAM_POS_Y
- 277,    7,  -38.927,  0, // CAM_POS_Z
- 277,    8,    0.070,  0, // CAM_DIR_X
- 277,    9,   -0.011,  0, // CAM_DIR_Y
- 277,   10,   -0.997,  0, // CAM_DIR_Z
+ 287,    5,   -0.896,  0, // CAM_POS_X
+ 287,    6,    2.502,  0, // CAM_POS_Y
+ 287,    7,   -7.174,  0, // CAM_POS_Z
+ 287,    8,   -0.032,  0, // CAM_DIR_X
+ 287,    9,   -0.005,  0, // CAM_DIR_Y
+ 287,   10,   -0.999,  0, // CAM_DIR_Z
 
 //KEY1
- 278,    5,   27.724,  1, // CAM_POS_X
- 278,    6,   18.304,  1, // CAM_POS_Y
- 278,    7,  -38.456,  1, // CAM_POS_Z
- 278,    8,    0.754,  1, // CAM_DIR_X
- 278,    9,   -0.001,  1, // CAM_DIR_Y
- 278,   10,   -0.657,  1, // CAM_DIR_Z
+ 288,    5,   -3.323,  2, // CAM_POS_X
+ 288,    6,   10.134,  2, // CAM_POS_Y
+ 288,    7,   10.007,  2, // CAM_POS_Z
+ 288,    8,   -0.502,  2, // CAM_DIR_X
+ 288,    9,    0.468,  2, // CAM_DIR_Y
+ 288,   10,    0.728,  2, // CAM_DIR_Z
 
  //KEY2
- 319,    5,   11.352,  0, // CAM_POS_X
- 319,    6,   18.043,  0, // CAM_POS_Y
- 319,    7,  -24.237,  0, // CAM_POS_Z
- 319,    8,    0.757,  0, // CAM_DIR_X
- 319,    9,    0.004,  0, // CAM_DIR_Y
- 319,   10,   -0.653,  0, // CAM_DIR_Z
+ 319,    5,    7.752,  0, // CAM_POS_X
+ 319,    6,   10.134,  0, // CAM_POS_Y
+ 319,    7,    8.436,  0, // CAM_POS_Z
+ 319,    8,    0.367,  0, // CAM_DIR_X
+ 319,    9,    0.578,  0, // CAM_DIR_Y
+ 319,   10,    0.729,  0, // CAM_DIR_Z
 
  // ************************ SCENE 2 ************************
 
@@ -288,21 +288,20 @@ const TRACK = [
 
 //KEY1
 
- 856,    5,    5.672,  1, // CAM_POS_X
- 856,    6,   25.886,  1, // CAM_POS_Y
- 856,    7,   32.309,  1, // CAM_POS_Z
- 856,    8,   -0.003,  1, // CAM_DIR_X
- 856,    9,    0.872,  1, // CAM_DIR_Y
- 856,   10,    0.490,  1, // CAM_DIR_Z
- 856,   11,   40.312,  1, // CAM_FOV
+ 856,    5,   19.961,  1, // CAM_POS_X
+ 856,    6,   26.107,  1, // CAM_POS_Y
+ 856,    7,   28.040,  1, // CAM_POS_Z
+ 856,    8,    0.002,  1, // CAM_DIR_X
+ 856,    9,    0.005,  1, // CAM_DIR_Y
+ 856,   10,    1.000,  1, // CAM_DIR_Z
 
 //KEY2
 
- 887,    5,   -6.322,  0, // CAM_POS_X
- 887,    6,   26.809,  0, // CAM_POS_Y
- 887,    7,   39.246,  0, // CAM_POS_Z
- 887,    8,    0.007,  0, // CAM_DIR_X
- 887,    9,    0.004,  0, // CAM_DIR_Y
+ 887,    5,   -3.635,  0, // CAM_POS_X
+ 887,    6,   26.107,  0, // CAM_POS_Y
+ 887,    7,   28.094,  0, // CAM_POS_Z
+ 887,    8,    0.002,  0, // CAM_DIR_X
+ 887,    9,    0.005,  0, // CAM_DIR_Y
  887,   10,    1.000,  0, // CAM_DIR_Z
 
 
@@ -349,20 +348,28 @@ const TRACK = [
  991,   10,    0.704,  0, // CAM_DIR_Z
 
  //KEY1
- 992,    5,   -4.692,  1, // CAM_POS_X
- 992,    6,   27.996,  1, // CAM_POS_Y
- 992,    7,   36.042,  1, // CAM_POS_Z
- 992,    8,    0.421,  1, // CAM_DIR_X
- 992,    9,    0.029,  1, // CAM_DIR_Y
- 992,   10,    0.907,  1, // CAM_DIR_Z
+ 992,    5,    4.285,  1, // CAM_POS_X
+ 992,    6,   19.733,  1, // CAM_POS_Y
+ 992,    7,   44.327,  1, // CAM_POS_Z
+ 992,    8,    0.133,  1, // CAM_DIR_X
+ 992,    9,   -0.001,  1, // CAM_DIR_Y
+ 992,   10,    0.991,  1, // CAM_DIR_Z
 
  //KEY2
- 1023,    5,   18.888,  0, // CAM_POS_X
- 1023,    6,   23.374,  0, // CAM_POS_Y
- 1023,    7,   15.482,  0, // CAM_POS_Z
- 1023,    8,    0.920,  0, // CAM_DIR_X
- 1023,    9,   -0.026,  0, // CAM_DIR_Y
- 1023,   10,    0.390,  0, // CAM_DIR_Z
+ 1015,    5,   25.865,  1, // CAM_POS_X
+ 1015,    6,   19.733,  1, // CAM_POS_Y
+ 1015,    7,   34.209,  1, // CAM_POS_Z
+ 1015,    8,    0.684,  1, // CAM_DIR_X
+ 1015,    9,   -0.011,  1, // CAM_DIR_Y
+ 1015,   10,    0.729,  1, // CAM_DIR_Z
+
+ //KEY3
+ 1023,    5,   35.251,  0, // CAM_POS_X
+ 1023,    6,   19.842,  0, // CAM_POS_Y
+ 1023,    7,   25.108,  0, // CAM_POS_Z
+ 1023,    8,    0.893,  0, // CAM_DIR_X
+ 1023,    9,    0.002,  0, // CAM_DIR_Y
+ 1023,   10,    0.451,  0, // CAM_DIR_Z
 
  //KEY1
 
@@ -404,73 +411,74 @@ const TRACK = [
 
  //KEY1
 
- 1088,    5,   36.519,  1, // CAM_POS_X
- 1088,    6,   -6.343,  1, // CAM_POS_Y
- 1088,    7, -239.273,  1, // CAM_POS_Z
- 1088,    8,    0.052,  1, // CAM_DIR_X
- 1088,    9,   -0.061,  1, // CAM_DIR_Y
- 1088,   10,   -0.997,  1, // CAM_DIR_Z
+ 1088,    5,   41.239,  1, // CAM_POS_X
+ 1088,    6,   20.135,  1, // CAM_POS_Y
+ 1088,    7,  -10.683,  1, // CAM_POS_Z
+ 1088,    8,   -0.605,  1, // CAM_DIR_X
+ 1088,    9,   -0.230,  1, // CAM_DIR_Y
+ 1088,   10,   -0.762,  1, // CAM_DIR_Z
 
  //KEY2
 
- 1119,    5,  -85.862,  0, // CAM_POS_X
- 1119,    6,    1.574,  0, // CAM_POS_Y
- 1119,    7, -206.606,  0, // CAM_POS_Z
- 1119,    8,   -0.383,  0, // CAM_DIR_X
- 1119,    9,    0.004,  0, // CAM_DIR_Y
- 1119,   10,   -0.924,  0, // CAM_DIR_Z
+ 1119,    5,   47.600,  0, // CAM_POS_X
+ 1119,    6,   25.597,  0, // CAM_POS_Y
+ 1119,    7,   16.085,  0, // CAM_POS_Z
+ 1119,    8,   -0.774,  0, // CAM_DIR_X
+ 1119,    9,   -0.250,  0, // CAM_DIR_Y
+ 1119,   10,   -0.582,  0, // CAM_DIR_Z
 
  //KEY1
 
- 1120,    5,  -51.341,  1, // CAM_POS_X
- 1120,    6,   -2.395,  1, // CAM_POS_Y
- 1120,    7, -106.548,  1, // CAM_POS_Z
- 1120,    8,   -0.402,  1, // CAM_DIR_X
- 1120,    9,    0.094,  1, // CAM_DIR_Y
- 1120,   10,   -0.911,  1, // CAM_DIR_Z
+ 1120,    5,   58.157,  1, // CAM_POS_X
+ 1120,    6,   28.770,  1, // CAM_POS_Y
+ 1120,    7,   44.441,  1, // CAM_POS_Z
+ 1120,    8,   -0.944,  1, // CAM_DIR_X
+ 1120,    9,   -0.240,  1, // CAM_DIR_Y
+ 1120,   10,   -0.225,  1, // CAM_DIR_Z
 
  //KEY2
 
- 1151,    5, -116.386,  0, // CAM_POS_X
- 1151,    6,    8.604,  0, // CAM_POS_Y
- 1151,    7, -237.314,  0, // CAM_POS_Z
- 1151,    8,   -0.436,  0, // CAM_DIR_X
- 1151,    9,   -0.011,  0, // CAM_DIR_Y
- 1151,   10,   -0.900,  0, // CAM_DIR_Z
+ 1151,    5,   52.121,  0, // CAM_POS_X
+ 1151,    6,   28.770,  0, // CAM_POS_Y
+ 1151,    7,   69.798,  0, // CAM_POS_Z
+ 1151,    8,   -0.944,  0, // CAM_DIR_X
+ 1151,    9,   -0.235,  0, // CAM_DIR_Y
+ 1151,   10,   -0.230,  0, // CAM_DIR_Z
 
  //KEY1
 
- 1152,    5,  105.441,  1, // CAM_POS_X
- 1152,    6,  127.185,  1, // CAM_POS_Y
- 1152,    7, -113.586,  1, // CAM_POS_Z
- 1152,    8,   -0.316,  1, // CAM_DIR_X
- 1152,    9,   -0.011,  1, // CAM_DIR_Y
- 1152,   10,   -0.949,  1, // CAM_DIR_Z
+ 1152,    5,   32.039,  1, // CAM_POS_X
+ 1152,    6,   28.677,  1, // CAM_POS_Y
+ 1152,    7,   54.539,  1, // CAM_POS_Z
+ 1152,    8,   -0.759,  1, // CAM_DIR_X
+ 1152,    9,   -0.210,  1, // CAM_DIR_Y
+ 1152,   10,   -0.616,  1, // CAM_DIR_Z
 
  //KEY2
 
- 1183,    5,  105.441,  0, // CAM_POS_X
- 1183,    6,  127.185,  0, // CAM_POS_Y
- 1183,    7, -113.586,  0, // CAM_POS_Z
- 1183,    8,    0.530,  0, // CAM_DIR_X
- 1183,    9,    0.039,  0, // CAM_DIR_Y
- 1183,   10,   -0.847,  0, // CAM_DIR_Z
+ 1183,    5,   52.295,  0, // CAM_POS_X
+ 1183,    6,   29.203,  0, // CAM_POS_Y
+ 1183,    7,   31.116,  0, // CAM_POS_Z
+ 1183,    8,   -0.590,  0, // CAM_DIR_X
+ 1183,    9,   -0.185,  0, // CAM_DIR_Y
+ 1183,   10,   -0.786,  0, // CAM_DIR_Z
+
 
  //KEY1
- 1184,    5, -135.238,  1, // CAM_POS_X
- 1184,    6,    1.997,  1, // CAM_POS_Y
- 1184,    7, -304.734,  1, // CAM_POS_Z
- 1184,    8,   -0.401,  1, // CAM_DIR_X
- 1184,    9,   -0.006,  1, // CAM_DIR_Y
- 1184,   10,   -0.916,  1, // CAM_DIR_Z
+ 1184,    5,   41.169,  1, // CAM_POS_X
+ 1184,    6,   25.170,  1, // CAM_POS_Y
+ 1184,    7,   51.745,  1, // CAM_POS_Z
+ 1184,    8,   -0.933,  1, // CAM_DIR_X
+ 1184,    9,   -0.263,  1, // CAM_DIR_Y
+ 1184,   10,   -0.245,  1, // CAM_DIR_Z
 
  //KEY2
- 1215,    5,  -67.322,  0, // CAM_POS_X
- 1215,    6,    3.063,  0, // CAM_POS_Y
- 1215,    7, -149.613,  0, // CAM_POS_Z
- 1215,    8,   -0.401,  0, // CAM_DIR_X
- 1215,    9,   -0.006,  0, // CAM_DIR_Y
- 1215,   10,   -0.916,  0, // CAM_DIR_Z
+ 1215,    5,   52.224,  0, // CAM_POS_X
+ 1215,    6,   28.288,  0, // CAM_POS_Y
+ 1215,    7,   54.648,  0, // CAM_POS_Z
+ 1215,    8,   -0.933,  0, // CAM_DIR_X
+ 1215,    9,   -0.263,  0, // CAM_DIR_Y
+ 1215,   10,   -0.245,  0, // CAM_DIR_Z
 
 
 // ************************ SCENE 8 ************************
@@ -551,33 +559,33 @@ const TRACK = [
  1383,    9,   -0.031,  0, // CAM_DIR_Y
  1383,   10,    1.000,  0, // CAM_DIR_Z
 
- //KEY1
+//KEY1
 
- 1384,    5,  -22.373,  1, // CAM_POS_X
- 1384,    6,   37.898,  1, // CAM_POS_Y
- 1384,    7,   30.327,  1, // CAM_POS_Z
- 1384,    8,   -0.467,  1, // CAM_DIR_X
- 1384,    9,    0.616,  1, // CAM_DIR_Y
- 1384,   10,    0.634,  1, // CAM_DIR_Z
+ 1384,    5,   34.487,  1, // CAM_POS_X
+ 1384,    6,   12.767,  1, // CAM_POS_Y
+ 1384,    7,   38.799,  1, // CAM_POS_Z
+ 1384,    8,   -0.027,  1, // CAM_DIR_X
+ 1384,    9,   -0.041,  1, // CAM_DIR_Y
+ 1384,   10,    0.999,  1, // CAM_DIR_Z
 
 //KEY2
 
- 1399,    5,   10.820,  0, // CAM_POS_X
- 1399,    6,   15.455,  0, // CAM_POS_Y
- 1399,    7,   58.243,  0, // CAM_POS_Z
- 1399,    8,   -0.014,  0, // CAM_DIR_X
- 1399,    9,    0.009,  0, // CAM_DIR_Y
- 1399,   10,    1.000,  0, // CAM_DIR_Z
+ 1415,    5,    5.478,  0, // CAM_POS_X
+ 1415,    6,   15.433,  0, // CAM_POS_Y
+ 1415,    7,   44.807,  0, // CAM_POS_Z
+ 1415,    8,    0.016,  0, // CAM_DIR_X
+ 1415,    9,   -0.006,  0, // CAM_DIR_Y
+ 1415,   10,    1.000,  0, // CAM_DIR_Z
 
  //KEY1
 
- 1400,    5,    3.891,  2, // CAM_POS_X
- 1400,    6,   17.237,  2, // CAM_POS_Y
- 1400,    7,   26.060,  2, // CAM_POS_Z
- 1400,    8,   -0.014,  2, // CAM_DIR_X
- 1400,    9,    0.004,  2, // CAM_DIR_Y
- 1400,   10,    1.000,  2, // CAM_DIR_Z
- 1400,   11,   40.312,  2, // CAM_FOV
+ 1416,    5,    3.891,  2, // CAM_POS_X
+ 1416,    6,   17.237,  2, // CAM_POS_Y
+ 1416,    7,   26.060,  2, // CAM_POS_Z
+ 1416,    8,   -0.014,  2, // CAM_DIR_X
+ 1416,    9,    0.004,  2, // CAM_DIR_Y
+ 1416,   10,    1.000,  2, // CAM_DIR_Z
+ 1416,   11,   40.312,  2, // CAM_FOV
 
 //KEY2
 
@@ -629,9 +637,9 @@ const ROWS_PER_BEAT = 4;
 // Rendering
 const ENABLE_RENDER = true;
 const ENABLE_PRERENDER = false;
-const FULLSCREEN = false;
+const FULLSCREEN = true;
 const ASPECT = 16.0 / 7.0;
-const WIDTH = 880;
+const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 // Scene loading/export
@@ -649,24 +657,8 @@ const SCENES_TO_LOAD = [
   "good_9.gltf",
   "good_10.gltf",
   "end.gltf",
-];
-//*/
-/*const PATH_TO_SCENES = "scenes/old/";
-const SCENES_TO_LOAD = [
-  "bernstein.gltf",
-  "big-triangle.gltf",
-  "donuts.gltf",
-  "layers-of-spheres.gltf",
-  "only-god-forgives.gltf",
-  "purple-motion.gltf",
-  "red-skybox.gltf",
-  "schellen.gltf",
-  "sphere-grid.gltf",
-  "triangle-cave.gltf",
-  "yellow-blue-hangar.gltf",
-  "yellow-donut-cubes.gltf",
 ];//*/
-const EXPORT_BIN_TO_DISK = false && LOAD_FROM_GLTF;
+const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 const DO_NOT_LOAD_FROM_JS = false && !LOAD_FROM_GLTF;
 
@@ -1058,17 +1050,17 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz) 
   });
 
   res.buf[BUF_ACC0] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
+    size: WIDTH * HEIGHT * 4 * 4 * 3,
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_ACC1] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
+    size: WIDTH * HEIGHT * 4 * 4 * 3,
     usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_ACC2] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
+    size: WIDTH * HEIGHT * 4 * 4 * 3,
     usage: GPUBufferUsage.STORAGE
   });
 
