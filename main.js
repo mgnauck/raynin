@@ -629,7 +629,7 @@ const TRACK = [
 
 // Audio
 const ENABLE_AUDIO = true;
-const LOAD_AUDIO_FROM_FILE = true;
+const LOAD_AUDIO_FROM_FILE = false;
 const AUDIO_TO_LOAD = "tunes/tune.bkpo"
 const BPM = 125;
 const ROWS_PER_BEAT = 4;
@@ -691,6 +691,9 @@ END_denoise_wgsl`;
 
 const SM_BLIT = `BEGIN_blit_wgsl
 END_blit_wgsl`;
+
+const AUDIO = `BEGIN_audio_js
+END_audio_js`;
 
 const BUF_CAM = 0; // Accessed from WASM
 const BUF_MTL = 1; // Accessed from WASM
@@ -754,7 +757,6 @@ const WG_SIZE_Y = 16;
 
 let canvas, context, device;
 let wa, res = {};
-let wasmModule;
 let startTime = undefined, last;
 let frames = 0;
 let samples = 0;
@@ -792,6 +794,7 @@ function installEventHandler() {
 }
 
 function Wasm(module) {
+  this.module = module;
   this.environment = {
     console: (level, addr, len) => {
       let s = "";
@@ -847,7 +850,7 @@ function Wasm(module) {
   };
 
   this.instantiate = async function () {
-    const res = await WebAssembly.instantiate(module, { env: this.environment });
+    const res = await WebAssembly.instantiate(this.module, { env: this.environment });
     Object.assign(this, res.instance.exports);
     this.memUint8 = new Uint8Array(this.memory.buffer);
   }
@@ -872,9 +875,14 @@ function Audio(module) {
     //await this.audioContext.resume();
 
     // Add audio processor
-    // TODO add embedded handling
-    // Load audio worklet script from file
-    await this.audioContext.audioWorklet.addModule('audio.js');
+    if (AUDIO.includes("END_")) {
+      // Load audio worklet script from file
+      await this.audioContext.audioWorklet.addModule('audio.js');
+    } else {
+      // Load the embedded audio.js
+      await this.audioContext.audioWorklet.addModule(URL.createObjectURL(
+        new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))], { type: 'application/javascript' })));
+    }
 
     // Defaults are in:1, out:1, channels:2
     this.audioWorklet = new AudioWorkletNode(this.audioContext, 'a', { outputChannelCount: [2] });
@@ -1655,7 +1663,7 @@ async function start() {
 
   // Initialize audio
   if (ENABLE_AUDIO) {
-    audio = new Audio(wasmModule);
+    audio = new Audio(wa.module);
     if (LOAD_AUDIO_FROM_FILE)
       await audio.initialize(START_AT_SEQUENCE, AUDIO_TO_LOAD);
     else
@@ -1750,16 +1758,17 @@ async function main() {
   context.configure({ device, format: presentationFormat, alphaMode: "opaque" });
 
   // Load actual code
+  let module;
   if (WASM.includes("END_")) {
     // Load wasm from file
-    wasmModule = await (await fetch("intro.wasm")).arrayBuffer();
+    module = await (await fetch("intro.wasm")).arrayBuffer();
   } else {
     // When embedded, the wasm is deflated and base64 encoded. Undo in reverse.
-    wasmModule = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
-    wasmNodule = await new Response(wasmModule.stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+    module = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
+    module = await new Response(module.stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
   }
 
-  wa = new Wasm(wasmModule);
+  wa = new Wasm(module);
   await wa.instantiate();
 
   // Load scenes
