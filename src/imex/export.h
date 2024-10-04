@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define EXPORT_CAMS
+//#define EXPORT_CAMS
 //#define EXPORT_NORMALS
 //#define EXPORT_TRIS
 

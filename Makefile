@@ -9,8 +9,8 @@ LOADER_JS=main
 AUDIO_JS=audio
 OUT=index.html
 
-#PLAYER_CONFIG=-DPROJECT_DATA -DPLAYER_ONLY -DBUMP_ALLOCATOR -DNO_LOG -DSKIP_RESET_STATE_ON_VOICE_START
-PLAYER_CONFIG=-DPROJECT_DATA -DPLAYER_ONLY -DBUMP_ALLOCATOR -DSKIP_RESET_STATE_ON_VOICE_START
+PLAYER_CONFIG=-DPROJECT_DATA -DPLAYER_ONLY -DBUMP_ALLOCATOR -DNO_LOG -DSKIP_RESET_STATE_ON_VOICE_START
+#PLAYER_CONFIG=-DPROJECT_DATA -DPLAYER_ONLY -DBUMP_ALLOCATOR -DSKIP_RESET_STATE_ON_VOICE_START
 PLAYER_FEATURES = -DSUPPORT_NOTE -DSUPPORT_OSC -DSUPPORT_NOISE2 -DSUPPORT_ADSR -DSUPPORT_TRANSPOSE -DSUPPORT_MUL -DSUPPORT_CLAMP -DSUPPORT_SCALE -DSUPPORT_MIX -DSUPPORT_FILTER -DSUPPORT_DELAY -DSUPPORT_REVERB -DSUPPORT_DIST -DSUPPORT_OUT
 CC=clang
 LD=wasm-ld
@@ -36,14 +36,14 @@ $(OUT_DIR)/$(AUDIO_JS).2.js: $(OUT_DIR)/$(AUDIO_JS).1.js
 
 $(OUT_DIR)/$(AUDIO_JS).1.js: $(AUDIO_JS).js
 	@mkdir -p `dirname $@`
-	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=true --toplevel > $@
+	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=false --toplevel > $@
 
 $(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $(SHADER_MIN) $(OUT_DIR)/$(LOADER_JS).2.js
 	./embed.sh $(OUT_DIR)/$(LOADER_JS).2.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $@
 
 $(OUT_DIR)/%.wgsl.min: ./%.wgsl $(OUT_DIR)/$(LOADER_JS).1.js
 	@mkdir -p `dirname $@`
-	gcp -u $(OUT_DIR)/$(LOADER_JS).1.js $(OUT_DIR)/$(LOADER_JS).2.js
+	cp -u $(OUT_DIR)/$(LOADER_JS).1.js $(OUT_DIR)/$(LOADER_JS).2.js
 	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<)
 	@echo "$(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<):" `wc -c < $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<)` "bytes"
 	./embed.sh $(OUT_DIR)/$(LOADER_JS).2.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<) $(OUT_DIR)/$(LOADER_JS).2.js

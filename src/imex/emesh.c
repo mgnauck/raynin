@@ -54,7 +54,7 @@ uint32_t emesh_calc_size(const emesh *m)
   } else {
     sz += sizeof(m->subx);
     sz += sizeof(m->suby);
-    //sz += sizeof(m->in_radius);
+    sz += sizeof(m->in_radius);
   }
 
   return sz;
@@ -85,7 +85,7 @@ uint8_t *emesh_write_primitive(uint8_t *dst, const emesh *m)
   } else {
     dst = ie_write(dst, &m->subx, sizeof(m->subx));
     dst = ie_write(dst, &m->suby, sizeof(m->suby));
-    //dst = ie_write(dst, &m->in_radius, sizeof(m->in_radius));
+    dst = ie_write(dst, &m->in_radius, sizeof(m->in_radius));
   }
 
   return dst;

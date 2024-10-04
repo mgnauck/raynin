@@ -636,7 +636,7 @@ const ROWS_PER_BEAT = 4;
 
 // Rendering
 const ENABLE_RENDER = true;
-const ENABLE_PRERENDER = false;
+const ENABLE_PRERENDER = true;
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 7.0;
 const WIDTH = 1280;
@@ -881,7 +881,7 @@ function Audio(module) {
     } else {
       // Load the embedded audio.js
       await this.audioContext.audioWorklet.addModule(URL.createObjectURL(
-        new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))], { type: 'application/javascript' })));
+        new Blob([AUDIO], { type: 'application/javascript' })));
     }
 
     // Defaults are in:1, out:1, channels:2

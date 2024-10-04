@@ -18,9 +18,9 @@
 #include "sync/sync_types.h"
 #include "util/vec3.h"
 
-// #define NO_CONTROL
-// #define TINY_BUILD
-// #define LOAD_EMBEDDED_DATA
+//#define NO_CONTROL
+//#define TINY_BUILD
+//#define LOAD_EMBEDDED_DATA
 
 #ifdef LOAD_EMBEDDED_DATA
 #include "scene_data.h"

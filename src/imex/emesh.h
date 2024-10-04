@@ -22,7 +22,7 @@ typedef struct emesh {
   uint8_t   type;         // (((no_caps << 2) | (invert_nrms << 1) | (face_nrms & 0x1)) << 4) | (obj_type & 0xf)
   uint8_t   subx;         // !OT_MESH
   uint8_t   suby;         // !OT_MESH
-  float     in_radius;    // !OT_MESH (currently not used)
+  float     in_radius;    // !OT_MESH
   uint16_t  vertex_cnt;   // OT_MESH only (all subsequent)
   vec3      *vertices;
   vec3      *normals;
