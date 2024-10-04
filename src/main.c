@@ -38,7 +38,7 @@ post_params post;
 bool active_post = false;
 track intro;
 
-// animations
+// Animations
 #define ANIMATION_MAX_TRANSFORMS 44
 float active_scene_time = 0.f;
 bool active_scene_changed = false;
@@ -60,7 +60,8 @@ uint8_t escene_cnt = 0;
 #endif
 
 #ifndef NO_CONTROL
-__attribute__((visibility("default"))) void key_down(unsigned char key, float move_vel)
+__attribute__((visibility("default")))
+void key_down(unsigned char key, float move_vel)
 {
   vec3 gmin = vec3_min(active_scene->tlas_nodes[0].lmin, active_scene->tlas_nodes[0].rmin);
   vec3 gmax = vec3_max(active_scene->tlas_nodes[0].lmax, active_scene->tlas_nodes[0].rmax);
@@ -149,7 +150,8 @@ __attribute__((visibility("default"))) void key_down(unsigned char key, float mo
   scene_set_dirty(active_scene, RT_CAM);
 }
 
-__attribute__((visibility("default"))) void mouse_move(int32_t dx, int32_t dy, float look_vel)
+__attribute__((visibility("default")))
+void mouse_move(int32_t dx, int32_t dy, float look_vel)
 {
   cam *cam = scene_get_active_cam(active_scene);
 
@@ -164,8 +166,7 @@ __attribute__((visibility("default"))) void mouse_move(int32_t dx, int32_t dy, f
 
 #ifndef TINY_BUILD
 __attribute__((visibility("default")))
-uint8_t
-load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz, bool prepare_for_export)
+uint8_t load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz, bool prepare_for_export)
 {
   uint8_t ret = 0;
 
@@ -204,8 +205,7 @@ load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size
 }
 
 __attribute__((visibility("default")))
-uint8_t
-export_scenes()
+uint8_t export_scenes()
 {
   if (escene_cnt > 0)
   {
@@ -226,14 +226,14 @@ export_scenes()
 }
 #endif
 
-__attribute__((visibility("default"))) void add_event(uint16_t row, uint8_t id, float value, uint8_t blend_type)
+__attribute__((visibility("default")))
+void add_event(uint16_t row, uint8_t id, float value, uint8_t blend_type)
 {
   sync_add_event(&intro, row, id, value, blend_type);
 }
 
 __attribute__((visibility("default")))
-uint8_t
-load_scenes_bin(uint8_t *bin)
+uint8_t load_scenes_bin(uint8_t *bin)
 {
 #ifndef LOAD_EMBEDDED_DATA
   return import_bin(&scenes, &scene_cnt, bin);
@@ -242,7 +242,8 @@ load_scenes_bin(uint8_t *bin)
 #endif
 }
 
-__attribute__((visibility("default"))) void init(uint16_t bpm, uint8_t rows_per_beat, uint16_t event_cnt)
+__attribute__((visibility("default")))
+void init(uint16_t bpm, uint8_t rows_per_beat, uint16_t event_cnt)
 {
 #ifdef LOAD_EMBEDDED_DATA
   // Load our scenes
@@ -279,53 +280,70 @@ __attribute__((visibility("default"))) void init(uint16_t bpm, uint8_t rows_per_
   active_scene = &scenes[active_scene_id];
 }
 
-void process_events(const track *track, float time)
+__attribute__((visibility("default")))
+void finalize_resources()
+{
+  sync_index_track(&intro);
+
+  for (uint8_t i = 0; i < scene_cnt; i++)
+  {
+    renderer_update(&scenes[i], NULL, false);
+    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
+  }
+}
+
+
+void process_events(track *track, float time)
 {
   // Set the active scene (SCN_ID)
-  uint8_t id = (uint8_t)sync_get_value(track, SCN_ID, time);
-  if (id >= 0 && id < scene_cnt)
+  float fid = sync_event_get_value(track, SCN_ID, time);
+  if(fid != EVENT_INACTIVE)
   {
-    if (id != active_scene_id)
-    {
-      active_scene_id = id;
-      active_scene = &scenes[active_scene_id];
-      scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
-      active_scene_time = time;
-      active_scene_changed = true;
+    uint8_t id = (uint8_t)fid;
+    if(id >= 0 && id < scene_cnt) {
+      if (id != active_scene_id)
+      {
+        active_scene_id = id;
+        active_scene = &scenes[active_scene_id];
+        scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
+        active_scene_time = time;
+        active_scene_changed = true;
+      }
     }
+    else
+      logc("#### ERROR Sync track requested unavailable scene");
   }
-  else
-    logc("#### ERROR Sync track requested unavailable scene");
+
+  cam *cam = scene_get_active_cam(active_scene);
 
   // Camera pos/dir
-  if (sync_is_active(track, CAM_POS_X, time))
+  float px = sync_event_get_value(track, CAM_POS_X, time);
+  if(px != EVENT_INACTIVE)
   {
-    float px = sync_get_value(track, CAM_POS_X, time);
-    float py = sync_get_value(track, CAM_POS_Y, time);
-    float pz = sync_get_value(track, CAM_POS_Z, time);
-    float dx = sync_get_value(track, CAM_DIR_X, time);
-    float dy = sync_get_value(track, CAM_DIR_Y, time);
-    float dz = sync_get_value(track, CAM_DIR_Z, time);
-    cam *cam = scene_get_active_cam(active_scene);
+    float py = sync_event_get_value(track, CAM_POS_Y, time);
+    float pz = sync_event_get_value(track, CAM_POS_Z, time);
+    float dx = sync_event_get_value(track, CAM_DIR_X, time);
+    float dy = sync_event_get_value(track, CAM_DIR_Y, time);
+    float dz = sync_event_get_value(track, CAM_DIR_Z, time);
     cam_set(cam, (vec3){px, py, pz}, (vec3){dx, dy, dz});
     scene_set_dirty(active_scene, RT_CAM);
   }
 
   // Camera fov
-  cam *cam = scene_get_active_cam(active_scene);
-  float fov = sync_get_value(track, CAM_FOV, time);
+  float fov = sync_event_get_value(track, CAM_FOV, time);
   if (fov != EVENT_INACTIVE)
   {
     cam->vert_fov = fov;
     scene_set_dirty(active_scene, RT_CAM);
   }
 
-  if (sync_is_active(track, FADE_COL_R, time))
+  float col_x = sync_event_get_value(track, FADE_COL_R, time);
+  if(col_x != EVENT_INACTIVE)
   {
-    post.fade_col.x = sync_get_value(track, FADE_COL_R, time);
-    post.fade_col.y = sync_get_value(track, FADE_COL_G, time);
-    post.fade_col.z = sync_get_value(track, FADE_COL_B, time);
-    post.fade_val = sync_get_value(track, FADE_VAL, time);
+    post.fade_col.x = col_x;
+    post.fade_col.y = sync_event_get_value(track, FADE_COL_G, time);
+    post.fade_col.z = sync_event_get_value(track, FADE_COL_B, time);
+    post.fade_val = sync_event_get_value(track, FADE_VAL, time);
     active_post = true;
   }
   else
@@ -409,16 +427,8 @@ void handle_animations(float time)
   active_scene_changed = false;
 }
 
-__attribute__((visibility("default"))) void init_gpu_data()
-{
-  for (uint8_t i = 0; i < scene_cnt; i++)
-  {
-    renderer_update(&scenes[i], NULL, false);
-    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
-  }
-}
-
-__attribute__((visibility("default"))) bool update(float time, bool converge, bool run_track)
+__attribute__((visibility("default")))
+bool update(float time, bool converge, bool run_track)
 {
   bool finished = sync_is_finished(&intro, time);
   if (run_track && !finished)
@@ -432,7 +442,8 @@ __attribute__((visibility("default"))) bool update(float time, bool converge, bo
 }
 
 #ifndef TINY_BUILD
-__attribute__((visibility("default"))) void release()
+__attribute__((visibility("default")))
+void release()
 {
   sync_release_track(&intro);
 

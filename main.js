@@ -637,7 +637,7 @@ const ROWS_PER_BEAT = 4;
 // Rendering
 const ENABLE_RENDER = true;
 const ENABLE_PRERENDER = false;
-const FULLSCREEN = true;
+const FULLSCREEN = false;
 const ASPECT = 16.0 / 7.0;
 const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
@@ -658,7 +658,7 @@ const SCENES_TO_LOAD = [
   "good_10.gltf",
   "end.gltf",
 ];//*/
-const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
+const EXPORT_BIN_TO_DISK = false && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 const DO_NOT_LOAD_FROM_JS = false && !LOAD_FROM_GLTF;
 
@@ -1663,11 +1663,11 @@ async function start() {
   }
 
   // Prepare for rendering
-  wa.init_gpu_data();
+  wa.finalize_resources();
   wa.update(0, false, !editMode);
 
+  // Prerender to warm shaders
   if (ENABLE_PRERENDER) {
-    // Prerender to warm shaders
     for(let i=0; i<50; i++) {
       render(-303);
       startTime = undefined;
