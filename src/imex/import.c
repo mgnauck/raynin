@@ -878,7 +878,7 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
     cam *c = scene_get_cam(s, 0);
     *c = (cam){ .vert_fov = 45.0f, .foc_dist = 10.0 };
     cam_set(c, (vec3){ 0.0f, 0.0f, 10.0f }, (vec3){ 0.0f, 0.0f, -1.0f });
-    logc("Added default cam %i to scene %i with vert fov %f", i, j, c->vert_fov);
+    logc("Added default cam to scene %i with vert fov %f", j, c->vert_fov);
 #endif
   }
 
