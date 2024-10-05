@@ -349,6 +349,9 @@ void process_events(track *track, float time)
     active_post = false;
 }
 
+static uint8_t good1_light_offsets[14] =
+    {11, 15, 13, 2, 4, 8};
+
 static uint8_t yellow_sphere_offsets[14] =
     {28 /* center sphere */, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
 
@@ -391,6 +394,7 @@ void handle_animations(track *track, float time)
   float trigger0_val = sync_event_get_value(track, TRIGGER_0, time);
 
 // scenes
+#define SCENE_GOOD1 0
 #define SCENE_YELLOW_SUBMARINE 1
 #define SCENE_MARBLES 4
 #define SCENE_GOOD7 6
@@ -402,135 +406,59 @@ void handle_animations(track *track, float time)
     logc("active_scene_changed to %d", active_scene_id);
   }
 
-  // SCENE_YELLOW_SUBMARINE
-  if (active_scene_id == SCENE_YELLOW_SUBMARINE)
+  // SCENE_GOOD1
+  if (active_scene_id == SCENE_GOOD1)
   {
-    uint8_t yellow_sphere_offsets_cnt = sizeof(yellow_sphere_offsets) / sizeof(yellow_sphere_offsets[0]);
+    // use trigger0 to disable one of the lights
+    uint8_t good1_light_offsets_cnt = sizeof(good1_light_offsets) / sizeof(good1_light_offsets[0]);
 
-    // init
-    if (active_scene_changed)
+    // enable all
+    for (uint8_t i = 0; i < good1_light_offsets_cnt; i++)
     {
-      for (uint8_t i = 0; i < yellow_sphere_offsets_cnt; i++)
-      {
-        uint8_t offset = yellow_sphere_offsets[i];
-        inst_info *inst_info = &scene->inst_info[offset];
-        mat4_copy(animation_transforms[i], inst_info->transform);
-      }
+      uint8_t offset = good1_light_offsets[i];
+      inst_info *inst_info = &scene->inst_info[offset];
+      scene_clr_inst_state(scene, offset, IS_DISABLED);
     }
 
-    // TODO grab center ob sphere offset 0
-    mat4 center_sphere_mat;
-    mat4_copy(center_sphere_mat, animation_transforms[0]);
-    vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
-
-    if (active_scene_changed)
+    // disable the one marked by trigger0
+    uint8_t light_index_trigger0 = (uint8_t)trigger0_val;
+    if (light_index_trigger0 > 0 && light_index_trigger0 < good1_light_offsets_cnt)
     {
-      vec3_logc("center_sphere_pos: ", center_sphere_pos);
-    }
-
-    // TODO translate all other spheres by this offset and rotate them
-    for (uint8_t i = 1; i < yellow_sphere_offsets_cnt; i++)
-    {
-      uint8_t offset = yellow_sphere_offsets[i];
-
-      mat4 sphere_mat;
-      mat4_copy(sphere_mat, animation_transforms[i]);
-      vec3 sphere_pos = mat4_get_trans(sphere_mat);
-
-      // sub center sphere translation from sphere pos
-      sphere_pos = vec3_sub(sphere_pos, center_sphere_pos);
-
-      sphere_mat[3] = sphere_pos.x;
-      sphere_mat[7] = sphere_pos.y;
-      sphere_mat[11] = sphere_pos.z;
-
-      float rot = time;
-      mat4 sphere_rot_x;
-      mat4 sphere_rot_y;
-      mat4_rot_x(sphere_rot_x, rot);
-      mat4_rot_y(sphere_rot_y, rot);
-      mat4_mul(sphere_mat, sphere_rot_x, sphere_mat);
-      mat4_mul(sphere_mat, sphere_rot_y, sphere_mat);
-
-      sphere_mat[3] += center_sphere_pos.x;
-      sphere_mat[7] += center_sphere_pos.y;
-      sphere_mat[11] += center_sphere_pos.z;
-
-      if (active_scene_changed)
-      {
-        vec3_logc("sphere_pos: ", sphere_pos);
-      }
-
-      scene_upd_inst_trans(scene, offset, sphere_mat);
-    }
-  }
-  else if (active_scene_id == SCENE_MARBLES)
-  {
-    uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
-
-    // init
-    if (active_scene_changed)
-    {
-      for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-      {
-        uint8_t offset = marble_sphere_offsets[i];
-        inst_info *inst_info = &scene->inst_info[offset];
-        mat4_copy(animation_transforms[i], inst_info->transform);
-      }
-    }
-
-    // animate only if trigger0 > 0
-    if (trigger0_val > 0)
-    {
-      for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-      {
-        uint8_t offset = marble_sphere_offsets[i];
-
-        mat4 transform;
-        mat4_copy(transform, animation_transforms[i]);
-
-        float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
-
-        // add trigger0 to control scale
-        // scale *= + trigger0_val;
-
-        vec3 scale_vec = {scale, scale, scale};
-        mat4 scale_mat;
-        mat4_scale(scale_mat, scale_vec);
-        mat4_mul(transform, transform, scale_mat);
-
-        scene_upd_inst_trans(scene, offset, transform);
-      }
+      uint8_t offset = good1_light_offsets[light_index_trigger0];
+      scene_set_inst_state(scene, offset, IS_DISABLED);
     }
   }
   else
-    // SCENE_GOOD7
-    if (active_scene_id == SCENE_GOOD7)
+    // SCENE_YELLOW_SUBMARINE
+    if (active_scene_id == SCENE_YELLOW_SUBMARINE)
     {
-#define OFFSETS good7_sphere_offsets
-      uint8_t *offsets = OFFSETS;
-      uint8_t offsets_cnt = sizeof(OFFSETS) / sizeof(OFFSETS[0]);
+      uint8_t yellow_sphere_offsets_cnt = sizeof(yellow_sphere_offsets) / sizeof(yellow_sphere_offsets[0]);
 
       // init
       if (active_scene_changed)
       {
-        for (uint8_t i = 0; i < offsets_cnt; i++)
+        for (uint8_t i = 0; i < yellow_sphere_offsets_cnt; i++)
         {
-          uint8_t offset = offsets[i];
+          uint8_t offset = yellow_sphere_offsets[i];
           inst_info *inst_info = &scene->inst_info[offset];
           mat4_copy(animation_transforms[i], inst_info->transform);
         }
       }
 
-      // grab center ob sphere offset 0
+      // TODO grab center ob sphere offset 0
       mat4 center_sphere_mat;
       mat4_copy(center_sphere_mat, animation_transforms[0]);
       vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
 
-      // translate all other spheres by this offset and rotate them
-      for (uint8_t i = 1; i < offsets_cnt; i++)
+      if (active_scene_changed)
       {
-        uint8_t offset = offsets[i];
+        vec3_logc("center_sphere_pos: ", center_sphere_pos);
+      }
+
+      // TODO translate all other spheres by this offset and rotate them
+      for (uint8_t i = 1; i < yellow_sphere_offsets_cnt; i++)
+      {
+        uint8_t offset = yellow_sphere_offsets[i];
 
         mat4 sphere_mat;
         mat4_copy(sphere_mat, animation_transforms[i]);
@@ -543,15 +471,22 @@ void handle_animations(track *track, float time)
         sphere_mat[7] = sphere_pos.y;
         sphere_mat[11] = sphere_pos.z;
 
-        // mul by trigger0 to switch direction
-        float rot = time * trigger0_val;
+        float rot = time;
+        mat4 sphere_rot_x;
         mat4 sphere_rot_y;
+        mat4_rot_x(sphere_rot_x, rot);
         mat4_rot_y(sphere_rot_y, rot);
+        mat4_mul(sphere_mat, sphere_rot_x, sphere_mat);
         mat4_mul(sphere_mat, sphere_rot_y, sphere_mat);
 
         sphere_mat[3] += center_sphere_pos.x;
         sphere_mat[7] += center_sphere_pos.y;
         sphere_mat[11] += center_sphere_pos.z;
+
+        if (active_scene_changed)
+        {
+          vec3_logc("sphere_pos: ", sphere_pos);
+        }
 
         scene_upd_inst_trans(scene, offset, sphere_mat);
       }
@@ -571,8 +506,8 @@ void handle_animations(track *track, float time)
         }
       }
 
-      // bool animate = scene_time > 4.f;
-      if (true)
+      // animate only if trigger0 > 0
+      if (trigger0_val > 0)
       {
         for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
         {
@@ -582,6 +517,10 @@ void handle_animations(track *track, float time)
           mat4_copy(transform, animation_transforms[i]);
 
           float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
+
+          // add trigger0 to control scale
+          // scale *= + trigger0_val;
+
           vec3 scale_vec = {scale, scale, scale};
           mat4 scale_mat;
           mat4_scale(scale_mat, scale_vec);
@@ -592,40 +531,128 @@ void handle_animations(track *track, float time)
       }
     }
     else
-      // SCENE_GOOD9
-      if (active_scene_id == SCENE_GOOD9)
+      // SCENE_GOOD7
+      if (active_scene_id == SCENE_GOOD7)
       {
+#define OFFSETS good7_sphere_offsets
+        uint8_t *offsets = OFFSETS;
+        uint8_t offsets_cnt = sizeof(OFFSETS) / sizeof(OFFSETS[0]);
+
         // init
         if (active_scene_changed)
         {
-          uint8_t offset = good9_cylinder_offset;
-          inst_info *inst_info = &scene->inst_info[offset];
-          mat4_copy(animation_transforms[0], inst_info->transform);
-
-          logc("cylinder start");
+          for (uint8_t i = 0; i < offsets_cnt; i++)
+          {
+            uint8_t offset = offsets[i];
+            inst_info *inst_info = &scene->inst_info[offset];
+            mat4_copy(animation_transforms[i], inst_info->transform);
+          }
         }
 
-        // grab center ob cylinder
-        mat4 cylinder_mat;
-        mat4_copy(cylinder_mat, animation_transforms[0]);
+        // grab center ob sphere offset 0
+        mat4 center_sphere_mat;
+        mat4_copy(center_sphere_mat, animation_transforms[0]);
+        vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
 
-        vec3 cylinder_pos = mat4_get_trans(cylinder_mat);
+        // translate all other spheres by this offset and rotate them
+        for (uint8_t i = 1; i < offsets_cnt; i++)
+        {
+          uint8_t offset = offsets[i];
 
-        cylinder_mat[3] = 0.f;
-        cylinder_mat[7] = 0.f;
-        cylinder_mat[11] = 0.f;
+          mat4 sphere_mat;
+          mat4_copy(sphere_mat, animation_transforms[i]);
+          vec3 sphere_pos = mat4_get_trans(sphere_mat);
 
-        float rot = time;
-        mat4 cylinder_rot_y;
-        mat4_rot_y(cylinder_rot_y, rot);
-        mat4_mul(cylinder_mat, cylinder_rot_y, cylinder_mat);
+          // sub center sphere translation from sphere pos
+          sphere_pos = vec3_sub(sphere_pos, center_sphere_pos);
 
-        cylinder_mat[3] = cylinder_pos.x;
-        cylinder_mat[7] = cylinder_pos.y;
-        cylinder_mat[11] = cylinder_pos.z;
+          sphere_mat[3] = sphere_pos.x;
+          sphere_mat[7] = sphere_pos.y;
+          sphere_mat[11] = sphere_pos.z;
 
-        scene_upd_inst_trans(scene, good9_cylinder_offset, cylinder_mat);
+          // mul by trigger0 to switch direction
+          float rot = time * trigger0_val;
+          mat4 sphere_rot_y;
+          mat4_rot_y(sphere_rot_y, rot);
+          mat4_mul(sphere_mat, sphere_rot_y, sphere_mat);
+
+          sphere_mat[3] += center_sphere_pos.x;
+          sphere_mat[7] += center_sphere_pos.y;
+          sphere_mat[11] += center_sphere_pos.z;
+
+          scene_upd_inst_trans(scene, offset, sphere_mat);
+        }
       }
+      else if (active_scene_id == SCENE_MARBLES)
+      {
+        uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
+
+        // init
+        if (active_scene_changed)
+        {
+          for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
+          {
+            uint8_t offset = marble_sphere_offsets[i];
+            inst_info *inst_info = &scene->inst_info[offset];
+            mat4_copy(animation_transforms[i], inst_info->transform);
+          }
+        }
+
+        // bool animate = scene_time > 4.f;
+        if (true)
+        {
+          for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
+          {
+            uint8_t offset = marble_sphere_offsets[i];
+
+            mat4 transform;
+            mat4_copy(transform, animation_transforms[i]);
+
+            float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
+            vec3 scale_vec = {scale, scale, scale};
+            mat4 scale_mat;
+            mat4_scale(scale_mat, scale_vec);
+            mat4_mul(transform, transform, scale_mat);
+
+            scene_upd_inst_trans(scene, offset, transform);
+          }
+        }
+      }
+      else
+        // SCENE_GOOD9
+        if (active_scene_id == SCENE_GOOD9)
+        {
+          // init
+          if (active_scene_changed)
+          {
+            uint8_t offset = good9_cylinder_offset;
+            inst_info *inst_info = &scene->inst_info[offset];
+            mat4_copy(animation_transforms[0], inst_info->transform);
+
+            logc("cylinder start");
+          }
+
+          // grab center ob cylinder
+          mat4 cylinder_mat;
+          mat4_copy(cylinder_mat, animation_transforms[0]);
+
+          vec3 cylinder_pos = mat4_get_trans(cylinder_mat);
+
+          cylinder_mat[3] = 0.f;
+          cylinder_mat[7] = 0.f;
+          cylinder_mat[11] = 0.f;
+
+          float rot = time;
+          mat4 cylinder_rot_y;
+          mat4_rot_y(cylinder_rot_y, rot);
+          mat4_mul(cylinder_mat, cylinder_rot_y, cylinder_mat);
+
+          cylinder_mat[3] = cylinder_pos.x;
+          cylinder_mat[7] = cylinder_pos.y;
+          cylinder_mat[11] = cylinder_pos.z;
+
+          scene_upd_inst_trans(scene, good9_cylinder_offset, cylinder_mat);
+        }
 
 #if false  
   if (active_scene_id == SCENE_DISCO)
