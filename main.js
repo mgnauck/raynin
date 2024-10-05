@@ -658,7 +658,7 @@ const SCENES_TO_LOAD = [
   "good_10.gltf",
   "end.gltf",
 ];//*/
-const EXPORT_BIN_TO_DISK = false && LOAD_FROM_GLTF;
+const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 const DO_NOT_LOAD_FROM_JS = false && !LOAD_FROM_GLTF;
 
