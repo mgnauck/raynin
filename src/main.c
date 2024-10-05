@@ -389,7 +389,7 @@ static float last_disco_change = 0.f;
 static disco_entry disco_offsets[3] =
     {{{20, 30, 25}, 0},
      {{26, 21, 31}, 0},
-     {{9, 24, 34}, 0}};
+     {{29, 24, 34}, 0}};
 
 void handle_animations(track *track, float time)
 {
