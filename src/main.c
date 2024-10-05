@@ -18,9 +18,9 @@
 #include "sync/sync_types.h"
 #include "util/vec3.h"
 
-//#define NO_CONTROL
-//#define TINY_BUILD
-//#define LOAD_EMBEDDED_DATA
+// #define NO_CONTROL
+// #define TINY_BUILD
+// #define LOAD_EMBEDDED_DATA
 
 #ifdef LOAD_EMBEDDED_DATA
 #include "scene_data.h"
@@ -39,9 +39,10 @@ bool active_post = false;
 track intro;
 
 // Animations
-#define ANIMATION_MAX_TRANSFORMS 50
+#define ANIMATION_MAX_TRANSFORMS 75
 float active_scene_time = 0.f;
 bool active_scene_changed = false;
+bool active_cam_changed = false;
 mat4 animation_transforms[ANIMATION_MAX_TRANSFORMS];
 
 #ifndef NO_CONTROL
@@ -336,7 +337,7 @@ void process_events(track *track, float time)
   }
 
   float val = sync_event_get_value(track, FADE_VAL, time);
-  if(val != EVENT_INACTIVE)
+  if (val != EVENT_INACTIVE)
   {
     post.fade_col.x = sync_event_get_value(track, FADE_COL_R, time);
     post.fade_col.y = sync_event_get_value(track, FADE_COL_G, time);
@@ -352,14 +353,6 @@ static uint8_t yellow_sphere_offsets[14] =
     {28 /* center sphere */, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
 
 // TODO: 'Sphere.009' does not exist as a node
-/*static uint8_t marble_sphere_offsets[42] =
-    {41, 42, 0, 1, 43, 2, 44, 3,
-     5, 4, 6, 45, 8, 7, 46, 9,
-     10, 47, 48, 11, 12, 49, 13, 14,
-     15, 50, 17, 16, 18, 51, 52, 19,
-     20, 21, 53, 22, 23, 24, 54, 55,
-     25, 26};*/
-
 static uint8_t marble_sphere_offsets[43] =
     {37, 38, 0, 1, 39, 2, 40, 3, 4, 5,
      6, 41, 7, 8, 42, 9, 10, 43, 44, 11,
@@ -368,6 +361,14 @@ static uint8_t marble_sphere_offsets[43] =
      25, 52, 26};
 
 // immer 4 sagen
+
+static uint8_t good7_sphere_offsets[58] =
+    {57 /* center sphere */, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+     17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+     27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+     37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
+     47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
+     70, 71, 72, 73, 74, 75, 76, 77};
 
 /*
 static uint8_t disco_offsets[] =
@@ -378,18 +379,19 @@ static uint8_t disco_offsets[] =
      25, 52, 26};
 */
 
-void handle_animations(float time)
+void handle_animations(track *track, float time)
 {
   // time is relative to when the scene became active
   float scene_time = time - active_scene_time;
   scene *scene = active_scene;
 
-// DISABLED
-#if true
+  // get trigger values
+  float trigger0_val = sync_event_get_value(track, TRIGGER_0, time);
 
 // scenes
 #define SCENE_YELLOW_SUBMARINE 1
 #define SCENE_MARBLES 4
+#define SCENE_GOOD7 6
 #define SCENE_DISCO 9
 
   if (active_scene_changed)
@@ -397,6 +399,7 @@ void handle_animations(float time)
     logc("active_scene_changed to %d", active_scene_id);
   }
 
+  // SCENE_YELLOW_SUBMARINE
   if (active_scene_id == SCENE_YELLOW_SUBMARINE)
   {
     uint8_t yellow_sphere_offsets_cnt = sizeof(yellow_sphere_offsets) / sizeof(yellow_sphere_offsets[0]);
@@ -412,7 +415,6 @@ void handle_animations(float time)
       }
     }
 
-    // TODO animate
     // TODO grab center ob sphere offset 0
     mat4 center_sphere_mat;
     mat4_copy(center_sphere_mat, animation_transforms[0]);
@@ -457,46 +459,150 @@ void handle_animations(float time)
       }
 
       scene_upd_inst_trans(scene, offset, sphere_mat);
+    }
+  }
+  else if (active_scene_id == SCENE_MARBLES)
+  {
+    uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
 
-#if false
-      mat4 sphere_mat;
-      mat4_copy(sphere_mat, animation_transforms[i]);
-      vec3 sphere_translation = mat4_get_trans(sphere_mat);
-
-      // subtract center sphere translation from sphere
-      vec3_sub(sphere_translation, center_sphere_translation);
-
-      // TODO rotate sphere
-      mat4 sphere_mat_trans;
-      mat4_copy(sphere_mat_trans, sphere_mat);
-
-#if false
-      float rot = time;
-
-      mat4 sphere_mat_rot_x;
-      mat4 sphere_mat_rot_y;
-      mat4 sphere_mat_rot_z;
-      mat4_rot_x(sphere_mat_rot_x, rot);
-      mat4_rot_y(sphere_mat_rot_y, rot);
-      mat4_rot_z(sphere_mat_rot_z, rot);
-
-      mat4_mul(sphere_mat_trans, sphere_mat_trans, sphere_mat_rot_x);
-      mat4_mul(sphere_mat_trans, sphere_mat_trans, sphere_mat_rot_y);
-      mat4_mul(sphere_mat_trans, sphere_mat_trans, sphere_mat_rot_z);
-#endif
-
-      // mat4_trans(sphere_mat_trans)
-
-      if (active_scene_changed)
+    // init
+    if (active_scene_changed)
+    {
+      for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
       {
-        vec3_logc("sphere_translation: ", sphere_translation);
+        uint8_t offset = marble_sphere_offsets[i];
+        inst_info *inst_info = &scene->inst_info[offset];
+        mat4_copy(animation_transforms[i], inst_info->transform);
       }
-
-      scene_upd_inst_trans(scene, offset, sphere_mat_trans);
-      //scene_set_inst_state(scene, yellow_sphere_offsets[0], IS_DISABLED);
-#endif
     }
 
+    // animate only if trigger0 > 0
+    if (trigger0_val > 0)
+    {
+      for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
+      {
+        uint8_t offset = marble_sphere_offsets[i];
+
+        mat4 transform;
+        mat4_copy(transform, animation_transforms[i]);
+
+        float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
+
+        // add trigger0 to control scale
+        //scale *= + trigger0_val;
+
+        vec3 scale_vec = {scale, scale, scale};
+        mat4 scale_mat;
+        mat4_scale(scale_mat, scale_vec);
+        mat4_mul(transform, transform, scale_mat);
+
+        scene_upd_inst_trans(scene, offset, transform);
+      }
+    }
+  }
+  else
+    // SCENE_GOOD7
+    if (active_scene_id == SCENE_GOOD7)
+    {
+#define OFFSETS good7_sphere_offsets
+      uint8_t *offsets = OFFSETS;
+      uint8_t offsets_cnt = sizeof(OFFSETS) / sizeof(OFFSETS[0]);
+
+      // init
+      if (active_scene_changed)
+      {
+        for (uint8_t i = 0; i < offsets_cnt; i++)
+        {
+          uint8_t offset = offsets[i];
+          inst_info *inst_info = &scene->inst_info[offset];
+          mat4_copy(animation_transforms[i], inst_info->transform);
+        }
+      }
+
+      // grab center ob sphere offset 0
+      mat4 center_sphere_mat;
+      mat4_copy(center_sphere_mat, animation_transforms[0]);
+      vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
+
+      // translate all other spheres by this offset and rotate them
+      for (uint8_t i = 1; i < offsets_cnt; i++)
+      {
+        uint8_t offset = offsets[i];
+
+        mat4 sphere_mat;
+        mat4_copy(sphere_mat, animation_transforms[i]);
+        vec3 sphere_pos = mat4_get_trans(sphere_mat);
+
+        // sub center sphere translation from sphere pos
+        sphere_pos = vec3_sub(sphere_pos, center_sphere_pos);
+
+        sphere_mat[3] = sphere_pos.x;
+        sphere_mat[7] = sphere_pos.y;
+        sphere_mat[11] = sphere_pos.z;
+
+        // mul by trigger0 to switch direction
+        float rot = time * trigger0_val;
+        mat4 sphere_rot_y;
+        mat4_rot_y(sphere_rot_y, rot);
+        mat4_mul(sphere_mat, sphere_rot_y, sphere_mat);
+
+        sphere_mat[3] += center_sphere_pos.x;
+        sphere_mat[7] += center_sphere_pos.y;
+        sphere_mat[11] += center_sphere_pos.z;
+
+        scene_upd_inst_trans(scene, offset, sphere_mat);
+      }
+    }
+    else if (active_scene_id == SCENE_MARBLES)
+    {
+      uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
+
+      // init
+      if (active_scene_changed)
+      {
+        for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
+        {
+          uint8_t offset = marble_sphere_offsets[i];
+          inst_info *inst_info = &scene->inst_info[offset];
+          mat4_copy(animation_transforms[i], inst_info->transform);
+        }
+      }
+
+      // bool animate = scene_time > 4.f;
+      if (true)
+      {
+        for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
+        {
+          uint8_t offset = marble_sphere_offsets[i];
+
+          mat4 transform;
+          mat4_copy(transform, animation_transforms[i]);
+
+          float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
+          vec3 scale_vec = {scale, scale, scale};
+          mat4 scale_mat;
+          mat4_scale(scale_mat, scale_vec);
+          mat4_mul(transform, transform, scale_mat);
+
+          scene_upd_inst_trans(scene, offset, transform);
+        }
+      }
+    }
+
+#if false  
+  if (active_scene_id == SCENE_DISCO)
+  {
+    uint8_t disco_offsets_cnt = sizeof(disco_offsets) / sizeof(disco_offsets[0]);
+
+    // init
+    if (active_scene_changed)
+    {
+      // TODO
+    }
+
+    // TODO
+  }
+#endif
 #if false
     // DEBUG
     bool disabled = (((int)scene_time) % 2) > 0;
@@ -514,68 +620,6 @@ void handle_animations(float time)
       }
     }
 #endif
-  }
-  else if (active_scene_id == SCENE_MARBLES)
-  {
-    uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
-
-    // init
-    if (active_scene_changed)
-    {
-      for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-      {
-        uint8_t offset = marble_sphere_offsets[i];
-        inst_info *inst_info = &scene->inst_info[offset];
-        mat4_copy(animation_transforms[i], inst_info->transform);
-      }
-    }
-
-    // animate
-    bool disabled = (((int)scene_time) % 2) > 0;
-    for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-    {
-      uint8_t offset = marble_sphere_offsets[i];
-
-      mat4 transform;
-      mat4_copy(transform, animation_transforms[i]);
-
-      float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
-      vec3 scale_vec = {scale, scale, scale};
-      mat4 scale_mat;
-      mat4_scale(scale_mat, scale_vec);
-      mat4_mul(transform, transform, scale_mat);
-
-      scene_upd_inst_trans(scene, offset, transform);
-
-// TODO on/off for emissive objects?
-#if false
-      if (disabled)
-      {
-        scene_set_inst_state(scene, offset, IS_DISABLED);
-      }
-      else
-      {
-        scene_clr_inst_state(scene, offset, IS_DISABLED);
-      }
-#endif
-    }
-  }
-#if false  
-  if (active_scene_id == SCENE_DISCO)
-  {
-    uint8_t disco_offsets_cnt = sizeof(disco_offsets) / sizeof(disco_offsets[0]);
-
-    // init
-    if (active_scene_changed)
-    {
-      // TODO
-    }
-
-    // TODO
-  }
-#endif
-
-#endif
 
   // reset active scene changed
   active_scene_changed = false;
@@ -587,7 +631,7 @@ __attribute__((visibility("default"))) bool update(float time, bool converge, bo
   if (run_track && !finished)
     process_events(&intro, time);
 
-  handle_animations(time);
+  handle_animations(&intro, time);
   renderer_update(active_scene, active_post ? &post : NULL, converge);
   set_ltri_cnt(active_scene->ltri_cnt);
 
