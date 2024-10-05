@@ -1,7 +1,7 @@
 // Sync track
 const PLAY_SYNC_TRACK = true;
 const LOOP_SYNC_TRACK = false;
-const START_AT_SEQUENCE = 0; // 21; // 2;
+const START_AT_SEQUENCE = 0; // 15; // 21; // 2;
 const TRACK = [
   // Row, ev id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
 
@@ -241,6 +241,9 @@ const TRACK = [
 
  640,    0,        4,  0, // SCN_ID
 
+ //ANIM
+ 640,   20,      0.0,  0, // TRIGGER_0
+
  //KEY1
  640,    5,  -63.381,  2, // CAM_POS_X
  640,    6,   20.749,  2, // CAM_POS_Y
@@ -266,15 +269,18 @@ const TRACK = [
  672,    9,    0.024,  1, // CAM_DIR_Y
  672,   10,    0.017,  1, // CAM_DIR_Z
  
-  //KEY2
-  703,    5,  -34.472,  0, // CAM_POS_X
-  703,    6,   18.049,  0, // CAM_POS_Y
-  703,    7,   21.454,  0, // CAM_POS_Z
-  703,    8,   -0.937,  0, // CAM_DIR_X
-  703,    9,   -0.008,  0, // CAM_DIR_Y
-  703,   10,    0.349,  0, // CAM_DIR_Z
-  703,   11,   40.312,  0, // CAM_FOV
-   
+ //KEY2
+ 703,    5,  -34.472,  0, // CAM_POS_X
+ 703,    6,   18.049,  0, // CAM_POS_Y
+ 703,    7,   21.454,  0, // CAM_POS_Z
+ 703,    8,   -0.937,  0, // CAM_DIR_X
+ 703,    9,   -0.008,  0, // CAM_DIR_Y
+ 703,   10,    0.349,  0, // CAM_DIR_Z
+ 703,   11,   40.312,  0, // CAM_FOV
+ 
+ //ANIM
+ 704,   20,      1.0,  1, // TRIGGER_0
+ 
 //KEY1
 
  704,    5,  -11.548,  2, // CAM_POS_X
@@ -303,7 +309,8 @@ const TRACK = [
  768,    9,    0.884,  1, // CAM_DIR_Y
  768,   10,    0.251,  1, // CAM_DIR_Z
 
-
+ //ANIM
+ 768,   20,      2.0,  0, // TRIGGER_0
 
 //KEY2
 
@@ -382,6 +389,9 @@ const TRACK = [
 
  960,    0,        6,  0, // SCN_ID
 
+ //ANIM
+ 960,   20,      1.0,  0, // TRIGGER_0
+
  //KEY1
  960,   4,       1.0,  3, // FADE_VAL
  960,    5,   33.345,  2, // CAM_POS_X
@@ -401,6 +411,9 @@ const TRACK = [
  991,    8,    0.710,  0, // CAM_DIR_X
  991,    9,    0.014,  0, // CAM_DIR_Y
  991,   10,    0.704,  0, // CAM_DIR_Z
+
+//ANIM
+ 992,   20,     -1.0,  0, // TRIGGER_0
 
  992,   4,       1.0,  3, // FADE_VAL
  //KEY1
@@ -429,6 +442,9 @@ const TRACK = [
  1023,    9,    0.002,  0, // CAM_DIR_Y
  1023,   10,    0.451,  0, // CAM_DIR_Z
 
+//ANIM
+ 1024,   20,      1.0,  0, // TRIGGER_0
+
  //KEY1
 
  1024,    5,   32.334,  1, // CAM_POS_X
@@ -446,6 +462,9 @@ const TRACK = [
  1055,    8,    0.401,  0, // CAM_DIR_X
  1055,    9,   -0.046,  0, // CAM_DIR_Y
  1055,   10,    0.915,  0, // CAM_DIR_Z
+
+//ANIM
+ 1056,   20,     -1.0,  0, // TRIGGER_0
 
  //KEY1
 
