@@ -350,7 +350,8 @@ void process_events(track *track, float time)
 }
 
 static uint8_t good1_light_offsets[14] =
-    {11, 15, 13, 2, 4, 8};
+    //    {11, 15, 13, 2, 4, 8};
+    {9, 13, 11, 2, 4, 6};
 
 static uint8_t torus_offsets[3] =
     {33 /* center sphere */, 37, 38};
@@ -490,53 +491,53 @@ void handle_animations(track *track, float time)
     }
     else if (active_scene_id == SCENE_TORUS)
     {
-        uint8_t *offsets = torus_offsets;
-        uint8_t offsets_cnt = sizeof(torus_offsets) / sizeof(torus_offsets[0]);
+      uint8_t *offsets = torus_offsets;
+      uint8_t offsets_cnt = sizeof(torus_offsets) / sizeof(torus_offsets[0]);
 
-        // init
-        if (active_scene_changed)
-        {
-          for (uint8_t i = 0; i < offsets_cnt; i++)
-          {
-            uint8_t offset = offsets[i];
-            inst_info *inst_info = &scene->inst_info[offset];
-            mat4_copy(animation_transforms[i], inst_info->transform);
-          }
-        }
-
-        // grab center ob sphere offset 0
-        mat4 center_sphere_mat;
-        mat4_copy(center_sphere_mat, animation_transforms[0]);
-        vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
-
-        // translate all other spheres by this offset and rotate them
-        for (uint8_t i = 1; i < offsets_cnt; i++)
+      // init
+      if (active_scene_changed)
+      {
+        for (uint8_t i = 0; i < offsets_cnt; i++)
         {
           uint8_t offset = offsets[i];
-
-          mat4 sphere_mat;
-          mat4_copy(sphere_mat, animation_transforms[i]);
-          vec3 sphere_pos = mat4_get_trans(sphere_mat);
-
-          // sub center sphere translation from sphere pos
-          sphere_pos = vec3_sub(sphere_pos, center_sphere_pos);
-
-          sphere_mat[3] = sphere_pos.x;
-          sphere_mat[7] = sphere_pos.y;
-          sphere_mat[11] = sphere_pos.z;
-
-          // mul by trigger0 to switch direction
-          float rot = time * 0.25f;
-          mat4 sphere_rot_y;
-          mat4_rot_y(sphere_rot_y, rot);
-          mat4_mul(sphere_mat, sphere_rot_y, sphere_mat);
-
-          sphere_mat[3] += center_sphere_pos.x;
-          sphere_mat[7] += center_sphere_pos.y;
-          sphere_mat[11] += center_sphere_pos.z;
-
-          scene_upd_inst_trans(scene, offset, sphere_mat);
+          inst_info *inst_info = &scene->inst_info[offset];
+          mat4_copy(animation_transforms[i], inst_info->transform);
         }
+      }
+
+      // grab center ob sphere offset 0
+      mat4 center_sphere_mat;
+      mat4_copy(center_sphere_mat, animation_transforms[0]);
+      vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
+
+      // translate all other spheres by this offset and rotate them
+      for (uint8_t i = 1; i < offsets_cnt; i++)
+      {
+        uint8_t offset = offsets[i];
+
+        mat4 sphere_mat;
+        mat4_copy(sphere_mat, animation_transforms[i]);
+        vec3 sphere_pos = mat4_get_trans(sphere_mat);
+
+        // sub center sphere translation from sphere pos
+        sphere_pos = vec3_sub(sphere_pos, center_sphere_pos);
+
+        sphere_mat[3] = sphere_pos.x;
+        sphere_mat[7] = sphere_pos.y;
+        sphere_mat[11] = sphere_pos.z;
+
+        // mul by trigger0 to switch direction
+        float rot = time * 0.25f;
+        mat4 sphere_rot_y;
+        mat4_rot_y(sphere_rot_y, rot);
+        mat4_mul(sphere_mat, sphere_rot_y, sphere_mat);
+
+        sphere_mat[3] += center_sphere_pos.x;
+        sphere_mat[7] += center_sphere_pos.y;
+        sphere_mat[11] += center_sphere_pos.z;
+
+        scene_upd_inst_trans(scene, offset, sphere_mat);
+      }
     }
     else if (active_scene_id == SCENE_MARBLES)
     {
