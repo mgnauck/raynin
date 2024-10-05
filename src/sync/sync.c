@@ -77,6 +77,8 @@ void sync_index_track(track *t)
       event *e = &t->events[i];
       if(beg < 0 && e->id == j) {
         beg = i;
+        if(i == t->event_cnt - 1)
+          end = i;
         continue;
       }
       if(beg >= 0 && (e->id > j || i == t->event_cnt - 1)) {
