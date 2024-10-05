@@ -18,13 +18,13 @@ const TRACK = [
  0,   10,   -0.958,  1, // CAM_DIR_Z
  
  // SETTING COLOR TO BLACK
- 0,   20,      0.0,  0, // FADE_COL_R
- 0,   21,      0.0,  0, // FADE_COL_G
- 0,   22,      0.0,  0, // FADE_COL_B
- 0,   23,      1.0,  3, // FADE_VAL
+ 0,   1,      0.0,  0, // FADE_COL_R
+ 0,   2,      0.0,  0, // FADE_COL_G
+ 0,   3,      0.0,  0, // FADE_COL_B
+ 0,   4,      1.0,  3, // FADE_VAL
 
- 32,   23,       0,  0, // FADE_VAL
- 112,   23,       0,  2, // FADE_VAL
+ 32,   4,       0,  0, // FADE_VAL
+ 112,  4,       0,  2, // FADE_VAL
 
  //KEY2
 
@@ -35,7 +35,7 @@ const TRACK = [
  127,    9,    0.022,  0, // CAM_DIR_Y
  127,   10,   -0.955,  0, // CAM_DIR_Z
 
- 127,   23,      1.0,  0, // FADE_VAL
+ 127,   4,      1.0,  0, // FADE_VAL
 
  // ************************ SCENE 1 ************************
 
@@ -50,13 +50,13 @@ const TRACK = [
  128,    9,   -0.074,  2, // CAM_DIR_Y
  128,   10,    0.997,  2, // CAM_DIR_Z
 
- 128,   23,       0,  0, // FADE_VAL
+ 128,   4,       0,  0, // FADE_VAL
 
 // SETTING COLOR TO WHITE
- 129,   20,      1.0,  0, // FADE_COL_R
- 129,   21,      1.0,  0, // FADE_COL_G
- 129,   22,      1.0,  0, // FADE_COL_B
- 129,   23,      0.0,  0, // FADE_VAL
+ 129,   1,      1.0,  0, // FADE_COL_R
+ 129,   2,      1.0,  0, // FADE_COL_G
+ 129,   3,      1.0,  0, // FADE_COL_B
+ 129,   4,      0.0,  0, // FADE_VAL
 
  //KEY2
  190,    5,    2.609,  0, // CAM_POS_X
@@ -144,8 +144,8 @@ const TRACK = [
  384,    8,   -0.016,  1, // CAM_DIR_X
  384,    9,    0.014,  1, // CAM_DIR_Y
  384,   10,    1.000,  1, // CAM_DIR_Z
- 384,   23,       1.0,  3, // FADE_VAL
- 387,   23,       0.0,  0, // FADE_VAL
+ 384,   4,       1.0,  3, // FADE_VAL
+ 387,   4,       0.0,  0, // FADE_VAL
 
  //KEY2
  447,    5,    3.920,  0, // CAM_POS_X
@@ -155,7 +155,7 @@ const TRACK = [
  447,    9,    0.004,  0, // CAM_DIR_Y
  447,   10,    1.000,  0, // CAM_DIR_Z
 
- 447,   23,       1.0,  3, // FADE_VAL
+ 447,   4,       1.0,  3, // FADE_VAL
 
  //KEY1
  448,    5,   -9.801,  1, // CAM_POS_X
@@ -165,7 +165,7 @@ const TRACK = [
  448,    9,   -0.011,  1, // CAM_DIR_Y
  448,   10,    1.000,  1, // CAM_DIR_Z
 
- 451,   23,       0.0,  0, // FADE_VAL
+ 451,   4,       0.0,  0, // FADE_VAL
 
 
  //KEY2
@@ -189,8 +189,8 @@ const TRACK = [
  512,   10,   -0.000,  2, // CAM_DIR_Z
  512,   11,   40.312,  2, // CAM_FOV
 
- 520,   23,       1.0,  3, // FADE_VAL
- 523,   23,       0.0,  0, // FADE_VAL
+ 520,   4,       1.0,  3, // FADE_VAL
+ 523,   4,       0.0,  0, // FADE_VAL
 
 //KEY2
 
@@ -359,7 +359,7 @@ const TRACK = [
 
  //KEY1
 
- 895,   23,       1.0,  3, // FADE_VAL
+ 895,   4,       1.0,  3, // FADE_VAL
 
  895,    5,    9.840,  2, // CAM_POS_X
  895,    6,   18.991,  2, // CAM_POS_Y
@@ -368,7 +368,7 @@ const TRACK = [
  895,    9,   -0.010,  2, // CAM_DIR_Y
  895,   10,    0.999,  2, // CAM_DIR_Z
 
- 898,   23,       0.0,  0, // FADE_VAL
+ 898,   4,       0.0,  0, // FADE_VAL
  //KEY2
 
  959,    5,    9.276,  0, // CAM_POS_X
@@ -383,7 +383,7 @@ const TRACK = [
  960,    0,        6,  0, // SCN_ID
 
  //KEY1
- 960,   23,       1.0,  3, // FADE_VAL
+ 960,   4,       1.0,  3, // FADE_VAL
  960,    5,   33.345,  2, // CAM_POS_X
  960,    6,   17.545,  2, // CAM_POS_Y
  960,    7,   38.925,  2, // CAM_POS_Z
@@ -391,7 +391,7 @@ const TRACK = [
  960,    9,    0.014,  2, // CAM_DIR_Y
  960,   10,    0.704,  2, // CAM_DIR_Z
 
- 963,   23,       0.0,  0, // FADE_VAL
+ 963,   4,       0.0,  0, // FADE_VAL
 
  //KEY2
 
@@ -402,7 +402,7 @@ const TRACK = [
  991,    9,    0.014,  0, // CAM_DIR_Y
  991,   10,    0.704,  0, // CAM_DIR_Z
 
- 992,   23,       1.0,  3, // FADE_VAL
+ 992,   4,       1.0,  3, // FADE_VAL
  //KEY1
  992,    5,    4.285,  3, // CAM_POS_X
  992,    6,   19.733,  3, // CAM_POS_Y
@@ -411,7 +411,7 @@ const TRACK = [
  992,    9,   -0.001,  3, // CAM_DIR_Y
  992,   10,    0.991,  3, // CAM_DIR_Z
 
- 995,   23,       0.0,  0, // FADE_VAL
+ 995,   4,       0.0,  0, // FADE_VAL
 
  //KEY2
  1015,    5,   25.865,  1, // CAM_POS_X
@@ -486,7 +486,7 @@ const TRACK = [
  1119,   10,   -0.582,  0, // CAM_DIR_Z
 
  //KEY1
- 1120,   23,       1.0,  3, // FADE_VAL
+ 1120,   4,       1.0,  3, // FADE_VAL
 
 
  1120,    5,   58.157,  1, // CAM_POS_X
@@ -496,7 +496,7 @@ const TRACK = [
  1120,    9,   -0.240,  1, // CAM_DIR_Y
  1120,   10,   -0.225,  1, // CAM_DIR_Z
 
- 1123,   23,       0.0,  0, // FADE_VAL
+ 1123,   4,       0.0,  0, // FADE_VAL
 
  //KEY2
 
@@ -604,7 +604,7 @@ const TRACK = [
  1344,    0,        9,  0, // SCN_ID
 
 //KEY1
- 1344,   23,       1.0,  3, // FADE_VAL
+ 1344,   4,       1.0,  3, // FADE_VAL
 
  1344,    5,  -38.184,  2, // CAM_POS_X
  1344,    6,   12.060,  2, // CAM_POS_Y
@@ -613,10 +613,10 @@ const TRACK = [
  1344,    9,   -0.006,  2, // CAM_DIR_Y
  1344,   10,    1.000,  2, // CAM_DIR_Z
 
- 1347,   23,       0.0,  0, // FADE_VAL
+ 1347,   4,       0.0,  0, // FADE_VAL
  //KEY2
 
- 1383,   23,       1.0,  3, // FADE_VAL
+ 1383,   4,       1.0,  3, // FADE_VAL
 
  1383,    5,    0.767,  0, // CAM_POS_X
  1383,    6,   15.749,  0, // CAM_POS_Y
@@ -625,7 +625,7 @@ const TRACK = [
  1383,    9,   -0.031,  0, // CAM_DIR_Y
  1383,   10,    1.000,  0, // CAM_DIR_Z
 
- 1386,   23,       0.0,  0, // FADE_VAL
+ 1386,   4,       0.0,  0, // FADE_VAL
 
 //KEY1
 
@@ -657,10 +657,10 @@ const TRACK = [
 
  // SETTING COLOR TO BLACK
 
- 1448,   20,      0.0,  0, // FADE_COL_R
- 1448,   21,      0.0,  0, // FADE_COL_G
- 1448,   22,      0.0,  0, // FADE_COL_B
- 1448,   23,      0.0,  3, // FADE_VAL
+ 1448,   1,      0.0,  0, // FADE_COL_R
+ 1448,   2,      0.0,  0, // FADE_COL_G
+ 1448,   3,      0.0,  0, // FADE_COL_B
+ 1448,   4,      0.0,  3, // FADE_VAL
 
 //KEY2
 
@@ -670,7 +670,7 @@ const TRACK = [
  1471,    8,   -0.014,  0, // CAM_DIR_X
  1471,    9,    0.034,  0, // CAM_DIR_Y
  1471,   10,    0.999,  0, // CAM_DIR_Z
- 1471,   23,      1.0,  0, // FADE_VAL
+ 1471,   4,      1.0,  0, // FADE_VAL
 
 // ************************ SCENE ENDE ************************
 
@@ -684,9 +684,9 @@ const TRACK = [
  1472,    9,   -0.001,  2, // CAM_DIR_Y
  1472,   10,    0.999,  2, // CAM_DIR_Z
 
- 1472,   23,      1.0,  1, // FADE_VAL
+ 1472,   4,      1.0,  1, // FADE_VAL
  
- 1488,   23,        0,  0, // FADE_VAL
+ 1488,   4,        0,  0, // FADE_VAL
 
  //KEY2
  1604,    5,    0.491,  0, // CAM_POS_X
@@ -696,8 +696,8 @@ const TRACK = [
  1604,    9,   -0.001,  0, // CAM_DIR_Y
  1604,   10,    0.999,  0, // CAM_DIR_Z
 
- 1698,   23,      0.0,  2, // FADE_VAL
- 1727,   23,      1.0,  0, // FADE_VAL
+ 1698,   4,      0.0,  2, // FADE_VAL
+ 1727,   4,      1.0,  0, // FADE_VAL
 
  //DUMMY
  2048,    5,    0.491,  0, // CAM_POS_X
@@ -711,21 +711,21 @@ const TRACK = [
 
 // Audio
 const ENABLE_AUDIO = true;
-const LOAD_AUDIO_FROM_FILE = true;
+const LOAD_AUDIO_FROM_FILE = false;
 const AUDIO_TO_LOAD = "tunes/tune.bkpo"
 const BPM = 125;
 const ROWS_PER_BEAT = 4;
 
 // Rendering
 const ENABLE_RENDER = true;
-const ENABLE_PRERENDER = false;
+const ENABLE_PRERENDER = true;
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 7.0;
 const WIDTH = 900; // 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 // Scene loading/export
-const LOAD_FROM_GLTF = true;
+const LOAD_FROM_GLTF = false;
 const PATH_TO_SCENES = "scenes/new/";
 const SCENES_TO_LOAD = [
   "good_1.gltf",
@@ -740,7 +740,7 @@ const SCENES_TO_LOAD = [
   "good_10.gltf",
   "end.gltf",
 ];//*/
-const EXPORT_BIN_TO_DISK = false && LOAD_FROM_GLTF;
+const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 const DO_NOT_LOAD_FROM_JS = false && !LOAD_FROM_GLTF;
 
@@ -773,6 +773,9 @@ END_denoise_wgsl`;
 
 const SM_BLIT = `BEGIN_blit_wgsl
 END_blit_wgsl`;
+
+const AUDIO = `BEGIN_audio_js
+END_audio_js`;
 
 const BUF_CAM = 0; // Accessed from WASM
 const BUF_MTL = 1; // Accessed from WASM
@@ -836,7 +839,6 @@ const WG_SIZE_Y = 16;
 
 let canvas, context, device;
 let wa, res = {};
-let wasmModule;
 let startTime = undefined, last;
 let frames = 0;
 let samples = 0;
@@ -874,6 +876,7 @@ function installEventHandler() {
 }
 
 function Wasm(module) {
+  this.module = module;
   this.environment = {
     console: (level, addr, len) => {
       let s = "";
@@ -929,7 +932,7 @@ function Wasm(module) {
   };
 
   this.instantiate = async function () {
-    const res = await WebAssembly.instantiate(module, { env: this.environment });
+    const res = await WebAssembly.instantiate(this.module, { env: this.environment });
     Object.assign(this, res.instance.exports);
     this.memUint8 = new Uint8Array(this.memory.buffer);
   }
@@ -954,9 +957,14 @@ function Audio(module) {
     //await this.audioContext.resume();
 
     // Add audio processor
-    // TODO add embedded handling
-    // Load audio worklet script from file
-    await this.audioContext.audioWorklet.addModule('audio.js');
+    if (AUDIO.includes("END_")) {
+      // Load audio worklet script from file
+      await this.audioContext.audioWorklet.addModule('audio.js');
+    } else {
+      // Load the embedded audio.js
+      await this.audioContext.audioWorklet.addModule(URL.createObjectURL(
+        new Blob([AUDIO], { type: 'application/javascript' })));
+    }
 
     // Defaults are in:1, out:1, channels:2
     this.audioWorklet = new AudioWorkletNode(this.audioContext, 'a', { outputChannelCount: [2] });
@@ -1737,7 +1745,7 @@ async function start() {
 
   // Initialize audio
   if (ENABLE_AUDIO) {
-    audio = new Audio(wasmModule);
+    audio = new Audio(wa.module);
     if (LOAD_AUDIO_FROM_FILE)
       await audio.initialize(START_AT_SEQUENCE, AUDIO_TO_LOAD);
     else
@@ -1832,16 +1840,17 @@ async function main() {
   context.configure({ device, format: presentationFormat, alphaMode: "opaque" });
 
   // Load actual code
+  let module;
   if (WASM.includes("END_")) {
     // Load wasm from file
-    wasmModule = await (await fetch("intro.wasm")).arrayBuffer();
+    module = await (await fetch("intro.wasm")).arrayBuffer();
   } else {
     // When embedded, the wasm is deflated and base64 encoded. Undo in reverse.
-    wasmModule = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
-    wasmNodule = await new Response(wasmModule.stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+    module = new Blob([Uint8Array.from(atob(WASM), (m) => m.codePointAt(0))]);
+    module = await new Response(module.stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
   }
 
-  wa = new Wasm(wasmModule);
+  wa = new Wasm(module);
   await wa.instantiate();
 
   // Load scenes

@@ -858,10 +858,10 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
     }
   }
 
-#ifdef EXPORT_CAMS
   // Read cams
   for(uint8_t j=0; j<*scene_cnt; j++) {
     scene *s = &(*scenes)[j];
+#ifdef EXPORT_CAMS
     for(uint16_t i=0; i<s->cam_cnt; i++) {
       vec3 pos, dir;
       p = ie_read(&pos, p, sizeof(pos));
@@ -873,14 +873,14 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
       cam_set(c, pos, dir);
       logc("Added cam %i to scene %i with vert fov %f", i, j, c->vert_fov);
     }
-  }
 #else
-  // Set a default cam
-  cam *c = scene_get_cam(s, 0);
-  *c = (cam){ .vert_fov = 45.0f * 180.0f / PI, .foc_dist = 10.0 };
-  cam_set(c, (vec3){ 0.0f, 0.0f, 10.0f }, (vec3){ 0.0f, 0.0f, -1.0f });
-  logc("Added default cam %i to scene %i with vert fov %f", i, j, c->vert_fov);
+    // Set a default cam
+    cam *c = scene_get_cam(s, 0);
+    *c = (cam){ .vert_fov = 45.0f, .foc_dist = 10.0 };
+    cam_set(c, (vec3){ 0.0f, 0.0f, 10.0f }, (vec3){ 0.0f, 0.0f, -1.0f });
+    logc("Added default cam %i to scene %i with vert fov %f", i, j, c->vert_fov);
 #endif
+  }
 
   // Read meshes
   for(uint8_t j=0; j<*scene_cnt; j++) {
@@ -930,7 +930,7 @@ uint8_t import_bin(scene **scenes, uint8_t *scene_cnt, const uint8_t *bin)
         uint8_t suby;
         p = ie_read(&suby, p, sizeof(suby));
         float in_radius = 0.0;
-        //p = ie_read(&in_radius, p, sizeof(in_radius));
+        p = ie_read(&in_radius, p, sizeof(in_radius));
         create_bin_generated_mesh(m, type, mtl_id, subx, suby, face_nrms, invert_nrms, no_caps, is_emissive, in_radius);
         logc("Added generated mesh %i of scene %i: mtl %i, type %i, emissive %i, invert nrms %i, face nrms %i, no caps %i",
             i, j, mtl_id, type, is_emissive, invert_nrms, face_nrms, no_caps);
