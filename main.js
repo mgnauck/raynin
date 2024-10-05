@@ -730,9 +730,8 @@ const TRACK = [
  1472,    9,   -0.001,  2, // CAM_DIR_Y
  1472,   10,    0.999,  2, // CAM_DIR_Z
 
- 1472,   4,      1.0,  1, // FADE_VAL
- 
- 1488,   4,        0,  0, // FADE_VAL
+ 1696,   4,      1.0,  1, // FADE_VAL
+ 1728,   4,        0,  0, // FADE_VAL
 
  //KEY2
  1599,    5,    0.491,  0, // CAM_POS_X
@@ -755,7 +754,7 @@ const TRACK = [
  1728,    8,    0.071,  0, // CAM_DIR_X
  1728,    9,    0.004,  0, // CAM_DIR_Y
  1728,   10,    0.997,  0, // CAM_DIR_Z
- 
+  
 ];
 
 // Audio

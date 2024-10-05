@@ -526,7 +526,7 @@ void handle_animations(track *track, float time)
           sphere_mat[11] = sphere_pos.z;
 
           // mul by trigger0 to switch direction
-          float rot = time * 0.4f;
+          float rot = time * 0.25f;
           mat4 sphere_rot_y;
           mat4_rot_y(sphere_rot_y, rot);
           mat4_mul(sphere_mat, sphere_rot_y, sphere_mat);
