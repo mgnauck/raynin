@@ -725,7 +725,7 @@ const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 // Scene loading/export
-const LOAD_FROM_GLTF = false;
+const LOAD_FROM_GLTF = true;
 const PATH_TO_SCENES = "scenes/new/";
 const SCENES_TO_LOAD = [
   "good_1.gltf",
@@ -740,7 +740,7 @@ const SCENES_TO_LOAD = [
   "good_10.gltf",
   "end.gltf",
 ];//*/
-const EXPORT_BIN_TO_DISK = true && LOAD_FROM_GLTF;
+const EXPORT_BIN_TO_DISK = false && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 const DO_NOT_LOAD_FROM_JS = false && !LOAD_FROM_GLTF;
 
