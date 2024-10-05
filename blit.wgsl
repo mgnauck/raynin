@@ -77,7 +77,8 @@ fn m(@builtin(position) pos: vec4f) -> @location(0) vec4f
 
   // Add bloom
   let bcol = accumColBuf[((w * h) << 1) + gidx].xyz;
-  fcol += bcol * 0.5;
+  fcol += bcol * 0.7;
+  //fcol = bcol;
  
   // Vignette
   var q = vec2f(pos.x / f32(w), pos.y / f32(h));
