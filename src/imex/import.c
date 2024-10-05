@@ -17,8 +17,8 @@
 #include "ieutil.h"
 
 // Make silent
-#undef logc
-#define logc(...) ((void)0)
+//#undef logc
+//#define logc(...) ((void)0)
 
 typedef struct mesh_ref {
   int32_t   mesh_idx;     // Render mesh index
@@ -218,7 +218,7 @@ void process_mesh_node(scene *s, gltf_data *d, gltf_node *gn, uint32_t node_idx,
     uint32_t flags = gn->invisible > 0 ? IF_INVISIBLE : 0;
     uint16_t inst_id = scene_add_inst(s, mesh_id, NO_MTL_OVERRIDE, flags, final);
 
-#if false
+#if true
     logc("[!!11] Inst id %d, Name: %s", inst_id, gn->name);
 #endif 
 

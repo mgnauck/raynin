@@ -1,7 +1,7 @@
 // Sync track
 const PLAY_SYNC_TRACK = true;
 const LOOP_SYNC_TRACK = false;
-const START_AT_SEQUENCE = 0;
+const START_AT_SEQUENCE = 0; // 21; // 2;
 const TRACK = [
   // Row, ev id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
 
@@ -721,7 +721,7 @@ const ENABLE_RENDER = true;
 const ENABLE_PRERENDER = true;
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 7.0;
-const WIDTH = 1280;
+const WIDTH = 900; // 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 // Scene loading/export
