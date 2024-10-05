@@ -375,7 +375,7 @@ static uint8_t good7_sphere_offsets[58] =
 
 static uint8_t good9_cylinder_offset = 41;
 
-typedef struct
+typedef struct disco_entry
 {
   uint8_t cubes[3];
   uint8_t disabled_index;
@@ -383,9 +383,9 @@ typedef struct
 
 static float last_disco_change = 0.f;
 static disco_entry disco_offsets[3] =
-    {{20, 30, 25, 0},
-     {26, 21, 31, 0},
-     {29, 24, 34, 0}};
+    {{{20, 30, 25}, 0},
+     {{26, 21, 31}, 0},
+     {{9, 24, 34}, 0}};
 
 void handle_animations(track *track, float time)
 {
