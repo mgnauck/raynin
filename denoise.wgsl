@@ -639,19 +639,22 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
     for(var i=-2; i<=2; i++) {
 
       let q = p + vec2i(i, j) * stepSize;
+      let qb = p + vec2i(i, j) * (1i + i32(frame.z));
       if(any(q < vec2i(0)) || any(q >= res) || all(vec2i(i, j) == vec2i(0))) {
         // Out of bounds or already accounted for center pixel
         continue;
       }
 
       let qidx = w * u32(q.y) + u32(q.x);
+      let qbidx = w * u32(qb.y) + u32(qb.x); // Pixel for bloom
 
       // xy = encoded nrm, z = mtl/inst id, w = last idx
       let qnrm4 = attrBuf[qidx];
 
       let qcolVarDir = accumColVarInBuf[             qidx];
       let qcolVarInd = accumColVarInBuf[       ofs + qidx];
-      let qcolBloom  = accumColVarInBuf[(ofs << 1) + qidx].xyz;
+      //let qcolBloom  = accumColVarInBuf[(ofs << 1) + qidx].xyz;
+      let qcolBloom  = accumColVarInBuf[(ofs << 1) + qbidx].xyz;
 
       // Gaussian influenced by edge stopping weights
       let kw = kernelWeights[abs(i)] * kernelWeights[abs(j)];
