@@ -721,7 +721,7 @@ const ENABLE_RENDER = true;
 const ENABLE_PRERENDER = true;
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 7.0;
-const WIDTH = 900; // 1280;
+const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 // Scene loading/export
