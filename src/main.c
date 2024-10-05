@@ -375,14 +375,17 @@ static uint8_t good7_sphere_offsets[58] =
 
 static uint8_t good9_cylinder_offset = 41;
 
-/*
-static uint8_t disco_offsets[] =
-    {37, 38, 0, 1, 39, 2, 40, 3, 4, 5,
-     6, 41, 7, 8, 42, 9, 10, 43, 44, 11,
-     12, 45, 13, 14, 15, 46, 16, 17, 47, 18,
-     19, 48, 20, 21, 49, 22, 23, 24, 50, 51,
-     25, 52, 26};
-*/
+typedef struct
+{
+  uint8_t cubes[3];
+  uint8_t disabled_index;
+} disco_entry;
+
+static float last_disco_change = 0.f;
+static disco_entry disco_offsets[3] =
+    {{20, 30, 25, 0},
+     {26, 21, 31, 0},
+     {29, 24, 34, 0}};
 
 void handle_animations(track *track, float time)
 {
@@ -598,24 +601,20 @@ void handle_animations(track *track, float time)
           }
         }
 
-        // bool animate = scene_time > 4.f;
-        if (true)
+        for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
         {
-          for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-          {
-            uint8_t offset = marble_sphere_offsets[i];
+          uint8_t offset = marble_sphere_offsets[i];
 
-            mat4 transform;
-            mat4_copy(transform, animation_transforms[i]);
+          mat4 transform;
+          mat4_copy(transform, animation_transforms[i]);
 
-            float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
-            vec3 scale_vec = {scale, scale, scale};
-            mat4 scale_mat;
-            mat4_scale(scale_mat, scale_vec);
-            mat4_mul(transform, transform, scale_mat);
+          float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
+          vec3 scale_vec = {scale, scale, scale};
+          mat4 scale_mat;
+          mat4_scale(scale_mat, scale_vec);
+          mat4_mul(transform, transform, scale_mat);
 
-            scene_upd_inst_trans(scene, offset, transform);
-          }
+          scene_upd_inst_trans(scene, offset, transform);
         }
       }
       else
@@ -653,21 +652,51 @@ void handle_animations(track *track, float time)
 
           scene_upd_inst_trans(scene, good9_cylinder_offset, cylinder_mat);
         }
+        else if (active_scene_id == SCENE_DISCO)
+        {
+          uint8_t disco_offsets_cnt = sizeof(disco_offsets) / sizeof(disco_offsets[0]);
 
-#if false  
-  if (active_scene_id == SCENE_DISCO)
-  {
-    uint8_t disco_offsets_cnt = sizeof(disco_offsets) / sizeof(disco_offsets[0]);
+          if (active_scene_changed)
+          {
+            // logc("disco_offsets_cnt: %d", disco_offsets_cnt);
+          }
 
-    // init
-    if (active_scene_changed)
-    {
-      // TODO
-    }
+          // 120ms per row
+          if (time - last_disco_change > (120 * 8) / 1000.f)
+          {
+            // logc("disco change trigger");
 
-    // TODO
-  }
-#endif
+            for (uint8_t i = 0; i < disco_offsets_cnt; i++)
+            {
+              disco_entry *entry = &disco_offsets[i];
+              entry->disabled_index = (1 + rand_uint32()) % 3;
+            }
+            // update index
+            last_disco_change = time;
+          }
+
+          for (uint8_t i = 0; i < disco_offsets_cnt; i++)
+          {
+            disco_entry *entry = &disco_offsets[i];
+            // pick a random entry to disable
+            for (uint8_t j = 0; j < 3; j++)
+            {
+              uint8_t offset = entry->cubes[j];
+              inst_info *inst_info = &scene->inst_info[offset];
+              if (j == entry->disabled_index)
+              {
+                scene_set_inst_state(scene, offset, IS_DISABLED);
+                // scene_set_inst_state(scene, offset, IS_EMISSIVE | IS_MTL_DIRTY);
+              }
+              else
+              {
+                scene_clr_inst_state(scene, offset, IS_DISABLED);
+                // scene_clr_inst_state(scene, offset, IS_EMISSIVE | IS_MTL_DIRTY | IS_WAS_EMISSIVE);
+              }
+            }
+          }
+        }
+
 #if false
     // DEBUG
     bool disabled = (((int)scene_time) % 2) > 0;
