@@ -370,6 +370,8 @@ static uint8_t good7_sphere_offsets[58] =
      47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
      70, 71, 72, 73, 74, 75, 76, 77};
 
+static uint8_t good9_cylinder_offset = 41;
+
 /*
 static uint8_t disco_offsets[] =
     {37, 38, 0, 1, 39, 2, 40, 3, 4, 5,
@@ -392,6 +394,7 @@ void handle_animations(track *track, float time)
 #define SCENE_YELLOW_SUBMARINE 1
 #define SCENE_MARBLES 4
 #define SCENE_GOOD7 6
+#define SCENE_GOOD9 8
 #define SCENE_DISCO 9
 
   if (active_scene_changed)
@@ -489,7 +492,7 @@ void handle_animations(track *track, float time)
         float scale = 1.f + sinf(i * 0.9f + 5.f * time) * 0.2f;
 
         // add trigger0 to control scale
-        //scale *= + trigger0_val;
+        // scale *= + trigger0_val;
 
         vec3 scale_vec = {scale, scale, scale};
         mat4 scale_mat;
@@ -588,6 +591,41 @@ void handle_animations(track *track, float time)
         }
       }
     }
+    else
+      // SCENE_GOOD9
+      if (active_scene_id == SCENE_GOOD9)
+      {
+        // init
+        if (active_scene_changed)
+        {
+          uint8_t offset = good9_cylinder_offset;
+          inst_info *inst_info = &scene->inst_info[offset];
+          mat4_copy(animation_transforms[0], inst_info->transform);
+
+          logc("cylinder start");
+        }
+
+        // grab center ob cylinder
+        mat4 cylinder_mat;
+        mat4_copy(cylinder_mat, animation_transforms[0]);
+
+        vec3 cylinder_pos = mat4_get_trans(cylinder_mat);
+
+        cylinder_mat[3] = 0.f;
+        cylinder_mat[7] = 0.f;
+        cylinder_mat[11] = 0.f;
+
+        float rot = time;
+        mat4 cylinder_rot_y;
+        mat4_rot_y(cylinder_rot_y, rot);
+        mat4_mul(cylinder_mat, cylinder_rot_y, cylinder_mat);
+
+        cylinder_mat[3] = cylinder_pos.x;
+        cylinder_mat[7] = cylinder_pos.y;
+        cylinder_mat[11] = cylinder_pos.z;
+
+        scene_upd_inst_trans(scene, good9_cylinder_offset, cylinder_mat);
+      }
 
 #if false  
   if (active_scene_id == SCENE_DISCO)
