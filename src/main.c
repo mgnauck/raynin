@@ -337,13 +337,13 @@ void process_events(track *track, float time)
     scene_set_dirty(active_scene, RT_CAM);
   }
 
-  float col_x = sync_event_get_value(track, FADE_COL_R, time);
-  if(col_x != EVENT_INACTIVE)
+  float val = sync_event_get_value(track, FADE_VAL, time);
+  if(val != EVENT_INACTIVE)
   {
-    post.fade_col.x = col_x;
+    post.fade_col.x = sync_event_get_value(track, FADE_COL_R, time);
     post.fade_col.y = sync_event_get_value(track, FADE_COL_G, time);
     post.fade_col.z = sync_event_get_value(track, FADE_COL_B, time);
-    post.fade_val = sync_event_get_value(track, FADE_VAL, time);
+    post.fade_val = val;
     active_post = true;
   }
   else
