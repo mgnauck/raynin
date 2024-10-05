@@ -9,6 +9,38 @@ const TRACK = [
 
  0,    0,        0,  0, // SCN_ID
 
+ //START SCENE TRIGGER0 
+  0,   20,      3.0,  0, // TRIGGER_0
+  4,   20,      5.0,  0, // TRIGGER_0
+  8,   20,      1.0,  0, // TRIGGER_0
+ 16,   20,      4.0,  0, // TRIGGER_0
+ 20,   20,      0.0,  0, // TRIGGER_0
+ 24,   20,      4.0,  0, // TRIGGER_0
+ 32,   20,      3.0,  0, // TRIGGER_0
+ 36,   20,      4.0,  0, // TRIGGER_0
+ 40,   20,      5.0,  0, // TRIGGER_0
+ 48,   20,      2.0,  0, // TRIGGER_0
+ 52,   20,      0.0,  0, // TRIGGER_0
+ 56,   20,      3.0,  0, // TRIGGER_0
+
+ 64,   20,      2.0,  0, // TRIGGER_0
+ 68,   20,      3.0,  0, // TRIGGER_0 
+ 72,   20,      0.0,  0, // TRIGGER_0 
+ 76,   20,      4.0,  0, // TRIGGER_0 
+ 80,   20,      3.0,  0, // TRIGGER_0 
+ 84,   20,      4.0,  0, // TRIGGER_0 
+ 88,   20,      2.0,  0, // TRIGGER_0 
+ 92,   20,      0.0,  0, // TRIGGER_0 
+ 96,   20,      3.0,  0, // TRIGGER_0 
+100,   20,      5.0,  0, // TRIGGER_0 
+104,   20,      1.0,  0, // TRIGGER_0 
+108,   20,      5.0,  0, // TRIGGER_0 
+112,   20,      1.0,  0, // TRIGGER_0 
+115,   20,      0.0,  0, // TRIGGER_0 
+116,   20,      3.0,  0, // TRIGGER_0 
+118,   20,      1.0,  0, // TRIGGER_0
+120,   20,      2.0,  0, // TRIGGER_0
+
  //KEY1
  0,    5,  -11.925,  1, // CAM_POS_X
  0,    6,   15.160,  1, // CAM_POS_Y
@@ -90,8 +122,6 @@ const TRACK = [
  224,    8,   -0.012,  1, // CAM_DIR_X
  224,    9,   -0.040,  1, // CAM_DIR_Y
  224,   10,   -0.999,  1, // CAM_DIR_Z
-
-
 
  //KEY2
  287,    5,   -0.896,  0, // CAM_POS_X
@@ -506,7 +536,6 @@ const TRACK = [
 
  //KEY1
  1120,   4,       1.0,  3, // FADE_VAL
-
 
  1120,    5,   58.157,  1, // CAM_POS_X
  1120,    6,   28.770,  1, // CAM_POS_Y
