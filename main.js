@@ -716,7 +716,7 @@ const TRACK = [
  1471,    8,   -0.014,  0, // CAM_DIR_X
  1471,    9,    0.034,  0, // CAM_DIR_Y
  1471,   10,    0.999,  0, // CAM_DIR_Z
- 1471,   4,      1.0,  0, // FADE_VAL
+// 1471,   4,      1.0,  0, // FADE_VAL
 
 // ************************ SCENE ENDE ************************
 
@@ -730,8 +730,8 @@ const TRACK = [
  1472,    9,   -0.001,  2, // CAM_DIR_Y
  1472,   10,    0.999,  2, // CAM_DIR_Z
 
- 1696,   4,      1.0,  1, // FADE_VAL
- 1728,   4,        0,  0, // FADE_VAL
+ 1700,   4,        0,  1, // FADE_VAL
+ 1728,   4,      1.0,  0, // FADE_VAL
 
  //KEY2
  1599,    5,    0.491,  0, // CAM_POS_X
@@ -757,23 +757,32 @@ const TRACK = [
   
 ];
 
-// Audio
-const ENABLE_AUDIO = true;
-const LOAD_AUDIO_FROM_FILE = false;
-const AUDIO_TO_LOAD = "tunes/tune.bkpo"
-const BPM = 125;
-const ROWS_PER_BEAT = 4;
-
 // Rendering
 const ENABLE_RENDER = true;
 const ENABLE_PRERENDER = true;
+const PRERENDER_INDICATOR = -303;
+const ENABLE_CAPTURE = false;
+const CAPTURE_FPS = 60.0;
+
+const NO_FILTER = false;
+const SPP = 1;
+const MAX_BOUNCES = 5; // Max is 15 (encoded in bits 0-3 in frame data)
+const SPP_PER_ITERATION = 1;
+
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 7.0;
 const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
+// Audio
+const ENABLE_AUDIO = true && ENABLE_CAPTURE;
+const LOAD_AUDIO_FROM_FILE = false;
+const AUDIO_TO_LOAD = "tunes/tune.bkpo"
+const BPM = 125;
+const ROWS_PER_BEAT = 4;
+
 // Scene loading/export
-const LOAD_FROM_GLTF = true;
+const LOAD_FROM_GLTF = false;
 const PATH_TO_SCENES = "scenes/new/";
 const SCENES_TO_LOAD = [
   "good_1.gltf",
@@ -791,9 +800,6 @@ const SCENES_TO_LOAD = [
 const EXPORT_BIN_TO_DISK = false && LOAD_FROM_GLTF;
 const EXPORT_FILENAME = "scenes-export.bin";
 const DO_NOT_LOAD_FROM_JS = false && !LOAD_FROM_GLTF;
-
-const SPP = 1;
-const MAX_BOUNCES = 5; // Max is 15 (encoded in bits 0-3 in frame data)
 
 const CAM_LOOK_VELOCITY = 0.005;
 const CAM_MOVE_VELOCITY = 0.1;
@@ -890,10 +896,11 @@ let wa, res = {};
 let startTime = undefined, last;
 let frames = 0;
 let samples = 0;
+let captureTime = 0;
 let ltriCount = 0;
 let converge = true;
-let filter = true;
-let reproj = filter | false;
+let filter = !NO_FILTER
+let reproj = !NO_FILTER;
 let editMode = !PLAY_SYNC_TRACK;
 
 function sleep(delay) {
@@ -921,6 +928,16 @@ function installEventHandler() {
     else
       canvas.removeEventListener("mousemove", handleMouseMoveEvent);
   });
+}
+
+function download(filename, blob)
+{
+  const anchor = document.createElement('a');
+  anchor.href = URL.createObjectURL(blob);
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
 }
 
 function Wasm(module) {
@@ -967,16 +984,7 @@ function Wasm(module) {
     },
     toggle_filter: () => { filter = !filter; if (filter) reproj = true; samples = 0; res.accumIdx = 0; },
     toggle_reprojection: () => { reproj = !reproj; if (!reproj) filter = false; samples = 0; res.accumIdx = 0; },
-    save_binary: (ptr, size) => {
-      const blob = new Blob([wa.memUint8.slice(ptr, ptr + size)], { type: "" });
-      const anchor = document.createElement('a');
-      anchor.href = URL.createObjectURL(blob);
-      anchor.download = EXPORT_FILENAME;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      console.log("Downloaded exported binary scenes to " + EXPORT_FILENAME + " with " + size + " bytes");
-    }
+    save_binary: (ptr, size) => { download(EXPORT_FILENAME, new Blob([wa.memUint8.slice(ptr, ptr + size)], { type: "" })); }
   };
 
   this.instantiate = async function () {
@@ -1719,9 +1727,21 @@ function blit(commandEncoder) {
   passEncoder.end();
 }
 
+function createScreenshotBlob(time)
+{
+  canvas.toBlob((blob) => {
+    const anchor = document.createElement('a');
+    anchor.download = "shot_" + time.toString().padStart(7, "0") + ".png";
+    anchor.href = URL.createObjectURL(blob);
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor); }, "image/png", 1);
+}
+
 async function render(time) {
+
   if (editMode || startTime === undefined)
-    startTime = time;
+    startTime = ENABLE_CAPTURE ? captureTime : time;
 
   // FPS
   let frameTime = performance.now() - last;
@@ -1746,7 +1766,7 @@ async function render(time) {
     commandEncoder.clearBuffer(res.buf[BUF_COL]);
 
   // Pathtrace
-  for (let i = 0; i < SPP; i++) {
+  for (let i = 0; i < SPP_PER_ITERATION; i++) {
     accumulateSample(commandEncoder);
     samples++;
   }
@@ -1756,27 +1776,42 @@ async function render(time) {
     reprojectAndFilter(commandEncoder);
 
   // Blit to canvasa
-  if (time != -303)
+  if (time != PRERENDER_INDICATOR)
     blit(commandEncoder);
 
   device.queue.submit([commandEncoder.finish()]);
 
-  if (time != -303) {
+  if (time != PRERENDER_INDICATOR) { // No updates on prerender
     // Toggle for next frame
     res.accumIdx = 1 - res.accumIdx;
 
-    // Update scene and renderer for next frame
-    let finished = wa.update((ENABLE_AUDIO && time != -303) ? audio.currentTime() : (time - startTime) / 1000, converge, !editMode);
-    frames++;
-  
-    if(finished > 0 && !editMode && LOOP_SYNC_TRACK) {
+    if (ENABLE_CAPTURE)
+      time = captureTime;
+
+    let finished = 0;
+    if (samples >= SPP) {
+      // Update scene and renderer for next frame
+      finished = wa.update(ENABLE_AUDIO ? audio.currentTime() : (time - startTime) / 1000, converge, !editMode);
+
+      if (ENABLE_CAPTURE) {
+        createScreenshotBlob(frames);
+        captureTime += 1000.0 / CAPTURE_FPS;
+      }
+
+      frames++;
+    }
+
+    if(!editMode && finished > 0 && LOOP_SYNC_TRACK) {
       if(ENABLE_AUDIO)
         audio.reset(START_AT_SEQUENCE);
+      if (ENABLE_CAPTURE)
+        console.log("Should have captured " + (frames - 1) + " frames");
       frames = 0;
       startTime = undefined;
     }
 
-    requestAnimationFrame(render);
+    if(editMode || finished == 0)
+      requestAnimationFrame(render);
   }
 }
 
@@ -1807,7 +1842,7 @@ async function start() {
   // Prerender to warm shaders
   if (ENABLE_PRERENDER) {
     for(let i=0; i<50; i++) {
-      render(-303);
+      render(PRERENDER_INDICATOR);
       startTime = undefined;
       frames = 0;
       samples = 0;
@@ -1931,7 +1966,7 @@ async function main() {
 
   // Init gpu resources and prepare scene
   t0 = performance.now();
-  wa.init(BPM, ROWS_PER_BEAT, TRACK.length / 4);
+  wa.init(START_AT_SEQUENCE, BPM, ROWS_PER_BEAT, TRACK.length / 4);
   console.log("Initialized data and GPU in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
   // Provide event track to wasm

@@ -18,9 +18,9 @@
 #include "sync/sync_types.h"
 #include "util/vec3.h"
 
-// #define NO_CONTROL
-// #define TINY_BUILD
-// #define LOAD_EMBEDDED_DATA
+//#define NO_CONTROL
+//#define TINY_BUILD
+//#define LOAD_EMBEDDED_DATA
 
 #ifdef LOAD_EMBEDDED_DATA
 #include "scene_data.h"
@@ -37,6 +37,7 @@ uint16_t active_cam_id = 0;
 post_params post;
 bool active_post = false;
 track intro;
+float start_offset;
 
 // Animations
 #define ANIMATION_MAX_TRANSFORMS 75
@@ -243,7 +244,7 @@ load_scenes_bin(uint8_t *bin)
 #endif
 }
 
-__attribute__((visibility("default"))) void init(uint16_t bpm, uint8_t rows_per_beat, uint16_t event_cnt)
+__attribute__((visibility("default"))) void init(float start_seq, uint16_t bpm, uint8_t rows_per_beat, uint16_t event_cnt)
 {
 #ifdef LOAD_EMBEDDED_DATA
   // Load our scenes
@@ -252,6 +253,8 @@ __attribute__((visibility("default"))) void init(uint16_t bpm, uint8_t rows_per_
 
   // Init the sync track
   sync_init_track(&intro, event_cnt, bpm, rows_per_beat);
+
+  start_offset = start_seq * 64.0 / intro.row_rate;
 
   // Find max resource sizes among the different scenes
   uint32_t max_tri_cnt = 0;
@@ -759,11 +762,11 @@ void handle_animations(track *track, float time)
 
 __attribute__((visibility("default"))) bool update(float time, bool converge, bool run_track)
 {
-  bool finished = sync_is_finished(&intro, time);
+  bool finished = sync_is_finished(&intro, start_offset + time);
   if (run_track && !finished)
-    process_events(&intro, time);
+    process_events(&intro, start_offset + time);
 
-  handle_animations(&intro, time);
+  handle_animations(&intro, start_offset + time);
   renderer_update(active_scene, active_post ? &post : NULL, converge);
   set_ltri_cnt(active_scene->ltri_cnt);
 
