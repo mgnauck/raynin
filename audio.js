@@ -15,8 +15,8 @@ class AudioProcessor extends AudioWorkletProcessor {
 
         this.port.onmessage = async (event) => {
             if ('w' in event.data) {
-                console.log(`Audio[Worklet]: Initializing synth...`);
-                console.log(`Audio[Worklet]: Starting at sequence ${event.data.s}`);
+                //console.log(`Audio[Worklet]: Initializing synth...`);
+                //console.log(`Audio[Worklet]: Starting at sequence ${event.data.s}`);
 
                 const importObjects = {
                     env: {
@@ -62,7 +62,7 @@ class AudioProcessor extends AudioWorkletProcessor {
                     const memory = new Uint8Array(this.#engine.exports.memory.buffer);
                     memory.set(new Uint8Array(tuneData), tunePtr);
 
-                    console.log(`Audio[Worklet]: Received tune with ${tuneData.byteLength} bytes`);
+                    //console.log(`Audio[Worklet]: Received tune with ${tuneData.byteLength} bytes`);
                 }
 
                 // init the project
@@ -79,13 +79,13 @@ class AudioProcessor extends AudioWorkletProcessor {
     }
 
     #initialize(outputs) {
-        console.log("Audio[Worklet]: Initializing buffers...");
+        //console.log("Audio[Worklet]: Initializing buffers...");
 
         // determine render quantum size
         const renderQuantum = outputs[0][0].length;
         const bufferSize = renderQuantum * 4;
 
-        console.log(`Audio[Worklet]: Sample rate is ${sampleRate}hz, render quantum is ${renderQuantum}`);
+        //console.log(`Audio[Worklet]: Sample rate is ${sampleRate}hz, render quantum is ${renderQuantum}`);
 
         const memory = this.#engine.exports.memory;
 

@@ -759,7 +759,7 @@ const TRACK = [
 
 // Rendering
 const ENABLE_RENDER = true;
-const ENABLE_PRERENDER = true;
+const ENABLE_PRERENDER = false;
 const PRERENDER_INDICATOR = -303;
 const ENABLE_CAPTURE = false;
 const CAPTURE_FPS = 60.0;
@@ -771,11 +771,11 @@ const SPP_PER_ITERATION = 1;
 
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 7.0;
-const WIDTH = 1280;
+const WIDTH = 1920;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 // Audio
-const ENABLE_AUDIO = true && ENABLE_CAPTURE;
+const ENABLE_AUDIO = true && !ENABLE_CAPTURE;
 const LOAD_AUDIO_FROM_FILE = false;
 const AUDIO_TO_LOAD = "tunes/tune.bkpo"
 const BPM = 125;
@@ -853,7 +853,7 @@ const BUF_ACC0 = 18; // Temporal accumulation buffer col + variance (dir/indir)
 const BUF_ACC1 = 19; // Temporal accumulation buffer col + variance (dir/indir)
 const BUF_ACC2 = 20; // Temporal accumulation buffer col + variance (dir/indir)
 const BUF_CFG = 21; // Accessed from WASM
-const BUF_POST = 22
+const BUF_POST = 22; // Accessed from WASM
 const BUF_LCAM = 23;
 const BUF_GRID = 24;
 
@@ -1007,7 +1007,7 @@ function Audio(module) {
   this.playTime = 0;
 
   this.initialize = async function (sequence, file) {
-    console.log("Audio: Initialize...");
+    //console.log("Audio: Initialize...");
 
     this.audioContext = new AudioContext;
     //await this.audioContext.resume();
@@ -1030,7 +1030,7 @@ function Audio(module) {
     this.audioWorklet.port.onmessage = async (event) => {
       if ('s' in event.data) {
         // synth is ready
-        console.info(`Audio: Received start time ${event.data.s.toFixed(3)}`);
+        //console.info(`Audio: Received start time ${event.data.s.toFixed(3)}`);
         this.playTime = event.data.s;
         this.initEvent.signal();
       }
@@ -1038,7 +1038,7 @@ function Audio(module) {
 
     // load song from external file if specified
     if (file) {
-      console.info(`Audio: Loading external tune ${file}`);
+      //console.info(`Audio: Loading external tune ${file}`);
       const tuneFile = await fetch(file);
       if (!tuneFile.ok) {
         alert(`The external tune in ${file} wasn't found.`);
@@ -1071,13 +1071,13 @@ function Audio(module) {
   }
 
   this.suspend = async function() {
-    console.log(`Audio: Suspend`);
+    //console.log(`Audio: Suspend`);
     await this.audioContext.suspend();
     this.audioWorklet.port.postMessage({ p: false });
   }
 
   this.play = async function () {
-    console.log(`Audio: Play.`);
+    //console.log(`Audio: Play.`);
 
     // Send message to start rendering
     await this.audioContext.resume();
@@ -1086,7 +1086,7 @@ function Audio(module) {
     // Reset timer (TODO timer drift compensation)
     this.startTime = performance.now();
 
-    console.log(`Audio: Time is ${this.currentTime().toFixed(2)}`);
+    //console.log(`Audio: Time is ${this.currentTime().toFixed(2)}`);
   }
 }
 
@@ -1744,9 +1744,9 @@ async function render(time) {
     startTime = ENABLE_CAPTURE ? captureTime : time;
 
   // FPS
-  let frameTime = performance.now() - last;
+  /*let frameTime = performance.now() - last;
   document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)} `;
-  last = performance.now();
+  last = performance.now();*/
 
   // Initialize config data
   device.queue.writeBuffer(res.buf[BUF_CFG], 0,
@@ -1941,7 +1941,7 @@ async function main() {
     let t0 = performance.now();
     if (LOAD_FROM_GLTF) {
       for (let i = 0; i < SCENES_TO_LOAD.length; i++) {
-        console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
+        //console.log("Trying to load scene " + PATH_TO_SCENES + SCENES_TO_LOAD[i]);
         if (!await loadSceneGltf(PATH_TO_SCENES + SCENES_TO_LOAD[i], EXPORT_BIN_TO_DISK)) {
           alert("Failed to load scene");
           return;
@@ -1953,7 +1953,7 @@ async function main() {
         return;
       }
     }
-    console.log("Loaded and generated scenes in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
+    //console.log("Loaded and generated scenes in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
     // Save exported scene to file via download
     if (EXPORT_BIN_TO_DISK) {
@@ -1967,7 +1967,7 @@ async function main() {
   // Init gpu resources and prepare scene
   t0 = performance.now();
   wa.init(START_AT_SEQUENCE, BPM, ROWS_PER_BEAT, TRACK.length / 4);
-  console.log("Initialized data and GPU in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
+  //console.log("Initialized data and GPU in " + ((performance.now() - t0) / 1000.0).toFixed(2) + "s");
 
   // Provide event track to wasm
   for (let i = 0; i < TRACK.length / 4; i++) {
