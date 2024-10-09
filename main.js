@@ -758,11 +758,12 @@ const TRACK = [
 ];
 
 // Rendering
-const ENABLE_RENDER = true;
-const ENABLE_PRERENDER = false;
-const PRERENDER_INDICATOR = -303;
 const ENABLE_CAPTURE = false;
 const CAPTURE_FPS = 60.0;
+const CAPTURE_START_FRAME = 0;
+const ENABLE_RENDER = true;
+const ENABLE_PRERENDER = true && !ENABLE_CAPTURE;
+const PRERENDER_INDICATOR = -303;
 
 const NO_FILTER = false;
 const SPP = 1;
@@ -771,7 +772,7 @@ const SPP_PER_ITERATION = 1;
 
 const FULLSCREEN = false;
 const ASPECT = 16.0 / 7.0;
-const WIDTH = 1920;
+const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
 
 // Audio
@@ -894,9 +895,9 @@ const WG_SIZE_Y = 16;
 let canvas, context, device;
 let wa, res = {};
 let startTime = undefined, last;
-let frames = 0;
+let frames = ENABLE_CAPTURE ? CAPTURE_START_FRAME : 0;
 let samples = 0;
-let captureTime = 0;
+let captureTime = CAPTURE_START_FRAME * (1000.0 / CAPTURE_FPS);
 let ltriCount = 0;
 let converge = true;
 let filter = !NO_FILTER
@@ -1741,7 +1742,7 @@ function createScreenshotBlob(time)
 async function render(time) {
 
   if (editMode || startTime === undefined)
-    startTime = ENABLE_CAPTURE ? captureTime : time;
+    startTime = ENABLE_CAPTURE ? 0 : time;
 
   // FPS
   /*let frameTime = performance.now() - last;
@@ -1804,8 +1805,8 @@ async function render(time) {
     if(!editMode && finished > 0 && LOOP_SYNC_TRACK) {
       if(ENABLE_AUDIO)
         audio.reset(START_AT_SEQUENCE);
-      if (ENABLE_CAPTURE)
-        console.log("Should have captured " + (frames - 1) + " frames");
+      //if (ENABLE_CAPTURE)
+        //console.log("Should have captured " + (frames - 1) + " frames");
       frames = 0;
       startTime = undefined;
     }
@@ -1837,7 +1838,7 @@ async function start() {
 
   // Prepare for rendering
   wa.finalize_resources();
-  wa.update(0, false, !editMode);
+  wa.update(ENABLE_CAPTURE ? (captureTime / 1000) : 0, false, !editMode);
 
   // Prerender to warm shaders
   if (ENABLE_PRERENDER) {
