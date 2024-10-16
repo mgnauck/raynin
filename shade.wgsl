@@ -82,8 +82,6 @@ const DIFFUSE_BOUNCE        = 1u;
 const PURE_SPEC_REFL_BOUNCE = 2u;
 const REFRACTION_BOUNCE     = 4u;
 
-const BACKGROUND            = 0xfffefffe;
-
 // General constants
 const EPS                   = 0.001;
 const INF                   = 3.402823466e+38;
@@ -125,16 +123,6 @@ fn rand4() -> vec4f
 fn maxComp3(v: vec3f) -> f32
 {
   return max(v.x, max(v.y, v.z));
-}
-
-fn toMat3x3(m: mat3x4f) -> mat3x3f
-{
-  return mat3x3f(m[0].xyz, m[1].xyz, m[2].xyz);
-}
-
-fn toMat4x4(m: mat3x4f) -> mat4x4f
-{
-  return mat4x4f(m[0], m[1], m[2], vec4f(0, 0, 0, 1));
 }
 
 // Duff et al: Building an Orthonormal Basis, Revisited

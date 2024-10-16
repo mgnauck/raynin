@@ -1,10 +1,11 @@
 #include "einst.h"
+
 #include "ieutil.h"
 
 uint16_t einst_calc_size(const einst *inst)
 {
-  return sizeof(inst->mesh_id) + sizeof(inst->scale) +
-    4 * sizeof(*inst->rot) + sizeof(inst->trans);
+  return sizeof(inst->mesh_id) + sizeof(inst->scale) + 4 * sizeof(*inst->rot) +
+         sizeof(inst->trans);
 }
 
 uint8_t *einst_write(uint8_t *dst, const einst *i)

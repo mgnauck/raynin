@@ -1,7 +1,7 @@
 // Sync track
 const PLAY_SYNC_TRACK = true;
 const LOOP_SYNC_TRACK = false;
-const START_AT_SEQUENCE = 0; // 15; // 21; // 2;
+const START_AT_SEQUENCE = 0;
 const TRACK = [
   // Row, ev id, value, blend mode (0 = STEP, 1 = LINEAR, 2 = SMOOTH, 3 = RAMP)
 
@@ -778,13 +778,13 @@ const HEIGHT = Math.ceil(WIDTH / ASPECT);
 // Audio
 const ENABLE_AUDIO = true && !ENABLE_CAPTURE;
 const LOAD_AUDIO_FROM_FILE = false;
-const AUDIO_TO_LOAD = "tunes/tune.bkpo"
+const AUDIO_TO_LOAD = "data/tune.bkpo"
 const BPM = 125;
 const ROWS_PER_BEAT = 4;
 
 // Scene loading/export
 const LOAD_FROM_GLTF = false;
-const PATH_TO_SCENES = "scenes/new/";
+const PATH_TO_SCENES = "data/";
 const SCENES_TO_LOAD = [
   "good_1.gltf",
   "good_2.gltf",

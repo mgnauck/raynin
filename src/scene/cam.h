@@ -4,13 +4,13 @@
 #include "../util/vec3.h"
 
 typedef struct cam {
-  vec3  eye;
+  vec3 eye;
   float vert_fov;
-  vec3  right;
+  vec3 right;
   float foc_dist;
-  vec3  up;
+  vec3 up;
   float foc_angle;
-  vec3  fwd;
+  vec3 fwd;
 } cam;
 
 void cam_set(cam *c, vec3 eye, vec3 fwd);

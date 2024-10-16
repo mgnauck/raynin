@@ -1,18 +1,18 @@
 #include "aabb.h"
+
 #include <float.h>
+
 #include "../base/math.h"
 
 aabb aabb_init()
 {
-  return (aabb){
-    (vec3){ FLT_MAX, FLT_MAX, FLT_MAX },
-    (vec3){ -FLT_MAX, -FLT_MAX, -FLT_MAX }
-  };
+  return (aabb){(vec3){FLT_MAX, FLT_MAX, FLT_MAX},
+                (vec3){-FLT_MAX, -FLT_MAX, -FLT_MAX}};
 }
 
 aabb aabb_combine(const aabb *a, const aabb *b)
 {
-  return (aabb){ vec3_min(a->min, b->min), vec3_max(a->max, b->max) };
+  return (aabb){vec3_min(a->min, b->min), vec3_max(a->max, b->max)};
 }
 
 void aabb_grow(aabb *a, vec3 v)
@@ -23,7 +23,7 @@ void aabb_grow(aabb *a, vec3 v)
 
 void aabb_pad(aabb *a)
 {
-  for(uint8_t i=0; i<3; i++) {
+  for(uint8_t i = 0; i < 3; i++) {
     float mi = vec3_get(a->min, i);
     float ma = vec3_get(a->max, i);
     if(fabsf(ma - mi) < EPSILON) {

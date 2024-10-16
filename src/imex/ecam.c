@@ -1,4 +1,5 @@
 #include "ecam.h"
+
 #include "ieutil.h"
 
 uint8_t ecam_calc_size(const ecam *c)

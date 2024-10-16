@@ -1,7 +1,8 @@
 #include <stdbool.h>
 #include <stdint.h>
-#include "base/math.h"
+
 #include "base/log.h"
+#include "base/math.h"
 #include "base/walloc.h"
 #include "imex/escene.h"
 #include "imex/export.h"
@@ -18,9 +19,9 @@
 #include "sync/sync_types.h"
 #include "util/vec3.h"
 
-//#define NO_CONTROL
-//#define TINY_BUILD
-//#define LOAD_EMBEDDED_DATA
+// #define NO_CONTROL
+// #define TINY_BUILD
+// #define LOAD_EMBEDDED_DATA
 
 #ifdef LOAD_EMBEDDED_DATA
 #include "scene_data.h"
@@ -62,101 +63,116 @@ uint8_t escene_cnt = 0;
 #endif
 
 #ifndef NO_CONTROL
-__attribute__((visibility("default"))) void key_down(unsigned char key, float move_vel)
+__attribute__((visibility("default"))) void key_down(unsigned char key,
+                                                     float move_vel)
 {
-  vec3 gmin = vec3_min(active_scene->tlas_nodes[0].lmin, active_scene->tlas_nodes[0].rmin);
-  vec3 gmax = vec3_max(active_scene->tlas_nodes[0].lmax, active_scene->tlas_nodes[0].rmax);
+  vec3 gmin = vec3_min(active_scene->tlas_nodes[0].lmin,
+                       active_scene->tlas_nodes[0].rmin);
+  vec3 gmax = vec3_max(active_scene->tlas_nodes[0].lmax,
+                       active_scene->tlas_nodes[0].rmax);
 
   float speed = vec3_max_comp(vec3_scale(vec3_sub(gmax, gmin), 0.2f));
 
   cam *cam = scene_get_active_cam(active_scene);
 
-  switch (key)
-  {
-  case 'a':
-    cam->eye = vec3_add(cam->eye, vec3_scale(cam->right, -speed * move_vel));
-    break;
-  case 'd':
-    cam->eye = vec3_add(cam->eye, vec3_scale(cam->right, speed * move_vel));
-    break;
-  case 'w':
-    cam->eye = vec3_add(cam->eye, vec3_scale(cam->fwd, -speed * move_vel));
-    break;
-  case 's':
-    cam->eye = vec3_add(cam->eye, vec3_scale(cam->fwd, speed * move_vel));
-    break;
-  case 'i':
-    cam->foc_dist += 0.1f;
-    break;
-  case 'k':
-    cam->foc_dist = max(cam->foc_dist - 0.1f, 0.1f);
-    break;
-  case 'j':
-    cam->foc_angle = max(cam->foc_angle - 0.1f, 0.1f);
-    break;
-  case 'l':
-    cam->foc_angle += 0.1f;
-    break;
-  case 'u':
-    active_scene->bg_col = vec3_sub((vec3){1.0f, 1.0f, 1.0f}, active_scene->bg_col);
-    scene_set_dirty(active_scene, RT_CFG);
-    break;
-  case 'v':
-    active_scene_id = (active_scene_id > 0) ? active_scene_id - 1 : scene_cnt - 1;
-    active_scene = &scenes[active_scene_id];
-    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
-    break;
-  case 'b':
-    active_scene_id = (active_scene_id + 1) % scene_cnt;
-    active_scene = &scenes[active_scene_id];
-    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
-    break;
-  case 'n':
-    active_cam_id = active_cam_id > 0 ? active_cam_id - 1 : active_scene->cam_cnt - 1;
-    scene_set_active_cam(active_scene, active_cam_id);
-    logc("Setting cam %i of %i cams active", active_cam_id, active_scene->cam_cnt);
-    break;
-  case 'm':
-    active_cam_id = (active_cam_id + 1) % active_scene->cam_cnt;
-    scene_set_active_cam(active_scene, active_cam_id);
-    logc("Setting cam %i of %i cams active", active_cam_id, active_scene->cam_cnt);
-    break;
-  case 'c':
-    toggle_converge();
-    break;
-  case 'p':
-    toggle_edit();
-    break;
-  case ' ':
-    logc("---> scene:");
-    logc("   r, %4i, %8i, %2i, // SCN_ID", SCN_ID, active_scene_id, BT_STEP);
-    logc("<----");
-    logc("---> camera:");
-    logc("   r, %4i, %8.3f, %2i, // CAM_POS_X\n   r, %4i, %8.3f, %2i, // CAM_POS_Y\n   r, %4i, %8.3f, %2i, // CAM_POS_Z\n"
-         "   r, %4i, %8.3f, %2i, // CAM_DIR_X\n   r, %4i, %8.3f, %2i, // CAM_DIR_Y\n   r, %4i, %8.3f, %2i, // CAM_DIR_Z\n"
-         "   r, %4i, %8.3f, %2i, // CAM_FOV",
-         CAM_POS_X, cam->eye.x, BT_STEP, CAM_POS_Y, cam->eye.y, BT_STEP, CAM_POS_Z, cam->eye.z, BT_STEP,
-         CAM_DIR_X, cam->fwd.x, BT_STEP, CAM_DIR_Y, cam->fwd.y, BT_STEP, CAM_DIR_Z, cam->fwd.z, BT_STEP,
-         CAM_FOV, cam->vert_fov, BT_STEP);
-    logc("<----");
-    break;
-  case 'f':
-    toggle_filter();
-    break;
-  case 'g':
-    toggle_reprojection();
-    break;
+  switch(key) {
+    case 'a':
+      cam->eye = vec3_add(cam->eye, vec3_scale(cam->right, -speed * move_vel));
+      break;
+    case 'd':
+      cam->eye = vec3_add(cam->eye, vec3_scale(cam->right, speed * move_vel));
+      break;
+    case 'w':
+      cam->eye = vec3_add(cam->eye, vec3_scale(cam->fwd, -speed * move_vel));
+      break;
+    case 's':
+      cam->eye = vec3_add(cam->eye, vec3_scale(cam->fwd, speed * move_vel));
+      break;
+    case 'i':
+      cam->foc_dist += 0.1f;
+      break;
+    case 'k':
+      cam->foc_dist = max(cam->foc_dist - 0.1f, 0.1f);
+      break;
+    case 'j':
+      cam->foc_angle = max(cam->foc_angle - 0.1f, 0.1f);
+      break;
+    case 'l':
+      cam->foc_angle += 0.1f;
+      break;
+    case 'u':
+      active_scene->bg_col =
+          vec3_sub((vec3){1.0f, 1.0f, 1.0f}, active_scene->bg_col);
+      scene_set_dirty(active_scene, RT_CFG);
+      break;
+    case 'v':
+      active_scene_id =
+          (active_scene_id > 0) ? active_scene_id - 1 : scene_cnt - 1;
+      active_scene = &scenes[active_scene_id];
+      scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI |
+                                        RT_LTRI | RT_INST | RT_BLAS);
+      break;
+    case 'b':
+      active_scene_id = (active_scene_id + 1) % scene_cnt;
+      active_scene = &scenes[active_scene_id];
+      scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI |
+                                        RT_LTRI | RT_INST | RT_BLAS);
+      break;
+    case 'n':
+      active_cam_id =
+          active_cam_id > 0 ? active_cam_id - 1 : active_scene->cam_cnt - 1;
+      scene_set_active_cam(active_scene, active_cam_id);
+      logc("Setting cam %i of %i cams active", active_cam_id,
+           active_scene->cam_cnt);
+      break;
+    case 'm':
+      active_cam_id = (active_cam_id + 1) % active_scene->cam_cnt;
+      scene_set_active_cam(active_scene, active_cam_id);
+      logc("Setting cam %i of %i cams active", active_cam_id,
+           active_scene->cam_cnt);
+      break;
+    case 'c':
+      toggle_converge();
+      break;
+    case 'p':
+      toggle_edit();
+      break;
+    case ' ':
+      logc("---> scene:");
+      logc("   r, %4i, %8i, %2i, // SCN_ID", SCN_ID, active_scene_id, BT_STEP);
+      logc("<----");
+      logc("---> camera:");
+      logc("   r, %4i, %8.3f, %2i, // CAM_POS_X\n   r, %4i, %8.3f, %2i, // "
+           "CAM_POS_Y\n   r, %4i, %8.3f, %2i, // CAM_POS_Z\n"
+           "   r, %4i, %8.3f, %2i, // CAM_DIR_X\n   r, %4i, %8.3f, %2i, // "
+           "CAM_DIR_Y\n   r, %4i, %8.3f, %2i, // CAM_DIR_Z\n"
+           "   r, %4i, %8.3f, %2i, // CAM_FOV",
+           CAM_POS_X, cam->eye.x, BT_STEP, CAM_POS_Y, cam->eye.y, BT_STEP,
+           CAM_POS_Z, cam->eye.z, BT_STEP, CAM_DIR_X, cam->fwd.x, BT_STEP,
+           CAM_DIR_Y, cam->fwd.y, BT_STEP, CAM_DIR_Z, cam->fwd.z, BT_STEP,
+           CAM_FOV, cam->vert_fov, BT_STEP);
+      logc("<----");
+      break;
+    case 'f':
+      toggle_filter();
+      break;
+    case 'g':
+      toggle_reprojection();
+      break;
   }
 
   scene_set_dirty(active_scene, RT_CAM);
 }
 
-__attribute__((visibility("default"))) void mouse_move(int32_t dx, int32_t dy, float look_vel)
+__attribute__((visibility("default"))) void mouse_move(int32_t dx, int32_t dy,
+                                                       float look_vel)
 {
   cam *cam = scene_get_active_cam(active_scene);
 
-  float theta = min(max(acosf(-cam->fwd.y) + (float)dy * look_vel, 0.05f), 0.95f * PI);
-  float phi = fmodf(atan2f(-cam->fwd.z, cam->fwd.x) + PI - (float)dx * look_vel, 2.0f * PI);
+  float theta =
+      min(max(acosf(-cam->fwd.y) + (float)dy * look_vel, 0.05f), 0.95f * PI);
+  float phi = fmodf(atan2f(-cam->fwd.z, cam->fwd.x) + PI - (float)dx * look_vel,
+                    2.0f * PI);
 
   cam_set_dir(cam, vec3_spherical(theta, phi));
 
@@ -165,13 +181,13 @@ __attribute__((visibility("default"))) void mouse_move(int32_t dx, int32_t dy, f
 #endif
 
 #ifndef TINY_BUILD
-__attribute__((visibility("default")))
-uint8_t
-load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size_t bin_sz, bool prepare_for_export)
+__attribute__((visibility("default"))) uint8_t
+load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin,
+                size_t bin_sz, bool prepare_for_export)
 {
   uint8_t ret = 0;
 
-  if (scenes == NULL)
+  if(scenes == NULL)
     scenes = malloc(MAX_SCENES * sizeof(*scenes));
 
   // Scene to load
@@ -182,7 +198,7 @@ load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size
 #endif
 
   // Import scene from given GLTF for rendering
-  if (import_gltf(s, gltf, gltf_sz, bin, bin_sz) == 0)
+  if(import_gltf(s, gltf, gltf_sz, bin, bin_sz) == 0)
     scene_cnt++;
   else
     return 1;
@@ -191,33 +207,26 @@ load_scene_gltf(const char *gltf, size_t gltf_sz, const unsigned char *bin, size
        s->max_tri_cnt, s->max_ltri_cnt, s->max_mtl_cnt, s->max_inst_cnt);
 
   // Import the scene again for export
-  if (prepare_for_export && escene_cnt < MAX_SCENES)
-  {
-    if (import_gltf_ex(&escenes[escene_cnt], gltf, gltf_sz, bin, bin_sz) == 0)
-    {
+  if(prepare_for_export && escene_cnt < MAX_SCENES) {
+    if(import_gltf_ex(&escenes[escene_cnt], gltf, gltf_sz, bin, bin_sz) == 0) {
       escene_cnt++;
       logc("Created export scene from gltf scene");
-    }
-    else
+    } else
       logc("Failed to import gltf scene for export");
   }
 
   return 0;
 }
 
-__attribute__((visibility("default")))
-uint8_t
-export_scenes()
+__attribute__((visibility("default"))) uint8_t export_scenes()
 {
-  if (escene_cnt > 0)
-  {
+  if(escene_cnt > 0) {
     uint8_t *bin;
     size_t bin_sz;
-    if (export_bin(&bin, &bin_sz, escenes, escene_cnt) == 0)
-    {
+    if(export_bin(&bin, &bin_sz, escenes, escene_cnt) == 0) {
       save_binary(bin, bin_sz);
       free(bin);
-      for (uint8_t i = 0; i < escene_cnt; i++)
+      for(uint8_t i = 0; i < escene_cnt; i++)
         escene_release(&escenes[i]);
       escene_cnt = 0;
       return 0;
@@ -228,14 +237,13 @@ export_scenes()
 }
 #endif
 
-__attribute__((visibility("default"))) void add_event(uint16_t row, uint8_t id, float value, uint8_t blend_type)
+__attribute__((visibility("default"))) void
+add_event(uint16_t row, uint8_t id, float value, uint8_t blend_type)
 {
   sync_add_event(&intro, row, id, value, blend_type);
 }
 
-__attribute__((visibility("default")))
-uint8_t
-load_scenes_bin(uint8_t *bin)
+__attribute__((visibility("default"))) uint8_t load_scenes_bin(uint8_t *bin)
 {
 #ifndef LOAD_EMBEDDED_DATA
   return import_bin(&scenes, &scene_cnt, bin);
@@ -244,7 +252,8 @@ load_scenes_bin(uint8_t *bin)
 #endif
 }
 
-__attribute__((visibility("default"))) void init(float start_seq, uint16_t bpm, uint8_t rows_per_beat, uint16_t event_cnt)
+__attribute__((visibility("default"))) void
+init(float start_seq, uint16_t bpm, uint8_t rows_per_beat, uint16_t event_cnt)
 {
 #ifdef LOAD_EMBEDDED_DATA
   // Load our scenes
@@ -262,8 +271,7 @@ __attribute__((visibility("default"))) void init(float start_seq, uint16_t bpm, 
   uint16_t max_mtl_cnt = 0;
   uint16_t max_inst_cnt = 0;
 
-  for (uint8_t i = 0; i < scene_cnt; i++)
-  {
+  for(uint8_t i = 0; i < scene_cnt; i++) {
     scene *s = &scenes[i];
     max_tri_cnt = max(max_tri_cnt, s->max_tri_cnt);
     max_ltri_cnt = max(max_ltri_cnt, s->max_ltri_cnt);
@@ -275,8 +283,9 @@ __attribute__((visibility("default"))) void init(float start_seq, uint16_t bpm, 
   renderer_gpu_alloc(max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
 
 #ifndef TINY_BUILD
-  logc("Allocated gpu resources for max %i tris, %i ltris, %i mtls and %i insts",
-       max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
+  logc(
+      "Allocated gpu resources for max %i tris, %i ltris, %i mtls and %i insts",
+      max_tri_cnt, max_ltri_cnt, max_mtl_cnt, max_inst_cnt);
 #endif
 
   // Initialize active scene
@@ -287,10 +296,10 @@ __attribute__((visibility("default"))) void finalize_resources()
 {
   sync_index_track(&intro);
 
-  for (uint8_t i = 0; i < scene_cnt; i++)
-  {
+  for(uint8_t i = 0; i < scene_cnt; i++) {
     renderer_update(&scenes[i], NULL, false);
-    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
+    scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI |
+                                      RT_INST | RT_BLAS);
   }
 }
 
@@ -298,21 +307,18 @@ void process_events(track *track, float time)
 {
   // Set the active scene (SCN_ID)
   float fid = sync_event_get_value(track, SCN_ID, time);
-  if (fid != EVENT_INACTIVE)
-  {
+  if(fid != EVENT_INACTIVE) {
     uint8_t id = (uint8_t)fid;
-    if (id >= 0 && id < scene_cnt)
-    {
-      if (id != active_scene_id)
-      {
+    if(id >= 0 && id < scene_cnt) {
+      if(id != active_scene_id) {
         active_scene_id = id;
         active_scene = &scenes[active_scene_id];
-        scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI | RT_LTRI | RT_INST | RT_BLAS);
+        scene_set_dirty(active_scene, RT_CFG | RT_CAM | RT_MTL | RT_TRI |
+                                          RT_LTRI | RT_INST | RT_BLAS);
         active_scene_time = time;
         active_scene_changed = true;
       }
-    }
-    else
+    } else
       logc("#### ERROR Sync track requested unavailable scene");
   }
 
@@ -320,8 +326,7 @@ void process_events(track *track, float time)
 
   // Camera pos/dir
   float px = sync_event_get_value(track, CAM_POS_X, time);
-  if (px != EVENT_INACTIVE)
-  {
+  if(px != EVENT_INACTIVE) {
     float py = sync_event_get_value(track, CAM_POS_Y, time);
     float pz = sync_event_get_value(track, CAM_POS_Z, time);
     float dx = sync_event_get_value(track, CAM_DIR_X, time);
@@ -333,22 +338,19 @@ void process_events(track *track, float time)
 
   // Camera fov
   float fov = sync_event_get_value(track, CAM_FOV, time);
-  if (fov != EVENT_INACTIVE)
-  {
+  if(fov != EVENT_INACTIVE) {
     cam->vert_fov = fov;
     scene_set_dirty(active_scene, RT_CAM);
   }
 
   float val = sync_event_get_value(track, FADE_VAL, time);
-  if (val != EVENT_INACTIVE)
-  {
+  if(val != EVENT_INACTIVE) {
     post.fade_col.x = sync_event_get_value(track, FADE_COL_R, time);
     post.fade_col.y = sync_event_get_value(track, FADE_COL_G, time);
     post.fade_col.z = sync_event_get_value(track, FADE_COL_B, time);
     post.fade_val = val;
     active_post = true;
-  }
-  else
+  } else
     active_post = false;
 }
 
@@ -356,43 +358,33 @@ static uint8_t good1_light_offsets[14] =
     //    {11, 15, 13, 2, 4, 8};
     {9, 13, 11, 2, 4, 6};
 
-static uint8_t torus_offsets[3] =
-    {33 /* center sphere */, 37, 38};
+static uint8_t torus_offsets[3] = {33 /* center sphere */, 37, 38};
 
-static uint8_t yellow_sphere_offsets[14] =
-    {28 /* center sphere */, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
+static uint8_t yellow_sphere_offsets[14] = {
+    28 /* center sphere */, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
 
 // TODO: 'Sphere.009' does not exist as a node
-static uint8_t marble_sphere_offsets[43] =
-    {37, 38, 0, 1, 39, 2, 40, 3, 4, 5,
-     6, 41, 7, 8, 42, 9, 10, 43, 44, 11,
-     12, 45, 13, 14, 15, 46, 16, 17, 47, 18,
-     19, 48, 20, 21, 49, 22, 23, 24, 50, 51,
-     25, 52, 26};
+static uint8_t marble_sphere_offsets[43] = {
+    37, 38, 0,  1,  39, 2,  40, 3,  4,  5,  6,  41, 7,  8,  42,
+    9,  10, 43, 44, 11, 12, 45, 13, 14, 15, 46, 16, 17, 47, 18,
+    19, 48, 20, 21, 49, 22, 23, 24, 50, 51, 25, 52, 26};
 
-// immer 4 sagen
-
-static uint8_t good7_sphere_offsets[58] =
-    {57 /* center sphere */, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-     17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-     27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-     37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
-     47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
-     70, 71, 72, 73, 74, 75, 76, 77};
+static uint8_t good7_sphere_offsets[58] = {
+    57, 8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+    37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
+    52, 53, 54, 55, 56, 70, 71, 72, 73, 74, 75, 76, 77};
 
 static uint8_t good9_cylinder_offset = 41;
 
-typedef struct disco_entry
-{
+typedef struct disco_entry {
   uint8_t cubes[3];
   uint8_t disabled_index;
 } disco_entry;
 
 static float last_disco_change = 0.f;
-static disco_entry disco_offsets[3] =
-    {{{20, 30, 25}, 0},
-     {{26, 21, 31}, 0},
-     {{29, 24, 34}, 0}};
+static disco_entry disco_offsets[3] = {
+    {{20, 30, 25}, 0}, {{26, 21, 31}, 0}, {{29, 24, 34}, 0}};
 
 void handle_animations(track *track, float time)
 {
@@ -404,28 +396,26 @@ void handle_animations(track *track, float time)
   float trigger0_val = sync_event_get_value(track, TRIGGER_0, time);
 
 // scenes
-#define SCENE_GOOD1 0
+#define SCENE_GOOD1            0
 #define SCENE_YELLOW_SUBMARINE 1
-#define SCENE_TORUS 3
-#define SCENE_MARBLES 4
-#define SCENE_GOOD7 6
-#define SCENE_GOOD9 8
-#define SCENE_DISCO 9
+#define SCENE_TORUS            3
+#define SCENE_MARBLES          4
+#define SCENE_GOOD7            6
+#define SCENE_GOOD9            8
+#define SCENE_DISCO            9
 
-  if (active_scene_changed)
-  {
+  if(active_scene_changed) {
     logc("active_scene_changed to %d", active_scene_id);
   }
 
   // SCENE_GOOD1
-  if (active_scene_id == SCENE_GOOD1)
-  {
+  if(active_scene_id == SCENE_GOOD1) {
     // use trigger0 to disable one of the lights
-    uint8_t good1_light_offsets_cnt = sizeof(good1_light_offsets) / sizeof(good1_light_offsets[0]);
+    uint8_t good1_light_offsets_cnt =
+        sizeof(good1_light_offsets) / sizeof(good1_light_offsets[0]);
 
     // enable all
-    for (uint8_t i = 0; i < good1_light_offsets_cnt; i++)
-    {
+    for(uint8_t i = 0; i < good1_light_offsets_cnt; i++) {
       uint8_t offset = good1_light_offsets[i];
       inst_info *inst_info = &scene->inst_info[offset];
       scene_clr_inst_state(scene, offset, IS_DISABLED);
@@ -433,23 +423,20 @@ void handle_animations(track *track, float time)
 
     // disable the one marked by trigger0
     uint8_t light_index_trigger0 = (uint8_t)trigger0_val;
-    if (light_index_trigger0 > 0 && light_index_trigger0 < good1_light_offsets_cnt)
-    {
+    if(light_index_trigger0 > 0 &&
+       light_index_trigger0 < good1_light_offsets_cnt) {
       uint8_t offset = good1_light_offsets[light_index_trigger0];
       scene_set_inst_state(scene, offset, IS_DISABLED);
     }
-  }
-  else
+  } else
     // SCENE_YELLOW_SUBMARINE
-    if (active_scene_id == SCENE_YELLOW_SUBMARINE)
-    {
-      uint8_t yellow_sphere_offsets_cnt = sizeof(yellow_sphere_offsets) / sizeof(yellow_sphere_offsets[0]);
+    if(active_scene_id == SCENE_YELLOW_SUBMARINE) {
+      uint8_t yellow_sphere_offsets_cnt =
+          sizeof(yellow_sphere_offsets) / sizeof(yellow_sphere_offsets[0]);
 
       // init
-      if (active_scene_changed)
-      {
-        for (uint8_t i = 0; i < yellow_sphere_offsets_cnt; i++)
-        {
+      if(active_scene_changed) {
+        for(uint8_t i = 0; i < yellow_sphere_offsets_cnt; i++) {
           uint8_t offset = yellow_sphere_offsets[i];
           inst_info *inst_info = &scene->inst_info[offset];
           mat4_copy(animation_transforms[i], inst_info->transform);
@@ -462,8 +449,7 @@ void handle_animations(track *track, float time)
       vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
 
       // TODO translate all other spheres by this offset and rotate them
-      for (uint8_t i = 1; i < yellow_sphere_offsets_cnt; i++)
-      {
+      for(uint8_t i = 1; i < yellow_sphere_offsets_cnt; i++) {
         uint8_t offset = yellow_sphere_offsets[i];
 
         mat4 sphere_mat;
@@ -491,17 +477,13 @@ void handle_animations(track *track, float time)
 
         scene_upd_inst_trans(scene, offset, sphere_mat);
       }
-    }
-    else if (active_scene_id == SCENE_TORUS)
-    {
+    } else if(active_scene_id == SCENE_TORUS) {
       uint8_t *offsets = torus_offsets;
       uint8_t offsets_cnt = sizeof(torus_offsets) / sizeof(torus_offsets[0]);
 
       // init
-      if (active_scene_changed)
-      {
-        for (uint8_t i = 0; i < offsets_cnt; i++)
-        {
+      if(active_scene_changed) {
+        for(uint8_t i = 0; i < offsets_cnt; i++) {
           uint8_t offset = offsets[i];
           inst_info *inst_info = &scene->inst_info[offset];
           mat4_copy(animation_transforms[i], inst_info->transform);
@@ -514,8 +496,7 @@ void handle_animations(track *track, float time)
       vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
 
       // translate all other spheres by this offset and rotate them
-      for (uint8_t i = 1; i < offsets_cnt; i++)
-      {
+      for(uint8_t i = 1; i < offsets_cnt; i++) {
         uint8_t offset = offsets[i];
 
         mat4 sphere_mat;
@@ -541,16 +522,13 @@ void handle_animations(track *track, float time)
 
         scene_upd_inst_trans(scene, offset, sphere_mat);
       }
-    }
-    else if (active_scene_id == SCENE_MARBLES)
-    {
-      uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
+    } else if(active_scene_id == SCENE_MARBLES) {
+      uint8_t marble_sphere_offset_cnt =
+          sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
 
       // init
-      if (active_scene_changed)
-      {
-        for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-        {
+      if(active_scene_changed) {
+        for(uint8_t i = 0; i < marble_sphere_offset_cnt; i++) {
           uint8_t offset = marble_sphere_offsets[i];
           inst_info *inst_info = &scene->inst_info[offset];
           mat4_copy(animation_transforms[i], inst_info->transform);
@@ -558,10 +536,8 @@ void handle_animations(track *track, float time)
       }
 
       // animate only if trigger0 > 0
-      if (trigger0_val > 0)
-      {
-        for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-        {
+      if(trigger0_val > 0) {
+        for(uint8_t i = 0; i < marble_sphere_offset_cnt; i++) {
           uint8_t offset = marble_sphere_offsets[i];
 
           mat4 transform;
@@ -580,20 +556,16 @@ void handle_animations(track *track, float time)
           scene_upd_inst_trans(scene, offset, transform);
         }
       }
-    }
-    else
+    } else
       // SCENE_GOOD7
-      if (active_scene_id == SCENE_GOOD7)
-      {
+      if(active_scene_id == SCENE_GOOD7) {
 #define OFFSETS good7_sphere_offsets
         uint8_t *offsets = OFFSETS;
         uint8_t offsets_cnt = sizeof(OFFSETS) / sizeof(OFFSETS[0]);
 
         // init
-        if (active_scene_changed)
-        {
-          for (uint8_t i = 0; i < offsets_cnt; i++)
-          {
+        if(active_scene_changed) {
+          for(uint8_t i = 0; i < offsets_cnt; i++) {
             uint8_t offset = offsets[i];
             inst_info *inst_info = &scene->inst_info[offset];
             mat4_copy(animation_transforms[i], inst_info->transform);
@@ -606,8 +578,7 @@ void handle_animations(track *track, float time)
         vec3 center_sphere_pos = mat4_get_trans(center_sphere_mat);
 
         // translate all other spheres by this offset and rotate them
-        for (uint8_t i = 1; i < offsets_cnt; i++)
-        {
+        for(uint8_t i = 1; i < offsets_cnt; i++) {
           uint8_t offset = offsets[i];
 
           mat4 sphere_mat;
@@ -633,24 +604,20 @@ void handle_animations(track *track, float time)
 
           scene_upd_inst_trans(scene, offset, sphere_mat);
         }
-      }
-      else if (active_scene_id == SCENE_MARBLES)
-      {
-        uint8_t marble_sphere_offset_cnt = sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
+      } else if(active_scene_id == SCENE_MARBLES) {
+        uint8_t marble_sphere_offset_cnt =
+            sizeof(marble_sphere_offsets) / sizeof(marble_sphere_offsets[0]);
 
         // init
-        if (active_scene_changed)
-        {
-          for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-          {
+        if(active_scene_changed) {
+          for(uint8_t i = 0; i < marble_sphere_offset_cnt; i++) {
             uint8_t offset = marble_sphere_offsets[i];
             inst_info *inst_info = &scene->inst_info[offset];
             mat4_copy(animation_transforms[i], inst_info->transform);
           }
         }
 
-        for (uint8_t i = 0; i < marble_sphere_offset_cnt; i++)
-        {
+        for(uint8_t i = 0; i < marble_sphere_offset_cnt; i++) {
           uint8_t offset = marble_sphere_offsets[i];
 
           mat4 transform;
@@ -664,14 +631,11 @@ void handle_animations(track *track, float time)
 
           scene_upd_inst_trans(scene, offset, transform);
         }
-      }
-      else
+      } else
         // SCENE_GOOD9
-        if (active_scene_id == SCENE_GOOD9)
-        {
+        if(active_scene_id == SCENE_GOOD9) {
           // init
-          if (active_scene_changed)
-          {
+          if(active_scene_changed) {
             uint8_t offset = good9_cylinder_offset;
             inst_info *inst_info = &scene->inst_info[offset];
             mat4_copy(animation_transforms[0], inst_info->transform);
@@ -697,18 +661,15 @@ void handle_animations(track *track, float time)
           cylinder_mat[11] = cylinder_pos.z;
 
           scene_upd_inst_trans(scene, good9_cylinder_offset, cylinder_mat);
-        }
-        else if (active_scene_id == SCENE_DISCO)
-        {
-          uint8_t disco_offsets_cnt = sizeof(disco_offsets) / sizeof(disco_offsets[0]);
+        } else if(active_scene_id == SCENE_DISCO) {
+          uint8_t disco_offsets_cnt =
+              sizeof(disco_offsets) / sizeof(disco_offsets[0]);
 
           // 120ms per row
-          if (time - last_disco_change > (120 * 8) / 1000.f)
-          {
+          if(time - last_disco_change > (120 * 8) / 1000.f) {
             // logc("disco change trigger");
 
-            for (uint8_t i = 0; i < disco_offsets_cnt; i++)
-            {
+            for(uint8_t i = 0; i < disco_offsets_cnt; i++) {
               disco_entry *entry = &disco_offsets[i];
               entry->disabled_index = (1 + rand_uint32()) % 3;
             }
@@ -716,23 +677,20 @@ void handle_animations(track *track, float time)
             last_disco_change = time;
           }
 
-          for (uint8_t i = 0; i < disco_offsets_cnt; i++)
-          {
+          for(uint8_t i = 0; i < disco_offsets_cnt; i++) {
             disco_entry *entry = &disco_offsets[i];
             // pick a random entry to disable
-            for (uint8_t j = 0; j < 3; j++)
-            {
+            for(uint8_t j = 0; j < 3; j++) {
               uint8_t offset = entry->cubes[j];
               inst_info *inst_info = &scene->inst_info[offset];
-              if (j == entry->disabled_index)
-              {
+              if(j == entry->disabled_index) {
                 scene_set_inst_state(scene, offset, IS_DISABLED);
-                // scene_set_inst_state(scene, offset, IS_EMISSIVE | IS_MTL_DIRTY);
-              }
-              else
-              {
+                // scene_set_inst_state(scene, offset, IS_EMISSIVE |
+                // IS_MTL_DIRTY);
+              } else {
                 scene_clr_inst_state(scene, offset, IS_DISABLED);
-                // scene_clr_inst_state(scene, offset, IS_EMISSIVE | IS_MTL_DIRTY | IS_WAS_EMISSIVE);
+                // scene_clr_inst_state(scene, offset, IS_EMISSIVE |
+                // IS_MTL_DIRTY | IS_WAS_EMISSIVE);
               }
             }
           }
@@ -760,10 +718,11 @@ void handle_animations(track *track, float time)
   active_scene_changed = false;
 }
 
-__attribute__((visibility("default"))) bool update(float time, bool converge, bool run_track)
+__attribute__((visibility("default"))) bool update(float time, bool converge,
+                                                   bool run_track)
 {
   bool finished = sync_is_finished(&intro, start_offset + time);
-  if (run_track && !finished)
+  if(run_track && !finished)
     process_events(&intro, start_offset + time);
 
   handle_animations(&intro, start_offset + time);
@@ -778,7 +737,7 @@ __attribute__((visibility("default"))) void release()
 {
   sync_release_track(&intro);
 
-  for (uint8_t i = 0; i < scene_cnt; i++)
+  for(uint8_t i = 0; i < scene_cnt; i++)
     scene_release(&scenes[i]);
   free(scenes);
 }

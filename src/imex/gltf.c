@@ -1,4 +1,5 @@
 #include "gltf.h"
+
 #include "../base/log.h"
 #include "../base/math.h"
 #include "../base/string.h"
@@ -17,7 +18,7 @@ char sbuf[SBUF_LEN];
 char *bstrndup(char *dest, const char *src, size_t len, size_t max_len)
 {
   uint32_t l = min(len, max_len - 1);
-  for(uint32_t i=0; i<l; i++)
+  for(uint32_t i = 0; i < l; i++)
     dest[i] = *src++;
   dest[l] = '\0';
   return dest;
@@ -34,7 +35,7 @@ char *toktostr(const char *s, jsmntok_t *t)
 int jsoneq(const char *json, jsmntok_t *tok, const char *s)
 {
   if(tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
-      strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
+     strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
     return 0;
   }
   return -1;
@@ -48,24 +49,24 @@ uint32_t dump(const char *s, jsmntok_t *t)
   }
 
   if(t->type == JSMN_OBJECT) {
-    //logc("o >>");
+    // logc("o >>");
     uint32_t j = 1;
-    for(int i=0; i<t->size; i++) {
+    for(int i = 0; i < t->size; i++) {
       jsmntok_t *key = t + j;
       j += dump(s, key);
       if(key->size > 0)
         j += dump(s, t + j);
     }
-    //logc("<< o");
+    // logc("<< o");
     return j;
   }
 
-  if (t->type == JSMN_ARRAY) {
-    //logc("a >>");
+  if(t->type == JSMN_ARRAY) {
+    // logc("a >>");
     uint32_t j = 1;
-    for(int i=0; i<t->size; i++)
+    for(int i = 0; i < t->size; i++)
       j += dump(s, t + j);
-    //logc("<< a");
+    // logc("<< a");
     return j;
   }
 
@@ -80,10 +81,11 @@ uint32_t ignore(const char *s, jsmntok_t *t)
   return j;
 }
 
-uint32_t read_mtl_extensions(gltf_mtl *m, const char *s, jsmntok_t *t, float *emissive_strength)
+uint32_t read_mtl_extensions(gltf_mtl *m, const char *s, jsmntok_t *t,
+                             float *emissive_strength)
 {
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "KHR_materials_emissive_strength") == 0) {
@@ -122,14 +124,16 @@ uint32_t read_mtl_extensions(gltf_mtl *m, const char *s, jsmntok_t *t, float *em
 uint32_t read_pbr_metallic_roughness(gltf_mtl *m, const char *s, jsmntok_t *t)
 {
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "baseColorFactor") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 4) {
         // Just read rgb, ignore alpha component (= j + 5)
-        m->col = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        //vec3_logc("baseColorFactor: ", m->col);
+        m->col =
+            (vec3){atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])),
+                   atof(toktostr(s, &t[j + 4]))};
+        // vec3_logc("baseColorFactor: ", m->col);
         j += 6;
         continue;
       } else
@@ -164,7 +168,7 @@ uint32_t read_pbr_metallic_roughness(gltf_mtl *m, const char *s, jsmntok_t *t)
 
 uint32_t read_mtl(gltf_mtl *m, const char *s, jsmntok_t *t)
 {
-  m->col = (vec3){ 1.0f, 1.0f, 1.0f };
+  m->col = (vec3){1.0f, 1.0f, 1.0f};
   m->metallic = 0.0f;
   m->roughness = 0.5f;
   m->ior = 1.5f;
@@ -172,10 +176,10 @@ uint32_t read_mtl(gltf_mtl *m, const char *s, jsmntok_t *t)
 
   // Temporary store only, will use to calc material emission
   float emissive_strength = 0.0f;
-  vec3 emissive_factor = (vec3){ 1.0f, 1.0f, 1.0f };
+  vec3 emissive_factor = (vec3){1.0f, 1.0f, 1.0f};
 
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "name") == 0) {
@@ -188,8 +192,10 @@ uint32_t read_mtl(gltf_mtl *m, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "emissiveFactor") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
-        emissive_factor = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        //vec3_logc("emissiveFactor: ", emissive_factor);
+        emissive_factor =
+            (vec3){atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])),
+                   atof(toktostr(s, &t[j + 4]))};
+        // vec3_logc("emissiveFactor: ", emissive_factor);
         j += 5;
         continue;
       } else
@@ -223,7 +229,7 @@ uint32_t read_mtls(gltf_data *data, const char *s, jsmntok_t *t)
 
   uint32_t cnt = 0;
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     logc(">>>> mtl %i", i);
     j += read_mtl(&data->mtls[cnt++], s, t + j);
     logc("<<<< mtl %i", i);
@@ -237,7 +243,7 @@ uint32_t read_mtls(gltf_data *data, const char *s, jsmntok_t *t)
 uint32_t read_node_extras(gltf_node *n, const char *s, jsmntok_t *t)
 {
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "invisible") == 0) {
@@ -258,12 +264,12 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
   n->mesh_idx = -1;
   n->cam_idx = -1;
   n->invisible = false;
-  n->trans = (vec3){ 0.0f, 0.0f, 0.0f };
-  n->scale = (vec3){ 1.0f, 1.0f, 1.0f };
-  memcpy(n->rot, (float[]){ 0.0f, 0.0f, 0.0f, 1.0f }, sizeof(n->rot));
+  n->trans = (vec3){0.0f, 0.0f, 0.0f};
+  n->scale = (vec3){1.0f, 1.0f, 1.0f};
+  memcpy(n->rot, (float[]){0.0f, 0.0f, 0.0f, 1.0f}, sizeof(n->rot));
 
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "extras") == 0) {
@@ -295,8 +301,10 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "translation") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
-        n->trans = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        //vec3_logc("translation: ", n->trans);
+        n->trans =
+            (vec3){atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])),
+                   atof(toktostr(s, &t[j + 4]))};
+        // vec3_logc("translation: ", n->trans);
         j += 5;
         continue;
       } else
@@ -305,8 +313,10 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
 
     if(jsoneq(s, key, "scale") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
-        n->scale = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        //vec3_logc("scale: ", n->scale);
+        n->scale =
+            (vec3){atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])),
+                   atof(toktostr(s, &t[j + 4]))};
+        // vec3_logc("scale: ", n->scale);
         j += 5;
         continue;
       } else
@@ -319,7 +329,8 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
         n->rot[1] = atof(toktostr(s, &t[j + 3]));
         n->rot[2] = atof(toktostr(s, &t[j + 4]));
         n->rot[3] = atof(toktostr(s, &t[j + 5]));
-        logc("rotation: %f, %f, %f, %f", n->rot[0], n->rot[1], n->rot[2], n->rot[3]);
+        logc("rotation: %f, %f, %f, %f", n->rot[0], n->rot[1], n->rot[2],
+             n->rot[3]);
         j += 6;
         continue;
       } else
@@ -327,7 +338,8 @@ uint32_t read_node(gltf_node *n, const char *s, jsmntok_t *t)
     }
 
     if(jsoneq(s, key, "children") == 0) {
-      logc("#### ERROR: Gltf nodes with children not supported. Most likely this gltf file will not be read correctly.");
+      logc("#### ERROR: Gltf nodes with children not supported. Most likely "
+           "this gltf file will not be read correctly.");
     }
 
     j += ignore(s, key);
@@ -345,12 +357,12 @@ uint32_t read_nodes(gltf_data *data, const char *s, jsmntok_t *t)
 
   uint32_t cnt = 0;
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     logc(">>>> node %i", i);
-    
+
     gltf_node *n = &data->nodes[cnt++];
     j += read_node(n, s, t + j);
-   
+
     if(n->cam_idx >= 0)
       data->cam_node_cnt++;
 
@@ -365,7 +377,7 @@ uint32_t read_nodes(gltf_data *data, const char *s, jsmntok_t *t)
 uint32_t read_cam_perspective(gltf_cam *c, const char *s, jsmntok_t *t)
 {
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "yfov") == 0) {
@@ -386,7 +398,7 @@ uint32_t read_cam(gltf_cam *c, const char *s, jsmntok_t *t)
   c->vert_fov = 45.0f;
 
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "name") == 0) {
@@ -417,7 +429,7 @@ uint32_t read_cams(gltf_data *data, const char *s, jsmntok_t *t)
 
   uint32_t cnt = 0;
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     logc(">>>> cam %i", i);
     j += read_cam(&data->cams[cnt++], s, t + j);
     logc("<<<< cam %i", i);
@@ -431,7 +443,7 @@ uint32_t read_cams(gltf_data *data, const char *s, jsmntok_t *t)
 uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 {
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "subx") == 0) {
@@ -493,7 +505,7 @@ uint32_t read_mesh_extras(gltf_mesh *m, const char *s, jsmntok_t *t)
 uint32_t read_attributes(gltf_prim *p, const char *s, jsmntok_t *t)
 {
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "POSITION") == 0) {
@@ -524,7 +536,7 @@ uint32_t read_primitive(gltf_prim *p, const char *s, jsmntok_t *t)
   p->nrm_idx = -1;
 
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "attributes") == 0) {
@@ -561,7 +573,7 @@ uint32_t read_primitives(gltf_mesh *m, const char *s, jsmntok_t *t)
 
   uint32_t cnt = 0;
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     logc(">>>>>> primitive %i", i);
     j += read_primitive(&m->prims[cnt++], s, &t[j]);
     logc("<<<<<< primitive %i", i);
@@ -585,7 +597,7 @@ uint32_t read_mesh(gltf_mesh *m, const char *s, jsmntok_t *t)
   m->share_id = 0;
 
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "extras") == 0) {
@@ -624,7 +636,7 @@ uint32_t read_meshes(gltf_data *data, const char *s, jsmntok_t *t)
 
   uint32_t cnt = 0;
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     logc(">>>> mesh %i", i);
     j += read_mesh(&data->meshes[cnt++], s, t + j);
     logc("<<<< mesh %i", i);
@@ -641,7 +653,7 @@ uint32_t read_accessor(gltf_accessor *a, const char *s, jsmntok_t *t)
   a->byte_ofs = 0;
 
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "bufferView") == 0) {
@@ -705,7 +717,7 @@ uint32_t read_accessors(gltf_data *data, const char *s, jsmntok_t *t)
 
   uint32_t cnt = 0;
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     logc(">>>> accessor %i", i);
     j += read_accessor(&data->accessors[cnt++], s, t + j);
     logc("<<<< accessor %i", i);
@@ -722,7 +734,7 @@ uint32_t read_bufview(gltf_bufview *b, const char *s, jsmntok_t *t)
   b->byte_ofs = 0;
 
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "buffer") == 0) {
@@ -768,7 +780,7 @@ uint32_t read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
 
   uint32_t cnt = 0;
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     logc(">>>> bufview %i", i);
     j += read_bufview(&data->bufviews[cnt++], s, t + j);
     logc("<<<< bufview %i", i);
@@ -782,13 +794,15 @@ uint32_t read_bufviews(gltf_data *data, const char *s, jsmntok_t *t)
 uint32_t read_scene_extras(gltf_data *d, const char *s, jsmntok_t *t)
 {
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "bgcol") == 0) {
       if(t[j + 1].type == JSMN_ARRAY && t[j + 1].size == 3) {
-        d->bg_col = (vec3){ atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])), atof(toktostr(s, &t[j + 4])) };
-        //vec3_logc("bg col: ", d->bg_col);
+        d->bg_col =
+            (vec3){atof(toktostr(s, &t[j + 2])), atof(toktostr(s, &t[j + 3])),
+                   atof(toktostr(s, &t[j + 4]))};
+        // vec3_logc("bg col: ", d->bg_col);
         j += 5;
         continue;
       } else
@@ -803,10 +817,10 @@ uint32_t read_scene_extras(gltf_data *d, const char *s, jsmntok_t *t)
 
 uint32_t read_scene(gltf_data *d, const char *s, jsmntok_t *t)
 {
-  d->bg_col = (vec3){ 0.0f, 0.0f, 0.0f };
+  d->bg_col = (vec3){0.0f, 0.0f, 0.0f};
 
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     if(jsoneq(s, key, "extras") == 0) {
@@ -825,11 +839,13 @@ uint32_t read_scenes(gltf_data *data, const char *s, jsmntok_t *t)
   logc(">> scenes");
 
   if(t->size > 1)
-    logc("#### WARN: Found %i scenes. Will process only the first and skip all others.", t->size);
+    logc("#### WARN: Found %i scenes. Will process only the first and skip all "
+         "others.",
+         t->size);
 
   uint32_t cnt = 0;
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     logc(">>>> scene %i", i);
 
     // For now we process the first scene only
@@ -877,61 +893,71 @@ uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz)
 
   // Read token/data
   uint32_t j = 1;
-  for(int i=0; i<t->size; i++) {
+  for(int i = 0; i < t->size; i++) {
     jsmntok_t *key = t + j;
 
     // Scenes
-    if(jsoneq(gltf, key, "scenes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "scenes") == 0 && t[j + 1].type == JSMN_ARRAY &&
+       t[j + 1].size > 0) {
       j++;
       j += read_scenes(data, gltf, t + j);
       continue;
     }
 
-   // Materials
-    if(jsoneq(gltf, key, "materials") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    // Materials
+    if(jsoneq(gltf, key, "materials") == 0 && t[j + 1].type == JSMN_ARRAY &&
+       t[j + 1].size > 0) {
       j++;
       j += read_mtls(data, gltf, t + j);
       continue;
     }
 
     // Nodes
-    if(jsoneq(gltf, key, "nodes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "nodes") == 0 && t[j + 1].type == JSMN_ARRAY &&
+       t[j + 1].size > 0) {
       j++;
       j += read_nodes(data, gltf, t + j);
       continue;
     }
 
     // Camera
-    if(jsoneq(gltf, key, "cameras") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "cameras") == 0 && t[j + 1].type == JSMN_ARRAY &&
+       t[j + 1].size > 0) {
       j++;
       j += read_cams(data, gltf, t + j);
       continue;
     }
 
     // Meshes
-    if(jsoneq(gltf, key, "meshes") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "meshes") == 0 && t[j + 1].type == JSMN_ARRAY &&
+       t[j + 1].size > 0) {
       j++;
       j += read_meshes(data, gltf, t + j);
       continue;
     }
 
     // Accessors
-    if(jsoneq(gltf, key, "accessors") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "accessors") == 0 && t[j + 1].type == JSMN_ARRAY &&
+       t[j + 1].size > 0) {
       j++;
       j += read_accessors(data, gltf, t + j);
       continue;
     }
 
     // Buffer views
-    if(jsoneq(gltf, key, "bufferViews") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size > 0) {
+    if(jsoneq(gltf, key, "bufferViews") == 0 && t[j + 1].type == JSMN_ARRAY &&
+       t[j + 1].size > 0) {
       j++;
       j += read_bufviews(data, gltf, t + j);
       continue;
     }
 
-    // Buffers. Check that we have a single buffer with mesh data. Something else is not supported ATM.
-    if(jsoneq(gltf, key, "buffers") == 0 && t[j + 1].type == JSMN_ARRAY && t[j + 1].size != 1) {
-      logc("#### ERROR: Expected gltf with one buffer only. Can not process file further.");
+    // Buffers. Check that we have a single buffer with mesh data. Something
+    // else is not supported ATM.
+    if(jsoneq(gltf, key, "buffers") == 0 && t[j + 1].type == JSMN_ARRAY &&
+       t[j + 1].size != 1) {
+      logc("#### ERROR: Expected gltf with one buffer only. Can not process "
+           "file further.");
       free(t);
       return 1;
     }
@@ -951,7 +977,7 @@ uint8_t gltf_read(gltf_data *data, const char *gltf, size_t gltf_sz)
 
 void gltf_release(gltf_data *data)
 {
-  for(uint32_t i=0; i<data->mesh_cnt; i++)
+  for(uint32_t i = 0; i < data->mesh_cnt; i++)
     free(data->meshes[i].prims);
 
   free(data->meshes);

@@ -51,15 +51,9 @@
 }*/
 
 // Scene data handling
-const SHORT_MASK          = 0xffffu;
 const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
-
-// General constants
 const EPS                 = 0.0001;
-const INF                 = 3.402823466e+38;
-
 const STACK_EMPTY_MARKER  = 0xfffffffi;
-
 const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
@@ -86,11 +80,6 @@ fn minComp4(v: vec4f) -> f32
 fn maxComp4(v: vec4f) -> f32
 {
   return max(v.x, max(v.y, max(v.z, v.w)));
-}
-
-fn toMat4x4(m: mat3x4f) -> mat4x4f
-{
-  return mat4x4f(m[0], m[1], m[2], vec4f(0, 0, 0, 1));
 }
 
 // Laine et al. 2013; Afra et al. 2016: GPU efficient slabs test

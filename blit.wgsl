@@ -45,12 +45,6 @@ fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
   return vec4f(pos[vertexIndex], 0.0, 1.0);
 }
 
-fn octToDir(oct: vec2f) -> vec3f
-{
-  let v = vec3f(oct, 1.0 - abs(oct.x) - abs(oct.y));
-  return normalize(select(v, vec3f((1.0 - abs(v.yx)) * (step(vec2f(0.0), v.xy) * 2.0 - vec2f(1.0)), v.z), v.z < 0.0));
-}
-
 // https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
 fn filmicToneACES(x: vec3f) -> vec3f
 {

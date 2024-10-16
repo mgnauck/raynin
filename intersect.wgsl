@@ -81,29 +81,14 @@ var<private> nodeStack: array<i32, MAX_NODE_CNT>; // For Aila traversal, switch 
 //var<workgroup> foundLeafCnt0: atomic<u32>;
 //var<workgroup> foundLeafCnt1: atomic<u32>;
 
-fn minComp3(v: vec3f) -> f32
-{
-  return min(v.x, min(v.y, v.z));
-}
-
 fn minComp4(v: vec4f) -> f32
 {
   return min(v.x, min(v.y, min(v.z, v.w)));
 }
 
-fn maxComp3(v: vec3f) -> f32
-{
-  return max(v.x, max(v.y, v.z));
-}
-
 fn maxComp4(v: vec4f) -> f32
 {
   return max(v.x, max(v.y, max(v.z, v.w)));
-}
-
-fn toMat4x4(m: mat3x4f) -> mat4x4f
-{
-  return mat4x4f(m[0], m[1], m[2], vec4f(0, 0, 0, 1));
 }
 
 // Laine et al. 2013; Afra et al. 2016: GPU efficient slabs test
