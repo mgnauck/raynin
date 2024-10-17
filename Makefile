@@ -6,37 +6,22 @@ SHADER=$(shell find ./ -maxdepth 1 -type f -name '*.wgsl')
 SHADER_MIN=$(patsubst ./%.wgsl,$(OUT_DIR)/%.wgsl.min,$(SHADER))
 SHADER_EXCLUDES=vm,m,m1,m2,m3
 LOADER_JS=main
-AUDIO_JS=audio
 OUT=index.html
 
-PLAYER_CONFIG=-DPROJECT_DATA -DPLAYER_ONLY -DBUMP_ALLOCATOR -DNO_LOG -DSKIP_RESET_STATE_ON_VOICE_START
-#PLAYER_CONFIG=-DPROJECT_DATA -DPLAYER_ONLY -DBUMP_ALLOCATOR -DSKIP_RESET_STATE_ON_VOICE_START
-PLAYER_FEATURES = -DSUPPORT_NOTE -DSUPPORT_OSC -DSUPPORT_NOISE2 -DSUPPORT_ADSR -DSUPPORT_TRANSPOSE -DSUPPORT_MUL -DSUPPORT_CLAMP -DSUPPORT_SCALE -DSUPPORT_MIX -DSUPPORT_FILTER -DSUPPORT_DELAY -DSUPPORT_REVERB -DSUPPORT_DIST -DSUPPORT_OUT
 CC=clang
 LD=wasm-ld
 DBGFLAGS=-DNDEBUG
-CFLAGS=--target=wasm32 -mbulk-memory -std=c2x -nostdlib -Os -ffast-math -msimd128 -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable $(PLAYER_CONFIG) $(PLAYER_FEATURES)
-#CFLAGS+=-DSILENT
+CFLAGS=--target=wasm32 -mbulk-memory -std=c2x -nostdlib -Os -ffast-math -msimd128 -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=134217728 -z stack-size=8388608 --Map=$(WASM_OUT).map
 WOPTFLAGS=-Oz --enable-bulk-memory --enable-simd
 
 .PHONY: clean
 
-$(OUT_DIR)/$(OUT): $(OUT_DIR)/$(LOADER_JS).5.js Makefile
+$(OUT_DIR)/$(OUT): $(OUT_DIR)/$(LOADER_JS).4.js Makefile
 	js-payload-compress --zopfli-iterations=100 $< $@ 
 
-$(OUT_DIR)/$(LOADER_JS).5.js: $(OUT_DIR)/$(LOADER_JS).4.js
+$(OUT_DIR)/$(LOADER_JS).4.js: $(OUT_DIR)/$(LOADER_JS).3.js
 	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=true --toplevel > $@
-
-$(OUT_DIR)/$(LOADER_JS).4.js: $(OUT_DIR)/$(AUDIO_JS).2.js $(OUT_DIR)/$(LOADER_JS).3.js
-	./embed.sh $(OUT_DIR)/$(LOADER_JS).3.js BEGIN_$(AUDIO_JS)_js END_$(AUDIO_JS)_js $(OUT_DIR)/$(AUDIO_JS).2.js $@
-
-$(OUT_DIR)/$(AUDIO_JS).2.js: $(OUT_DIR)/$(AUDIO_JS).1.js
-	sed -e 's/\\\\/\\\\/g' -e 's/`/\\`/g' -e 's/$${/\\$${/g' $< > $@
-
-$(OUT_DIR)/$(AUDIO_JS).1.js: $(AUDIO_JS).js
-	@mkdir -p `dirname $@`
-	terser $< -m -c toplevel,passes=5,unsafe=true,pure_getters=true,keep_fargs=false,booleans_as_integers=false --toplevel > $@
 
 $(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $(SHADER_MIN) $(OUT_DIR)/$(LOADER_JS).2.js
 	./embed.sh $(OUT_DIR)/$(LOADER_JS).2.js BEGIN_$(WASM_OUT)_wasm END_$(WASM_OUT)_wasm $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $@
