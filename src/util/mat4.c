@@ -4,7 +4,7 @@
 #include "../base/math.h"
 #include "../base/string.h"
 
-void mat4_identity(mat4 d)
+void mat4_identity(float *d)
 {
   d[0] = 1.0f;
   d[1] = 0.0f;
@@ -24,14 +24,14 @@ void mat4_identity(mat4 d)
   d[15] = 1.0f;
 }
 
-void mat4_transpose(mat4 d, const mat4 m)
+void mat4_transpose(float *d, const float *m)
 {
   for(int j = 0; j < 4; j++)
     for(int i = 0; i < 4; i++)
       d[4 * j + i] = m[4 * i + j];
 }
 
-void mat4_trans(mat4 d, const vec3 v)
+void mat4_trans(float *d, const vec3 v)
 {
   d[0] = 1.0f;
   d[1] = 0.0f;
@@ -51,7 +51,7 @@ void mat4_trans(mat4 d, const vec3 v)
   d[15] = 1.0f;
 }
 
-void mat4_rot_x(mat4 d, float rad)
+void mat4_rot_x(float *d, float rad)
 {
   float c = cosf(rad);
   float s = sinf(rad);
@@ -74,7 +74,7 @@ void mat4_rot_x(mat4 d, float rad)
   d[15] = 1.0f;
 }
 
-void mat4_rot_y(mat4 d, float rad)
+void mat4_rot_y(float *d, float rad)
 {
   float c = cosf(rad);
   float s = sinf(rad);
@@ -97,7 +97,7 @@ void mat4_rot_y(mat4 d, float rad)
   d[15] = 1.0f;
 }
 
-void mat4_rot_z(mat4 d, float rad)
+void mat4_rot_z(float *d, float rad)
 {
   float c = cosf(rad);
   float s = sinf(rad);
@@ -120,7 +120,7 @@ void mat4_rot_z(mat4 d, float rad)
   d[15] = 1.0f;
 }
 
-void mat4_scale(mat4 d, vec3 s)
+void mat4_scale(float *d, vec3 s)
 {
   d[0] = s.x;
   d[1] = 0.0f;
@@ -140,7 +140,7 @@ void mat4_scale(mat4 d, vec3 s)
   d[15] = 1.0f;
 }
 
-void mat4_scale_u(mat4 d, float s)
+void mat4_scale_u(float *d, float s)
 {
   d[0] = s;
   d[1] = 0.0f;
@@ -160,9 +160,9 @@ void mat4_scale_u(mat4 d, float s)
   d[15] = 1.0f;
 }
 
-void mat4_mul(mat4 d, const mat4 a, const mat4 b)
+void mat4_mul(float *d, const float *a, const float *b)
 {
-  mat4 t;
+  float t[16];
   t[0] = a[0] * b[0] + a[1] * b[4] + a[2] * b[8] + a[3] * b[12];
   t[1] = a[0] * b[1] + a[1] * b[5] + a[2] * b[9] + a[3] * b[13];
   t[2] = a[0] * b[2] + a[1] * b[6] + a[2] * b[10] + a[3] * b[14];
@@ -187,7 +187,7 @@ void mat4_mul(mat4 d, const mat4 a, const mat4 b)
     d[i] = t[i];
 }
 
-vec3 mat4_mul_pos(const mat4 m, vec3 v)
+vec3 mat4_mul_pos(const float *m, vec3 v)
 {
   vec3 r = {
       m[0] * v.x + m[1] * v.y + m[2] * v.z + m[3],
@@ -200,7 +200,7 @@ vec3 mat4_mul_pos(const mat4 m, vec3 v)
   return w == 1 ? r : vec3_scale(r, 1.0f / w);
 }
 
-vec3 mat4_mul_dir(const mat4 m, vec3 v)
+vec3 mat4_mul_dir(const float *m, vec3 v)
 {
   return (vec3){
       m[0] * v.x + m[1] * v.y + m[2] * v.z,
@@ -211,9 +211,9 @@ vec3 mat4_mul_dir(const mat4 m, vec3 v)
 
 // Taken from Mesa 3D
 // https://stackoverflow.com/questions/1148309/inverting-a-4x4-matrix
-bool mat4_inv(mat4 d, const mat4 m)
+bool mat4_inv(float *d, const float *m)
 {
-  mat4 inv;
+  float inv[16];
 
   inv[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15] +
            m[9] * m[7] * m[14] + m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
@@ -276,18 +276,18 @@ bool mat4_inv(mat4 d, const mat4 m)
   return true;
 }
 
-vec3 mat4_get_trans(const mat4 m)
+vec3 mat4_get_trans(const float *m)
 {
   return (vec3){m[3], m[7], m[11]};
 }
 
-void mat4_from_row3x4(mat4 dst, const float *src)
+void mat4_from_row3x4(float *dst, const float *src)
 {
   memcpy(dst, src, 12 * sizeof(*src));
   memcpy(dst + 12, &(float[4]){0.0f, 0.0f, 0.0f, 1.0f}, 4 * sizeof(float));
 }
 
-void mat4_from_quat(mat4 dst, float x, float y, float z, float w)
+void mat4_from_quat(float *dst, float x, float y, float z, float w)
 {
   float xx = x * x;
   float xy = x * y;
@@ -311,7 +311,7 @@ void mat4_from_quat(mat4 dst, float x, float y, float z, float w)
   dst[15] = 1.0f;
 }
 
-void mat4_logc(mat4 m)
+void mat4_logc(float *m)
 {
   for(uint8_t i = 0; i < 4; i++)
     logc("%6.3f %6.3f %6.3f %6.3f", m[4 * i], m[4 * i + 1], m[4 * i + 2],
