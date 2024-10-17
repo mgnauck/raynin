@@ -1,9 +1,8 @@
 #include "vec3.h"
-
 #include <stddef.h>
-
 #include "../base/log.h"
 #include "../base/math.h"
+#include "../base/pcgrand.h"
 
 void vec3_set(vec3 *v, uint8_t idx, float val)
 {

@@ -1,11 +1,8 @@
 #include "mat4.h"
-
 #include <stdint.h>
-
 #include "../base/log.h"
 #include "../base/math.h"
 #include "../base/string.h"
-#include "../base/walloc.h"
 
 void mat4_identity(mat4 d)
 {
@@ -32,11 +29,6 @@ void mat4_transpose(mat4 d, const mat4 m)
   for(int j = 0; j < 4; j++)
     for(int i = 0; i < 4; i++)
       d[4 * j + i] = m[4 * i + j];
-}
-
-void mat4_copy(mat4 dst, const mat4 src)
-{
-  memcpy(dst, src, 16 * sizeof(float));
 }
 
 void mat4_trans(mat4 d, const vec3 v)

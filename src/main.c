@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include "base/log.h"
 #include "base/math.h"
-#include "base/walloc.h"
+#include "base/stdlib.h"
 #include "imex/import.h"
 #include "rend/bvh.h"
 #include "rend/renderer.h"
@@ -161,7 +161,7 @@ void init()
 __attribute__((visibility("default")))
 void update(float time, bool converge)
 {
-  renderer_update(active_scene, NULL, converge);
+  renderer_update(active_scene, converge);
   set_ltri_cnt(active_scene->ltri_cnt);
 }
 

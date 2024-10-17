@@ -1,7 +1,5 @@
 #include "aabb.h"
-
 #include <float.h>
-
 #include "../base/math.h"
 
 aabb aabb_init()
@@ -26,9 +24,9 @@ void aabb_pad(aabb *a)
   for(uint8_t i = 0; i < 3; i++) {
     float mi = vec3_get(a->min, i);
     float ma = vec3_get(a->max, i);
-    if(fabsf(ma - mi) < EPSILON) {
-      vec3_set(&a->min, i, mi - EPSILON * 0.5);
-      vec3_set(&a->max, i, ma + EPSILON * 0.5);
+    if(fabsf(ma - mi) < EPS) {
+      vec3_set(&a->min, i, mi - EPS * 0.5);
+      vec3_set(&a->max, i, ma + EPS * 0.5);
     }
   }
 }

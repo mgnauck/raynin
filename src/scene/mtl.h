@@ -2,7 +2,6 @@
 #define MTL_H
 
 #include <stdbool.h>
-
 #include "../util/vec3.h"
 
 typedef struct mtl {

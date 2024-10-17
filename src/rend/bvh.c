@@ -1,7 +1,5 @@
 #include "bvh.h"
-
 #include <float.h>
-
 #include "../scene/inst.h"
 #include "../scene/tri.h"
 #include "../util/aabb.h"

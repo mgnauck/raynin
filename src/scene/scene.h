@@ -2,7 +2,6 @@
 #define SCENE_H
 
 #include <stdint.h>
-
 #include "../util/mat4.h"
 #include "types.h"
 
@@ -67,14 +66,11 @@ void scene_upd_inst_trans(scene *s, uint16_t inst_id, mat4 transform);
 void scene_upd_inst_mtl(scene *s, uint16_t inst_id, uint16_t mtl_id);
 void scene_upd_inst_flags(scene *s, uint16_t inst_id, uint32_t flags);
 
-// Mainly for IS_DISABLED state updates for now. Everything else is done via
-// scene_upd*().
 void scene_set_inst_state(scene *s, uint16_t inst_id, uint32_t state);
 void scene_clr_inst_state(scene *s, uint16_t inst_id, uint32_t state);
 uint32_t scene_get_inst_state(scene *s, uint16_t inst_id);
 
-mesh *scene_acquire_mesh(scene *s); // Pair calls to acquire and attach, i.e.
-                                    // can not acquire twice in a row
+mesh *scene_acquire_mesh(scene *s); // Pair calls to acquire and attach
 uint16_t scene_attach_mesh(scene *s, mesh *m, bool is_mesh_emissive);
 
 #endif

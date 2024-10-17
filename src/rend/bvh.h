@@ -2,7 +2,6 @@
 #define BVH_H
 
 #include <stdint.h>
-
 #include "../util/vec3.h"
 
 typedef struct inst_info inst_info;

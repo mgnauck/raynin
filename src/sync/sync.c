@@ -1,11 +1,9 @@
 #include "sync.h"
-
 #include <stddef.h>
-
 #include "../base/log.h"
 #include "../base/math.h"
+#include "../base/stdlib.h"
 #include "../base/string.h"
-#include "../base/walloc.h"
 
 float get_row_rate(uint16_t bpm, uint8_t rows_per_beat)
 {
@@ -94,7 +92,6 @@ void sync_index_track(track *t)
 
     // Init even state (if event id was not contained, beg/end is still -1)
     t->event_states[j] = (event_state){beg, end, -1};
-    // logc("id: %i, beg: %i, end: %i", j, beg, end);
   }
 }
 
@@ -179,66 +176,3 @@ float sync_event_get_value(track *t, uint8_t id, float time)
       }
   }
 }
-
-/*bool sync_event_is_active(const track *t, uint8_t id, float time)
-{
-  uint16_t row = (uint16_t)floorf(time * t->row_rate);
-  for(uint32_t i=0; i<t->event_cnt; i++) {
-    const event *c = &t->events[i];
-    if(c->id == id && c->row <= row)
-      return true;
-  }
-  return false;
-}
-
-
-float sync_event_search_value(const track *t, uint8_t id, float time)
-{
-  float row_time = time * t->row_rate;
-  uint16_t row = (uint16_t)floorf(time * t->row_rate);
-  const event *e0 = NULL;
-  const event *e1 = NULL;
-
-  for(uint32_t i=0; i<t->event_cnt; i++) {
-    const event *c = &t->events[i];
-    if(c->id == id) {
-      if(c->row <= row) {
-        // First one before current row time
-        e0 = c;
-        continue;
-      }
-      if(e0 && c->row > row) {
-        // Direct next one after current row time
-        e1 = c;
-        break;
-      }
-    }
-  }
-
-  if(!e0)
-    return EVENT_INACTIVE;
-
-  //if(e0->id == 5)
-  //  logc("%3.6f: Found e0 at row %i", row_time, e0->row);
-
-  if(!e1)
-    return e0->value;
-
-  //if(e1->id == 5)
-  //  logc("%3.6f: Found e1 at row %i", row_time, e1->row);
-
-  switch(e0->type) {
-    case BT_STEP:
-      return e0->value;
-    case BT_LINEAR:
-      return blend_linear(e0, e1, row_time);
-    case BT_SMOOTH:
-      return blend_smooth(e0, e1, row_time);
-    case BT_RAMP:
-      return blend_ramp(e0, e1, row_time);
-    default: {
-      logc("### ERROR Sync: Unknown blend type");
-      return EVENT_ERROR;
-    }
-  }
-}*/

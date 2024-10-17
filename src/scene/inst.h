@@ -2,7 +2,6 @@
 #define INST_H
 
 #include <stdint.h>
-
 #include "../util/aabb.h"
 #include "../util/mat4.h"
 
@@ -20,6 +19,7 @@ typedef enum inst_state {
 
 typedef enum inst_flags {
   IF_INVISIBLE = 1, // Instance is active but invisible, i.e. lights
+  IF_NO_SHADOW = 2, // Instance does not cast a shadow
 } inst_flags;
 
 // Additional CPU side data for instances

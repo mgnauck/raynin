@@ -1,8 +1,7 @@
 #include "renderer.h"
-
 #include "../base/math.h"
+#include "../base/stdlib.h"
 #include "../base/string.h"
-#include "../base/walloc.h"
 #include "../scene/cam.h"
 #include "../scene/inst.h"
 #include "../scene/mesh.h"
@@ -11,7 +10,6 @@
 #include "../scene/tri.h"
 #include "../util/vec3.h"
 #include "bvh.h"
-#include "postparams.h"
 
 #define CAM_BUF_SIZE         48
 #define MAX_UNIFORM_BUF_SIZE 65536
@@ -27,7 +25,6 @@ typedef enum buf_type {
   BT_NODE, // blas + tlas
   // ..more buffers on JS-side here..
   BT_CFG = 21,
-  BT_POST = 22,
 } buf_type;
 
 static uint32_t total_tris = 0;
@@ -58,8 +55,6 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
   // greater/equal than mtl)
   total_mtl_cnt = total_inst_cnt;
 
-  // TODO Define size of post param buffer from WASM instead of fixed in JS
-
   gpu_create_res(CAM_BUF_SIZE,                    // Camera (uniform buf)
                  total_mtl_cnt * sizeof(mtl),     // Materials (uniform buf)
                  total_inst_cnt * sizeof(inst),   // Instances (uniform buf)
@@ -74,20 +69,17 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
   return 0;
 }
 
-void renderer_update(scene *s, const post_params *p, bool converge)
+void renderer_update(scene *s, bool converge)
 {
   scene_prepare_render(s);
 
-  if(!converge || s->dirty > 0 || p)
+  if(!converge || s->dirty > 0)
     reset_samples();
 
   if(s->dirty & RT_CFG) {
     gpu_write_buf(BT_CFG, 12 * 4, &s->bg_col, sizeof(vec3));
     scene_clr_dirty(s, RT_CFG);
   }
-
-  if(p)
-    gpu_write_buf(BT_POST, 0, p, sizeof(*p));
 
   if(s->dirty & RT_CAM) {
     cam *cam = scene_get_active_cam(s);

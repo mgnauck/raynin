@@ -1,8 +1,7 @@
 #include "scene.h"
-
 #include "../base/math.h"
+#include "../base/stdlib.h"
 #include "../base/string.h"
-#include "../base/walloc.h"
 #include "../rend/bvh.h"
 #include "../util/aabb.h"
 #include "cam.h"

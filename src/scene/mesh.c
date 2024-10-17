@@ -1,8 +1,7 @@
 #include "mesh.h"
-
 #include "../base/math.h"
+#include "../base/stdlib.h"
 #include "../base/string.h"
-#include "../base/walloc.h"
 #include "tri.h"
 
 void mesh_init(mesh *m, uint32_t tri_cnt)

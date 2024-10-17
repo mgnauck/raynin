@@ -1,25 +1,20 @@
 #include "string.h"
 
-// requires -mbulk-memory + --enable-bulk-memory
-void *memset(void *dest, int c, size_t count)
+void *memset(void *dest, int c, size_t cnt)
 {
-    return __builtin_memset(dest, c, count);
+  return __builtin_memset(dest, c, cnt);
 }
 
-void *memcpy(void *dest, const void *src, size_t count)
+void *memcpy(void *dest, const void *src, size_t cnt)
 {
-    return __builtin_memcpy(dest, src, count);
-}
-
-char *strcat(char *destination, const char *source)
-{
-    return memcpy(destination + strlen(destination), source, strlen(source));
+  return __builtin_memcpy(dest, src, cnt);
 }
 
 size_t strlen(const char *p)
 {
   size_t len = 0;
-  while(*p++) { len++; }
+  while(*p++)
+    len++;
   return len;
 }
 
@@ -56,21 +51,6 @@ char *strstr(const char *str, const char *sub)
   return NULL;
 }
 
-int tolower(int c)
-{
-  return c > 0x40 && c < 0x5b ? c | 0x60 : c;
-}
-
-int atoi(const char *s)
-{
-  int i = 0;
-  while(*s) {
-    i = i * 10 + *s - '0';
-    s++;
-  }
-  return i;
-}
-
 char *strstr_lower(const char *str, const char *sub)
 {
   int l = strlen(sub);
@@ -85,4 +65,19 @@ char *strstr_lower(const char *str, const char *sub)
       p = (char *)sub;
   }
   return NULL;
+}
+
+int tolower(int c)
+{
+  return c > 0x40 && c < 0x5b ? c | 0x60 : c;
+}
+
+int atoi(const char *s)
+{
+  int i = 0;
+  while(*s) {
+    i = i * 10 + *s - '0';
+    s++;
+  }
+  return i;
 }

@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
 #include "sync_types.h"
 
 #define EVENT_INACTIVE -999999.9f
@@ -38,17 +37,17 @@ typedef struct track {
   float row_rate;
 } track;
 
-void sync_init_track(track *track, uint16_t max_event_cnt, uint16_t bpm,
+void  sync_init_track(track *track, uint16_t max_event_cnt, uint16_t bpm,
                      uint8_t rows_per_beat);
-void sync_release_track(track *track);
+void  sync_release_track(track *track);
 
-void sync_add_event(track *t, uint16_t row, uint8_t id, float value,
+void  sync_add_event(track *t, uint16_t row, uint8_t id, float value,
                     blend_type type);
-void sync_index_track(track *t);
+void  sync_index_track(track *t);
 
-bool sync_is_finished(const track *t, float time);
+bool  sync_is_finished(const track *t, float time);
 
-bool sync_event_is_active(const track *t, uint8_t id, float time);
+bool  sync_event_is_active(const track *t, uint8_t id, float time);
 float sync_event_get_value(track *t, uint8_t id, float time);
 
 #endif

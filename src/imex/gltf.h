@@ -52,8 +52,7 @@ typedef struct gltf_mesh {
 } gltf_mesh;
 
 typedef struct gltf_accessor {
-  int32_t bufview; // TODO: When undefined, the data MUST be initialized with
-                   // zeros.
+  int32_t bufview; // TODO: When undefined, the data MUST be initialized with 0
   uint32_t count;
   uint32_t byte_ofs; // Optional
   uint32_t comp_type;
