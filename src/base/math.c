@@ -1,8 +1,8 @@
 #include "math.h"
 
-float fabsf(float v)
+float fabsf(float x)
 {
-  return v < 0 ? -v : v;
+  return x < 0 ? -x : x;
 }
 
 float floorf(float v)

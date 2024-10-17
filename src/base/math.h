@@ -8,7 +8,7 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
-float fabsf(float value);
+float fabsf(float x);
 float fmodf(float x, float y);
 float floorf(float x);
 
@@ -20,7 +20,5 @@ extern float tanf(float a);
 extern float asinf(float a);
 extern float acosf(float a);
 extern float atan2f(float y, float x);
-extern float powf(float base, float exp);
-extern float fracf(float a);
 
 #endif

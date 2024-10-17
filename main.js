@@ -1,4 +1,4 @@
-const FULLSCREEN = false;
+const FULLSCREEN = true;
 const ASPECT = 16.0 / 10.0;
 const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
@@ -160,8 +160,6 @@ function Wasm(module)
     asinf: (v) => Math.asin(v),
     acosf: (v) => Math.acos(v),
     atan2f: (y, x) => Math.atan2(y, x),
-    powf: (b, e) => Math.pow(b, e),
-    fracf: (v) => v % 1,
     atof: (addr) => {
       let s = "", c, i = 0;
       while ((c = String.fromCharCode(this.memUint8[addr + i])) != "\0") {
@@ -1008,11 +1006,13 @@ async function main()
   }
 
   // Start
-  let button = document.querySelector("button");
-  button.disabled = false;
-  button.textContent = "Click to start";
-
-  document.addEventListener("click", start, { once: true });
+  if(FULLSCREEN) {
+    let button = document.querySelector("button");
+    button.disabled = false;
+    button.textContent = "Click to start";
+    document.addEventListener("click", start, { once: true });
+  } else
+    start();
 }
 
 main();
