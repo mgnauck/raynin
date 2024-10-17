@@ -1,4 +1,4 @@
-const FULLSCREEN = true;
+const FULLSCREEN = false;
 const ASPECT = 16.0 / 10.0;
 const WIDTH = 1280;
 const HEIGHT = Math.ceil(WIDTH / ASPECT);
