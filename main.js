@@ -43,9 +43,6 @@ END_traceShadowRay_wgsl`;
 const SM_CONTROL = `BEGIN_control_wgsl
 END_control_wgsl`;
 
-const SM_DENOISE = `BEGIN_denoise_wgsl
-END_denoise_wgsl`;
-
 const SM_BLIT = `BEGIN_blit_wgsl
 END_blit_wgsl`;
 
@@ -60,20 +57,9 @@ const BUF_PATH0 = 7;
 const BUF_PATH1 = 8;
 const BUF_SRAY = 9;
 const BUF_HIT = 10;
-const BUF_ATTR = 11; // Attribute buf (pos and nrm)
-const BUF_LATTR = 12; // Last attribute buf (pos and nrm)
-const BUF_COL = 13; // Separated direct and indirect illumination
-const BUF_MOM0 = 14; // Moments buffer (dir/indir)
-const BUF_MOM1 = 15; // Moments buffer (dir/indir)
-const BUF_HIS0 = 16; // History buffer (moments)
-const BUF_HIS1 = 17; // History buffer (moments)
-const BUF_ACC0 = 18; // Temporal accumulation buffer col + variance (dir/indir)
-const BUF_ACC1 = 19; // Temporal accumulation buffer col + variance (dir/indir)
-const BUF_ACC2 = 20; // Temporal accumulation buffer col + variance (dir/indir)
-const BUF_CFG = 21; // Accessed from WASM
-const BUF_POST = 22; // Accessed from WASM
-const BUF_LCAM = 23;
-const BUF_GRID = 24;
+const BUF_COL = 11; // Separated direct and indirect illumination
+const BUF_CFG = 12; // Accessed from WASM
+const BUF_GRID = 13;
 
 const PL_GENERATE = 0;
 const PL_INTERSECT = 1;
@@ -82,12 +68,7 @@ const PL_SHADOW = 3;
 const PL_CONTROL0 = 4;
 const PL_CONTROL1 = 5;
 const PL_CONTROL2 = 6;
-const PL_CONTROL3 = 7;
-const PL_DENOISE0 = 8;
-const PL_DENOISE1 = 9;
-const PL_DENOISE2 = 10;
-const PL_BLIT0 = 12;
-const PL_BLIT1 = 13;
+const PL_BLIT = 7;
 
 const BG_GENERATE = 0;
 const BG_INTERSECT0 = 1;
@@ -96,15 +77,7 @@ const BG_SHADE0 = 3;
 const BG_SHADE1 = 4;
 const BG_SHADOW = 5;
 const BG_CONTROL = 6;
-const BG_DENOISE0 = 7;
-const BG_DENOISE1 = 8;
-const BG_DENOISE2 = 9;
-const BG_DENOISE3 = 10;
-const BG_DENOISE4 = 11;
-const BG_DENOISE5 = 12;
-const BG_BLIT0 = 13;
-const BG_BLIT1 = 14;
-const BG_BLIT2 = 15;
+const BG_BLIT = 7;
 
 const WG_SIZE_X = 16;
 const WG_SIZE_Y = 16;
@@ -189,7 +162,6 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   res.bindGroups = [];
   res.pipelineLayouts = [];
   res.pipelines = [];
-  res.accumIdx = 0;
 
   // Buffers
 
@@ -254,69 +226,14 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
     usage: GPUBufferUsage.STORAGE
   });
 
-  res.buf[BUF_ATTR] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-  });
-
-  res.buf[BUF_LATTR] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
   res.buf[BUF_COL] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 2,
+    size: WIDTH * HEIGHT * 4 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[BUF_MOM0] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4,
-    usage: GPUBufferUsage.STORAGE
-  });
-
-  res.buf[BUF_MOM1] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4,
-    usage: GPUBufferUsage.STORAGE
-  });
-
-  res.buf[BUF_HIS0] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4,
-    usage: GPUBufferUsage.STORAGE
-  });
-
-  res.buf[BUF_HIS1] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4,
-    usage: GPUBufferUsage.STORAGE
-  });
-
-  res.buf[BUF_ACC0] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 3,
-    usage: GPUBufferUsage.STORAGE
-  });
-
-  res.buf[BUF_ACC1] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 3,
-    usage: GPUBufferUsage.STORAGE
-  });
-
-  res.buf[BUF_ACC2] = device.createBuffer({
-    size: WIDTH * HEIGHT * 4 * 4 * 3,
-    usage: GPUBufferUsage.STORAGE
   });
 
   res.buf[BUF_CFG] = device.createBuffer({
     size: 16 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
-  });
-
-  res.buf[BUF_POST] = device.createBuffer({
-    size: 4 * 4,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-  });
-
-  res.buf[BUF_LCAM] = device.createBuffer({
-    size: camSz,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
   res.buf[BUF_GRID] = device.createBuffer({
@@ -397,7 +314,6 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
       { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
-      { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
     ]
   });
 
@@ -413,8 +329,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 6, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 7, resource: { buffer: res.buf[BUF_PATH1] } }, // out
       { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 9, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 10, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 9, resource: { buffer: res.buf[BUF_COL] } },
     ]
   });
 
@@ -430,8 +345,7 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
       { binding: 6, resource: { buffer: res.buf[BUF_CFG] } },
       { binding: 7, resource: { buffer: res.buf[BUF_PATH0] } }, // out
       { binding: 8, resource: { buffer: res.buf[BUF_SRAY] } },
-      { binding: 9, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 10, resource: { buffer: res.buf[BUF_COL] } },
+      { binding: 9, resource: { buffer: res.buf[BUF_COL] } },
     ]
   });
 
@@ -480,173 +394,24 @@ function createGpuResources(camSz, mtlSz, instSz, triSz, nrmSz, ltriSz, nodeSz)
   res.pipelineLayouts[PL_CONTROL0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_CONTROL1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
   res.pipelineLayouts[PL_CONTROL2] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
-  res.pipelineLayouts[PL_CONTROL3] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
-
-  // Denoise
-  bindGroupLayout = device.createBindGroupLayout({
-    entries: [
-      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
-      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } },
-      { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // Mom in
-      { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // Mom out
-      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // His in
-      { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // His out
-      { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } }, // Col/Var in
-      { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }, // Col/Var out
-    ]
-  });
-
-  res.bindGroups[BG_DENOISE0] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // in
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // out
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // in
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // out
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC0] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC1] } }, // out
-    ]
-  });
-
-  res.bindGroups[BG_DENOISE1] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM1] } }, // in
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM0] } }, // out
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS1] } }, // in
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS0] } }, // out
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC1] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC0] } }, // out
-    ]
-  });
-
-  res.bindGroups[BG_DENOISE2] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC1] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC2] } }, // out
-    ]
-  });
-
-  res.bindGroups[BG_DENOISE3] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC0] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC2] } }, // out
-    ]
-  });
-
-  res.bindGroups[BG_DENOISE4] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC2] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC0] } }, // out
-    ]
-  });
-
-  res.bindGroups[BG_DENOISE5] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_LCAM] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_ATTR] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_LATTR] } },
-      { binding: 4, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 5, resource: { buffer: res.buf[BUF_MOM0] } }, // Not used
-      { binding: 6, resource: { buffer: res.buf[BUF_MOM1] } }, // Not used
-      { binding: 7, resource: { buffer: res.buf[BUF_HIS0] } }, // Not used
-      { binding: 8, resource: { buffer: res.buf[BUF_HIS1] } }, // Not used
-      { binding: 9, resource: { buffer: res.buf[BUF_ACC2] } }, // in
-      { binding: 10, resource: { buffer: res.buf[BUF_ACC1] } }, // out
-    ]
-  });
-
-  res.pipelineLayouts[PL_DENOISE0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
-  res.pipelineLayouts[PL_DENOISE1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
-  res.pipelineLayouts[PL_DENOISE2] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Blit
   bindGroupLayout = device.createBindGroupLayout({
     entries: [
-      { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "uniform" } },
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
-      { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
-      { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage" } },
     ]
   });
 
-  res.bindGroups[BG_BLIT0] = device.createBindGroup({
+  res.bindGroups[BG_BLIT] = device.createBindGroup({
     layout: bindGroupLayout,
     entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_POST] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_ACC0] } },
+      { binding: 0, resource: { buffer: res.buf[BUF_CFG] } },
+      { binding: 1, resource: { buffer: res.buf[BUF_COL] } },
     ]
   });
 
-  res.bindGroups[BG_BLIT1] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_POST] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_ACC1] } },
-    ]
-  });
-
-  res.bindGroups[BG_BLIT2] = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: res.buf[BUF_POST] } },
-      { binding: 1, resource: { buffer: res.buf[BUF_CFG] } },
-      { binding: 2, resource: { buffer: res.buf[BUF_COL] } },
-      { binding: 3, resource: { buffer: res.buf[BUF_ACC2] } },
-    ]
-  });
-
-  res.pipelineLayouts[PL_BLIT0] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
-  res.pipelineLayouts[PL_BLIT1] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+  res.pipelineLayouts[PL_BLIT] = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
 
   // Render pass descriptor
 
@@ -734,92 +499,13 @@ function accumulateSample(commandEncoder)
   passEncoder.end();
 }
 
-function reprojectAndFilter(commandEncoder)
-{
-  let passEncoder = commandEncoder.beginComputePass();
-
-  // Reprojection and temporal accumulation
-  passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
-  passEncoder.setPipeline(res.pipelines[PL_DENOISE0]);
-  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-  //if(filter) {
-    // Estimate variance
-    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE1 - res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE1]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-    // Edge-avoiding a-trous wavelet transform iterations
-    // 0
-    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
-    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
-    passEncoder.dispatchWorkgroups(1);
-
-    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE0 + res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-    // 1
-    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
-    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
-    passEncoder.dispatchWorkgroups(1);
-
-    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE2 + res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-    // 2
-    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
-    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
-    passEncoder.dispatchWorkgroups(1);
-
-    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE4 + res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-    // 3
-    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
-    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
-    passEncoder.dispatchWorkgroups(1);
-
-    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE3 - res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-
-    /*
-    // 4
-    passEncoder.setBindGroup(0, res.bindGroups[BG_CONTROL]);
-    passEncoder.setPipeline(res.pipelines[PL_CONTROL3]);
-    passEncoder.dispatchWorkgroups(1);
-
-    passEncoder.setBindGroup(0, res.bindGroups[BG_DENOISE4 + res.accumIdx]);
-    passEncoder.setPipeline(res.pipelines[PL_DENOISE2]);
-    passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
-    //*/
-  //}
-
-  passEncoder.end();
-
-  // Remember cam and attribute buffer
-  commandEncoder.copyBufferToBuffer(res.buf[BUF_CAM], 0, res.buf[BUF_LCAM], 0, 12 * 4);
-  commandEncoder.copyBufferToBuffer(res.buf[BUF_ATTR], 0, res.buf[BUF_LATTR], 0, WIDTH * HEIGHT * 4 * 4 * 2);
-}
-
 function blit(commandEncoder)
 {
   res.renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
 
   passEncoder = commandEncoder.beginRenderPass(res.renderPassDescriptor);
-
-  //if(reproj) {
-    //passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT0 + res.accumIdx : BG_BLIT1 - res.accumIdx]); // 3 or 5 filter iterations
-    //passEncoder.setBindGroup(0, res.bindGroups[filter ? BG_BLIT2 : BG_BLIT1 - res.accumIdx]); // 2 or 4 filter iterations
-    passEncoder.setBindGroup(0, res.bindGroups[BG_BLIT2]); // 2 or 4 filter iterations
-    passEncoder.setPipeline(res.pipelines[PL_BLIT0]);
-  /*} else {
-    passEncoder.setBindGroup(0, res.bindGroups[BG_BLIT0]);
-    passEncoder.setPipeline(res.pipelines[PL_BLIT1]);
-  }*/
+  passEncoder.setBindGroup(0, res.bindGroups[BG_BLIT]);
+  passEncoder.setPipeline(res.pipelines[PL_BLIT]);
   passEncoder.draw(4);
 
   passEncoder.end();
@@ -848,7 +534,7 @@ async function render(time)
 
   let commandEncoder = device.createCommandEncoder();
 
-  // Reset accumulated direct and indirect illumination
+  // Reset accumulated illumination
   if(samples == 0)
     commandEncoder.clearBuffer(res.buf[BUF_COL]);
 
@@ -858,16 +544,10 @@ async function render(time)
     samples++;
   }
 
-  // SVGF
-  reprojectAndFilter(commandEncoder);
-
-  // Blit to canvasa
+  // Blit to canvas
   blit(commandEncoder);
 
   device.queue.submit([commandEncoder.finish()]);
-
-  // Toggle for next frame
-  res.accumIdx = 1 - res.accumIdx;
 
   if(samples >= SPP) {
     // Update scene and renderer for next frame
@@ -919,8 +599,8 @@ async function main()
     return;
   }
 
-  //const adapter = await navigator.gpu.requestAdapter();
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: "low-power" });
+  //const adapter = await navigator.gpu.requestAdapter();
   //const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
   if(!adapter) {
     alert("Can not use WebGPU. No GPU adapter available.");
@@ -983,12 +663,7 @@ async function main()
     createPipeline(PL_CONTROL0, await (await fetch("control.wgsl")).text(), "m");
     createPipeline(PL_CONTROL1, await (await fetch("control.wgsl")).text(), "m1");
     createPipeline(PL_CONTROL2, await (await fetch("control.wgsl")).text(), "m2");
-    createPipeline(PL_CONTROL3, await (await fetch("control.wgsl")).text(), "m3");
-    createPipeline(PL_DENOISE0, await (await fetch("denoise.wgsl")).text(), "m");
-    createPipeline(PL_DENOISE1, await (await fetch("denoise.wgsl")).text(), "m1");
-    createPipeline(PL_DENOISE2, await (await fetch("denoise.wgsl")).text(), "m2");
-    createPipeline(PL_BLIT0, await (await fetch("blit.wgsl")).text(), "vm", "m");
-    createPipeline(PL_BLIT1, await (await fetch("blit.wgsl")).text(), "vm", "m1");
+    createPipeline(PL_BLIT, await (await fetch("blit.wgsl")).text(), "vm", "m");
   } else {
     createPipeline(PL_GENERATE, SM_GENERATE, "m");
     createPipeline(PL_INTERSECT, SM_INTERSECT, "m");
@@ -997,12 +672,7 @@ async function main()
     createPipeline(PL_CONTROL0, SM_CONTROL, "m");
     createPipeline(PL_CONTROL1, SM_CONTROL, "m1");
     createPipeline(PL_CONTROL2, SM_CONTROL, "m2");
-    createPipeline(PL_CONTROL3, SM_CONTROL, "m3");
-    createPipeline(PL_DENOISE0, SM_DENOISE, "m");
-    createPipeline(PL_DENOISE1, SM_DENOISE, "m1");
-    createPipeline(PL_DENOISE2, SM_DENOISE, "m2");
-    createPipeline(PL_BLIT0, SM_BLIT, "vm", "m");
-    createPipeline(PL_BLIT1, SM_BLIT, "vm", "m1");
+    createPipeline(PL_BLIT, SM_BLIT, "vm", "m");
   }
 
   // Start

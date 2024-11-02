@@ -94,7 +94,7 @@ fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxE
 
 // Moeller/Trumbore: Ray-triangle intersection
 // https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
-// (slightlyt rearranged)
+// (slightly rearranged)
 fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec3f) -> bool
 {
   let edge0 = v1 - v0;

@@ -69,18 +69,13 @@ struct Mtl
   ori:              vec3f,
   seed:             u32,
   dir:              vec3f,
-  pidx:             u32             // Pixel idx in bits 8-31, flags in bits 4-8, bounce num in bits 0-3
+  pidx:             u32             // Pixel idx in bits 8-31, flags in bits 4-8 (not in use currently), bounce num in bits 0-3
 }*/
 
 // Scene data handling
 const SHORT_MASK            = 0xffffu;
 const MTL_OVERRIDE_BIT      = 0x80000000u; // Bit 32
 const INST_DATA_MASK        = 0x3fffffffu; // Bits 31-0
-
-// Mtl flags (bounces)
-const DIFFUSE_BOUNCE        = 1u;
-const PURE_SPEC_REFL_BOUNCE = 2u;
-const REFRACTION_BOUNCE     = 4u;
 
 // General constants
 const EPS                   = 0.001;
@@ -100,8 +95,7 @@ const WG_SIZE               = vec3u(16, 16, 1);
 @group(0) @binding(6) var<storage, read_write> config: Config;
 @group(0) @binding(7) var<storage, read_write> pathStatesOut: array<vec4f>;
 @group(0) @binding(8) var<storage, read_write> shadowRays: array<vec4f>;
-@group(0) @binding(9) var<storage, read_write> attrBuf: array<vec4f>;
-@group(0) @binding(10) var<storage, read_write> colBuf: array<vec4f>;
+@group(0) @binding(9) var<storage, read_write> colBuf: array<vec4f>;
 
 // State of rng seed
 var<private> seed: u32;
@@ -493,21 +487,6 @@ fn calcTriNormal(bary: vec2f, n0: vec3f, n1: vec3f, n2: vec3f, m: mat4x4f) -> ve
   return normalize((vec4f(nrm, 0.0) * transpose(m)).xyz);
 }
 
-// https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/
-fn dirToOct(dir: vec3f) -> vec2f
-{
-  let v = dir.xy * (1.0 / dot(abs(dir), vec3f(1.0)));
-  let e = select((1.0 - abs(v.yx)) * (step(vec2f(0.0), v) * 2.0 - vec2f(1.0)), v, dir.z > 0.0);
-  return e;
-}
-
-/*fn dirToOct(dir: vec3f) -> u32
-{
-  let p = dir.xy * (1.0 / dot(abs(dir), vec3f(1.0)));
-  let e = select((1.0 - abs(p.yx)) * (step(vec2f(0.0), p) * 2.0 - vec2f(1.0)), p, dir.z > 0.0);
-  return (bitcast<u32>(quantizeToF16(e.y)) << 16) + (bitcast<u32>(quantizeToF16(e.x)));
-}*/
-
 fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nrm: ptr<function, vec3f>, ltriId: ptr<function, u32>, mtl: ptr<function, Mtl>) -> u32
 {
   // hit = vec4f(t, u, v, (tri id << 16) | inst id & 0xffff)
@@ -545,13 +524,6 @@ fn finalizeHit(ori: vec3f, dir: vec3f, hit: vec4f, pos: ptr<function, vec3f>, nr
   return mtlInstId;
 }
 
-fn writeAttributes(pos: vec3f, nrm: vec3f, mtlInstId: u32, flags: u32, pidx: u32, ofs: u32)
-{
-  // Write nrm, pos, pure specular reflection flag and mtl/inst id to our attr buf for SVGF
-  attrBuf[      pidx] = vec4f(dirToOct(nrm), bitcast<f32>(mtlInstId), /* unused */ 0.0);
-  attrBuf[ofs + pidx] = vec4f(pos, select(0.0, 1.0, (flags & PURE_SPEC_REFL_BOUNCE) > 0));
-}
-
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)
 {
@@ -574,28 +546,10 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   let pidx = bitcast<u32>(dir.w);
   let throughput4 = select(pathStatesIn[gidx], vec4f(1.0), (pidx & 0xf) == 0); // Avoid mem access on bounce 0
   var throughput = throughput4.xyz;
-  var flags = (pidx >> 4) & 0xf;
-
-  // For bounce 0 we index into direct col buf, further bounces into indirect col buf
-  let cidx = min(pidx & 0xf, 1u) * ofs + (pidx >> 8);
-
-  // Write attribute buffer on first sample and first diffuse or refaction hit
-  let writeAttr = frame.w == 0 && (flags & DIFFUSE_BOUNCE) == 0 && (flags & REFRACTION_BOUNCE) == 0;
-
-  // Reset attributes on first sample and bounce
-  /*if((pidx & 0xf) == 0 && writeAttr) {
-    writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
-  }*/
 
   // No hit, terminate path
   if(hit.x == INF) {
-    colBuf[cidx] += vec4f(throughput * config.bgColor.xyz, 1.0);
-    if(writeAttr) {
-    //if((pidx & 0xf) == 0) {
-      // Hit background, path terminates, write attributes with values that do not hurt the filter
-      //writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
-      writeAttributes(ori.xyz + 9999.0 * dir.xyz, -dir.xyz, (SHORT_MASK - 1) << 16, flags, pidx >> 8, ofs);
-    }
+    colBuf[pidx >> 8] += vec4f(throughput * config.bgColor.xyz, 1.0);
     return;
   }
 
@@ -604,11 +558,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var ltriId: u32;
   var mtl: Mtl;
   let mtlInstId = finalizeHit(ori.xyz, dir.xyz, hit, &pos, &nrm, &ltriId, &mtl);
-
-  // Write attributes on primary hit (if pure spec is not handled separately)
-  /*if((pidx & 0xf) == 0) {
-    writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
-  }*/
 
   // Hit light via material direction
   if(mtl.emissive > 0.0) {
@@ -622,18 +571,11 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
         let pdf = throughput4.w * geomSolidAngle(ldir * ldistInv, nrm, ldistInv); // throughput4.w = pdf
         let lpdf = sampleLTriUniformPdf(ltriId, ltriCnt);
         let weight = pdf / (pdf + lpdf);
-        colBuf[cidx] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
+        colBuf[pidx >> 8] += vec4f(throughput * weight * mtl.col.xyz, 1.0);
       } else {
         // Primary ray hit light
-        colBuf[cidx] += vec4f(throughput * mtl.col.xyz, 1.0);
+        colBuf[pidx >> 8] += vec4f(throughput * mtl.col.xyz, 1.0);
       }
-    }
-    // Path terminates, write attributes if we did not do before
-    if(writeAttr) {
-      //writeAttributes(vec3f(0.0), vec3f(0.0), SHORT_MASK << 16, 0, pidx >> 8, ofs);
-      //writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
-      //writeAttributes(vec3f(0.0), vec3f(0.0), (SHORT_MASK - 1) << 16, 0, pidx >> 8, ofs);
-      writeAttributes(pos, nrm, SHORT_MASK << 16, flags, pidx >> 8, ofs);
     }
     // Terminate ray after light hit (lights do not reflect)
     return;
@@ -643,27 +585,14 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   //mtl.roughness = min(1.0, mtl.roughness + f32(pidx & 0xf) * mtl.roughness * 0.75);
   //mtl.roughness = select(1.0, mtl.roughness, (pidx & 0xf) == 0u);
 
-  // Flag as "pure specular reflection"
-  let pureSpecReflection = (mtl.roughness < 0.05 || (mtl.roughness < 0.1 && mtl.metallic > 0.9)) && mtl.refractive == 0.0;
-
-  // Hit a diffuse or refractive mtl, write attributes
-  if(writeAttr && !pureSpecReflection) {
-    writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
-  }
-
   seed = bitcast<u32>(ori.w);
   let r0 = rand4();
 
   // Russian roulette
   // Terminate with prob inverse to throughput
-  let p = select(1.0, min(0.95, maxComp3(throughput)), (flags & DIFFUSE_BOUNCE) > 0 || (flags & REFRACTION_BOUNCE) > 0);
-  //let p = min(0.95, maxComp3(throughput));
+  let p = min(0.95, maxComp3(throughput));
   if(r0.w > p) { // (pidx & 0xf) > 0
-    // Path terminates due to russian roulette, write attributes if we did not do before
-    if(writeAttr) {
-      writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
-    }
-    return;
+   return;
   }
   // Account for bias introduced by path termination
   // Boost surviving paths by their probability to be terminated
@@ -675,7 +604,7 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   var ldistInv: f32;
   var emission: vec3f;
   var lpdf: f32;
-  if(ltriCnt > 0 && (!pureSpecReflection || mtl.refractive > 0.0) &&
+  if(ltriCnt > 0 &&
     //sampleLTrisUniform(rand4().xyz, pos, nrm, ltriCnt, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     sampleLTrisRIS(pos, nrm, ltriCnt, &lnrm, &ldir, &ldistInv, &emission, &lpdf)) {
     // Veach/Guibas: Optimally Combining Sampling Techniques for Monte Carlo Rendering
@@ -686,43 +615,25 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
     let weight = lpdf / (lpdf + bsdfPdf * gsa);
     // Init shadow ray
     let sidx = atomicAdd(&config.shadowRayCnt, 1u);
-    shadowRays[             sidx] = vec4f(pos, bitcast<f32>(cidx));
+    shadowRays[             sidx] = vec4f(pos, bitcast<f32>(pidx >> 8));
     shadowRays[       ofs + sidx] = vec4f(ldir, 1.0 / ldistInv - 2.0 * EPS);
     shadowRays[(ofs << 1) + sidx] = vec4f(throughput * bsdf * gsa * weight * emission * saturate(dot(nrm, ldir)) / lpdf, 0.0);
   }
  
-  // One diffuse bounce is enough
-  /*if((flags & REFRACTION_BOUNCE) == 0 && (flags & DIFFUSE_BOUNCE) > 0) {
-    // Can simply return, because we wrote attributes before
-    return;
-  }*/
-
   // Reached max bounces (encoded in lower 4 bits of height)
   if((pidx & 0xf) == (maxBounces & 0xf) - 1) {
-    // Path terminates, write attributes if we did not do before
-    if(writeAttr) {
-      writeAttributes(pos, nrm, mtlInstId, flags, pidx >> 8, ofs);
-    }
     return;
   }
 
   // Sample material
   var wi: vec3f;
   var pdf: f32;
-  if(pureSpecReflection) {
-    // Handle pure specular reflection separatedly to avoid overblurring from SVGF
-    wi = reflect(dir.xyz, nrm);
-    throughput *= mtl.col * abs(dot(nrm, wi));
-    pdf = 1.0;
-  } else {
-    // Everything else is considered glossy and is handled by microfacet bsdf
-    var fres: vec3f;
-    var isReflection: bool;
-    if(!sampleMaterial(mtl, -dir.xyz, nrm, r0.xyz, &wi, &fres, &isReflection, &pdf)) {
-      return;
-    }
-    throughput *= evalMaterial(mtl, -dir.xyz, nrm, wi, fres, isReflection) * abs(dot(nrm, wi)) / pdf;
+  var fres: vec3f;
+  var isReflection: bool;
+  if(!sampleMaterial(mtl, -dir.xyz, nrm, r0.xyz, &wi, &fres, &isReflection, &pdf)) {
+    return;
   }
+  throughput *= evalMaterial(mtl, -dir.xyz, nrm, wi, fres, isReflection) * abs(dot(nrm, wi)) / pdf;
 
   // Get compacted index into the path state buffer
   let gidxNext = atomicAdd(&config.extRayCnt, 1u);
@@ -731,10 +642,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   pathStatesOut[      gidxNext] = vec4f(throughput, pdf);
   pathStatesOut[ofs + gidxNext] = vec4f(pos, bitcast<f32>(seed));
 
-  // Flag this bounce by its material type
-  flags |= select(DIFFUSE_BOUNCE, PURE_SPEC_REFL_BOUNCE, (pureSpecReflection && mtl.refractive == 0.0));
-  flags |= select(0, REFRACTION_BOUNCE, mtl.refractive > 0.0);
-
-  // Keep pixel index, set flags in bits 4-7, increase bounce num in bits 0-3
-  pathStatesOut[(ofs << 1) + gidxNext] = vec4f(wi, bitcast<f32>((pidx & 0xffffff00) | (flags << 4) | ((pidx & 0xf) + 1)));
+  // Keep pixel index, set flags in bits 4-7 (not in use currently), increase bounce num in bits 0-3
+  pathStatesOut[(ofs << 1) + gidxNext] = vec4f(wi, bitcast<f32>((pidx & 0xffffff00) | ((pidx & 0xf) + 1)));
 }

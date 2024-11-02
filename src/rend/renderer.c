@@ -24,7 +24,7 @@ typedef enum buf_type {
   BT_LTRI,
   BT_NODE, // blas + tlas
   // ..more buffers on JS-side here..
-  BT_CFG = 21,
+  BT_CFG = 12,
 } buf_type;
 
 static uint32_t total_tris = 0;

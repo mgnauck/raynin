@@ -65,18 +65,3 @@ fn m2(@builtin(global_invocation_id) globalId: vec3u)
   // Reset shadow ray cnt
   config[2].w = 0u;
 }
-
-@compute @workgroup_size(1)
-fn m3(@builtin(global_invocation_id) globalId: vec3u)
-{
-  if(globalId.x != 0) {
-    return;
-  }
-
-  let frame = config[0];
-  
-  // Re-purpose z and w component as counter of filter iterations
-  // Initially w (sample num) will alway be > 0, so this marks our first iteration
-  let iter = select(frame.z + 1u, 0u, frame.w > 0);
-  config[0] = vec4u(frame.x, frame.y, iter, 0u);
-} 
