@@ -40,6 +40,14 @@
   pad2:             f32,
 }*/
 
+/*struct Hit
+{
+  t:                f32,
+  u:                f32,
+  v:                f32,
+  id:               f32             // tri id << 16 | inst id & 0xffff
+}*/
+
 /*struct PathState
 {
   throughput:       vec3f,

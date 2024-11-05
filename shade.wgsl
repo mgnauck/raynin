@@ -52,6 +52,14 @@ struct Mtl
   area:             f32
 }*/
 
+/*struct Hit
+{
+  t:                f32,
+  u:                f32,
+  v:                f32,
+  id:               f32             // tri id << 16 | inst id & 0xffff
+}*/
+
 /*struct ShadowRay
 {
   ori:              vec3f,
