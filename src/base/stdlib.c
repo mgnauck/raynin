@@ -1,5 +1,7 @@
 #include "stdlib.h"
 
+#ifdef BUMP_ALLOCATOR
+
 extern unsigned char __heap_base;
 static unsigned long heap_pos = (unsigned long)&__heap_base;
 
@@ -15,3 +17,5 @@ void free(void *p)
 {
   // Empty but do not optimize away
 }
+
+#endif
