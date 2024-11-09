@@ -10,7 +10,8 @@ OUT=index.html
 
 CC=clang
 LD=wasm-ld
-CONFIG=-DBUMP_ALLOCATOR
+#CONFIG=-DBUMP_ALLOCATOR
+CONFIG=
 DBGFLAGS=-DNDEBUG
 CFLAGS=--target=wasm32 -mbulk-memory -std=c2x -nostdlib -Os -ffast-math -msimd128 -flto -pedantic-errors -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable $(CONFIG)
 LDFLAGS=--strip-all --lto-O3 --no-entry --export-dynamic --import-undefined --initial-memory=134217728 -z stack-size=8388608 --Map=$(WASM_OUT).map
@@ -30,6 +31,8 @@ $(OUT_DIR)/$(LOADER_JS).3.js: $(OUT_DIR)/$(WASM_OUT).wasm.deflate.b64 $(SHADER_M
 $(OUT_DIR)/%.wgsl.min: ./%.wgsl $(OUT_DIR)/$(LOADER_JS).1.js
 	@mkdir -p `dirname $@`
 	cp -u $(OUT_DIR)/$(LOADER_JS).1.js $(OUT_DIR)/$(LOADER_JS).2.js
+	@echo "# Shader module" $<
+	@wgslminify -e $(SHADER_EXCLUDES) --print-unused $<
 	wgslminify -e $(SHADER_EXCLUDES) $< > $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<)
 	@echo "$(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<):" `wc -c < $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<)` "bytes"
 	./embed.sh $(OUT_DIR)/$(LOADER_JS).2.js BEGIN_$(subst .,_,$<) END_$(subst .,_,$<) $(OUT_DIR)/$(subst .wgsl,.wgsl.min,$<) $(OUT_DIR)/$(LOADER_JS).2.js
