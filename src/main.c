@@ -28,11 +28,8 @@ uint16_t  active_cam_id = 0;
 __attribute__((visibility("default")))
 void key_down(unsigned char key, float move_vel)
 {
-  vec3 gmin = vec3_min(active_scene->tlas_nodes[0].lmin,
-                       active_scene->tlas_nodes[0].rmin);
-
-  vec3 gmax = vec3_max(active_scene->tlas_nodes[0].lmax,
-                       active_scene->tlas_nodes[0].rmax);
+  vec3 gmin = active_scene->tlas_nodes[0].min;
+  vec3 gmax = active_scene->tlas_nodes[0].max;
 
   float speed = vec3_max_comp(vec3_scale(vec3_sub(gmax, gmin), 0.2f));
 

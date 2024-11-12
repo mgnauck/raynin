@@ -7,19 +7,14 @@
 typedef struct inst_info inst_info;
 typedef struct tri tri;
 
-// BLAS and TLAS node
-typedef struct node {
-  vec3 lmin;
-  int32_t left;
-  vec3 lmax;
-  uint32_t pad0;
-  vec3 rmin;
-  int32_t right;
-  vec3 rmax;
-  uint32_t pad1;
-} node;
+typedef struct bvhnode {
+  vec3      min;
+  uint32_t  children; // 2x 16 bit child node id
+  vec3      max;
+  uint32_t  idx;      // Index only specified at leaf node
+} bvhnode;
 
-void blas_build(node *nodes, const tri *tris, uint32_t tri_cnt);
-void tlas_build(node *nodes, const inst_info *instances, uint32_t inst_cnt);
+void blas_build(bvhnode *nodes, const tri *tris, uint32_t tri_cnt);
+void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt);
 
 #endif

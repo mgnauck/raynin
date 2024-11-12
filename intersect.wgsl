@@ -18,16 +18,12 @@
   pad1:             u32
 }*/
 
-/*struct Node
+/*struct BvhNode
 {
-  lmin:             vec3f,
-  left:             i32,
-  lmax:             vec3f,
-  pad0:             u32,
-  rmin:             vec3f,
-  right:            i32,
-  rmax:             vec3f,
-  pad1:             u32
+  aabbMin:          vec3f,
+  children:         u32,            // 2x 16 bits for left and right child
+  aabbMax:          vec3f,
+  idx:              u32             // Assigned on leaf nodes only
 }*/
 
 /*struct Tri
@@ -69,8 +65,6 @@ const IF_INVISIBLE        = 0x1;
 const EPS                 = 0.0001;
 const INF                 = 3.402823466e+38;
 
-const STACK_EMPTY_MARKER  = 0xfffffffi;
-
 const WG_SIZE             = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
@@ -83,11 +77,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 // Traversal stacks
 const MAX_NODE_CNT      = 64u;
 const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
-var<private> nodeStack: array<i32, MAX_NODE_CNT>; // For Aila traversal, switch to i32
-
-// Syncs the workgroup execution
-//var<workgroup> foundLeafCnt0: atomic<u32>;
-//var<workgroup> foundLeafCnt1: atomic<u32>;
+var<private> nodeStack: array<u32, MAX_NODE_CNT>; // For Aila traversal, switch to i32
 
 fn minComp4(v: vec4f) -> f32
 {
@@ -175,89 +165,67 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
   }
 }*/
 
-// Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
-// https://code.google.com/archive/p/understanding-the-efficiency-of-ray-traversal-on-gpus/
-// Karras: https://developer.nvidia.com/blog/thinking-parallel-part-ii-tree-traversal-gpu/
 fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
 {
   let blasOfs = dataOfs << 1;
 
-  var nodeStackIndex = HALF_MAX_NODE_CNT + 1u;
+  var nodeIndex = 0u;
+  var nodeStackIndex = HALF_MAX_NODE_CNT;
 
-  var nodeIndex = 0i; // Start at root node, but do not test its AABB
-  var leafIndex = 0i; // No leaf node (triangle) yet
+  // Ordered DF traversal, visit near child first
+  loop {
+    var ofs = (blasOfs + nodeIndex) << 1;
+    let nodeChildren = bitcast<u32>(nodes[ofs + 0].w);
 
-  // Ordered DF traversal, with postponed leaf node processing for improved WG sync
-  while(nodeIndex != STACK_EMPTY_MARKER) {
-
-    // Interior node traversal
-    while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
-
-      // Get current node
-      let ofs = (blasOfs + u32(nodeIndex)) << 2;
-      let lmin = nodes[ofs + 0];
-      let lmax = nodes[ofs + 1];
-      let rmin = nodes[ofs + 2];
-      let rmax = nodes[ofs + 3];
-
-      // Intersect both child node aabbs
-      var dists = array<f32, 2>(
-        intersectAabb(ori, invDir, (*hit).x, lmin.xyz, lmax.xyz),
-        intersectAabb(ori, invDir, (*hit).x, rmin.xyz, rmax.xyz) );
-
-      // Find indices of nearer and farther child
-      let near = select(1u, 0u, dists[0] < dists[1]);
-      let far = 1u - near;
-
-      if(dists[near] == INF) {
-        // Did not hit any child, pop next node from stack
-        nodeStackIndex--;
-        nodeIndex = nodeStack[nodeStackIndex];
+    // Leaf node
+    if(nodeChildren == 0) {
+      // Intersect contained triangle
+      let idx = bitcast<u32>(nodes[ofs + 1].w);
+      let triOfs = (dataOfs + idx) * 3; // 3 vec4f per tri
+      intersectTri(ori, dir, tris[triOfs + 0].xyz, tris[triOfs + 1].xyz, tris[triOfs + 2].xyz, (idx << 16) | (instId & SHORT_MASK), hit);
+      // Check the stack and continue traversal if something left
+      if(nodeStackIndex == HALF_MAX_NODE_CNT) {
+        return;
       } else {
-        // Hit one or both children, set near child as next node
-        let children = array<i32, 2>( bitcast<i32>(lmin.w), bitcast<i32>(rmin.w) );
-        nodeIndex = children[near];
-        if(dists[far] < INF) {
-          // Push far child on stack
-          nodeStack[nodeStackIndex] = children[far];
-          nodeStackIndex++;
-        }
-      }
-
-      // If our next node is a leaf node (as per above leaf nodes have a negative index) and we found no other leaf yet
-      if(nodeIndex < 0 && leafIndex >= 0) {
-        // Store the found leaf, so we can continue traversal
-        leafIndex = nodeIndex;
-        // Pop next node
         nodeStackIndex--;
         nodeIndex = nodeStack[nodeStackIndex];
-        // Another one in the workgroup has found a leaf
-        //atomicAdd(&foundLeafCnt1, 1u);
       }
-
-      // Synchronize: Everyone in the workgroup has found a leaf
-      //if(atomicLoad(&foundLeafCnt1) == WG_SIZE.x * WG_SIZE.y) {
-      //  break;
-      //}
+      continue;
     }
 
-    // Reset
-    //atomicStore(&foundLeafCnt1, 0u);
+    // Interior node
+    ofs = (blasOfs + (nodeChildren & SHORT_MASK)) << 1;
+    let leftChildMin = nodes[ofs + 0];
+    let leftChildMax = nodes[ofs + 1];
 
-    // Triangle "traversal"
-    while(leafIndex < 0) {
-      // Transform negated leaf index back into an actual triangle index
-      let triIdx = u32(~leafIndex);
-      // Fetch tri data and intersect
-      let triOfs = (dataOfs + triIdx) * 3; // 3 vec4f per tri
-      intersectTri(ori, dir, tris[triOfs + 0].xyz, tris[triOfs + 1].xyz, tris[triOfs + 2].xyz, (triIdx << 16) | (instId & SHORT_MASK), hit);
-      // Set next potential leaf for processing
-      leafIndex = nodeIndex;
-      if(leafIndex < 0) {
-        // Have another leaf/triangle available
-        // Pop next node (which could very well be a leaf too)
+    ofs = (blasOfs + (nodeChildren >> 16)) << 1;
+    let rightChildMin = nodes[ofs + 0];
+    let rightChildMax = nodes[ofs + 1];
+
+    // Intersect both child node aabbs
+    let childDists = array<f32, 2>(
+      intersectAabb(ori, invDir, (*hit).x, leftChildMin.xyz, leftChildMax.xyz),
+      intersectAabb(ori, invDir, (*hit).x, rightChildMin.xyz, rightChildMax.xyz) );
+
+    // Find indices of nearer and farther child
+    let near = select(1u, 0u, childDists[0] < childDists[1]);
+    let far = 1u - near;
+
+    if(childDists[near] == INF) {
+      // Did not hit any child, pop next node from stack
+      if(nodeStackIndex == HALF_MAX_NODE_CNT) {
+        return;
+      } else {
         nodeStackIndex--;
         nodeIndex = nodeStack[nodeStackIndex];
+      }
+    } else {
+      // Continue with nearer child node
+      nodeIndex = (nodeChildren >> (near << 4u)) & SHORT_MASK;
+      // Push farther child on stack if also within distance
+      if(childDists[far] < INF) {
+        nodeStack[nodeStackIndex] = (nodeChildren >> (far << 4u)) & SHORT_MASK;
+        nodeStackIndex++;
       }
     }
   }
@@ -286,95 +254,75 @@ fn intersectInst(ori: vec3f, dir: vec3f, instOfs: u32, hit: ptr<function, vec4f>
   intersectBlas(oriObj, dirObj, 1.0 / dirObj, bitcast<u32>(data.x), bitcast<u32>(data.y) & INST_DATA_MASK, hit);
 }
 
-// Aila et al: Understanding the Efficiency of Ray Traversal on GPUs
-// https://code.google.com/archive/p/understanding-the-efficiency-of-ray-traversal-on-gpus/
-// Karras: https://developer.nvidia.com/blog/thinking-parallel-part-ii-tree-traversal-gpu/
 fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
 
-  let tlasOfs = 2 * arrayLength(&tris) / 3; // = skip 2 * tri cnt blas nodes with 3 * vec4f per tri struct
+  // Skip 2 * tri cnt blas nodes with 3 * vec4f per tri struct
+  let tlasOfs = 2 * arrayLength(&tris) / 3;
 
-  var nodeStackIndex = 1u;
+  var nodeIndex = 0u;
+  var nodeStackIndex = 0u;
 
-  var nodeIndex = 0i; // Start at root node, but do not test its AABB
-  var leafIndex = 0i; // No leaf node (instance) yet
- 
   var hit = vec4f(tfar, 0, 0, 0);
 
-  // Ordered DF traversal, with postponed leaf node processing for improved WG sync
-  while(nodeIndex != STACK_EMPTY_MARKER) {
+  // Ordered DF traversal, visit near child first
+  loop {
+    var ofs = (tlasOfs + nodeIndex) << 1;
+    let nodeChildren = bitcast<u32>(nodes[ofs + 0].w);
 
-    // Interior node traversal
-    while(nodeIndex >= 0 && nodeIndex != STACK_EMPTY_MARKER) {
-
-      // Get current node
-      let ofs = (tlasOfs + u32(nodeIndex)) << 2;
-      let lmin = nodes[ofs + 0];
-      let lmax = nodes[ofs + 1];
-      let rmin = nodes[ofs + 2];
-      let rmax = nodes[ofs + 3];
-
-      // Intersect both child node aabbs
-      var dists = array<f32, 2>(
-        intersectAabb(ori, invDir, hit.x, lmin.xyz, lmax.xyz),
-        intersectAabb(ori, invDir, hit.x, rmin.xyz, rmax.xyz) );
-
-      // Find indices of nearer and farther child
-      let near = select(1u, 0u, dists[0] < dists[1]);
-      let far = 1u - near;
-
-      if(dists[near] == INF) {
-        // Did not hit any child, pop next node from stack
-        nodeStackIndex--;
-        nodeIndex = nodeStack[nodeStackIndex];
+    // Leaf node
+    if(nodeChildren == 0) {
+      // Intersect the single assigned instance 
+      intersectInst(ori, dir, bitcast<u32>(nodes[ofs + 1].w) << 2, &hit);
+      // Check the stack and continue traversal if something left
+      if(nodeStackIndex == 0) {
+        return hit;
       } else {
-        // Hit one or both children, set near child as next node
-        let children = array<i32, 2>( bitcast<i32>(lmin.w), bitcast<i32>(rmin.w) );
-        nodeIndex = children[near]; 
-        if(dists[far] < INF) {
-          // Push far child on stack
-          nodeStack[nodeStackIndex] = children[far];
-          nodeStackIndex++;
-        }
-      }
-
-      // If our next node is a leaf node (as per above leaf nodes have a negative index) and we found no other leaf yet
-      if(nodeIndex < 0 && leafIndex >= 0) {
-        // Store the found leaf, so we can continue traversal
-        leafIndex = nodeIndex;
-        // Pop next node
         nodeStackIndex--;
         nodeIndex = nodeStack[nodeStackIndex];
-        // Another one in the workgroup has found a leaf
-        //atomicAdd(&foundLeafCnt0, 1u);
       }
-
-      // Synchronize: Everyone in the workgroup has found a leaf
-      //if(atomicLoad(&foundLeafCnt0) == WG_SIZE.x * WG_SIZE.y) {
-      //  break;
-      //}
+      continue;
     }
 
-    // Reset
-    //atomicStore(&foundLeafCnt0, 0u);
+    // Interior node
+    ofs = (tlasOfs + (nodeChildren & SHORT_MASK)) << 1;
+    let leftChildMin = nodes[ofs + 0];
+    let leftChildMax = nodes[ofs + 1];
 
-    // Instance "traversal"
-    while(leafIndex < 0) {
-      // Transform negated leaf index back into actual instance index and intersect
-      intersectInst(ori, dir, u32(~leafIndex) << 2, &hit);
-      // Set next potential leaf for processing
-      leafIndex = nodeIndex;
-      if(leafIndex < 0) {
-        // Have another leaf/instance available
-        // Pop next node (which could very well be a leaf too)
+    ofs = (tlasOfs + (nodeChildren >> 16)) << 1;
+    let rightChildMin = nodes[ofs + 0];
+    let rightChildMax = nodes[ofs + 1];
+
+    // Intersect both child node aabbs
+    let childDists = array<f32, 2>(
+      intersectAabb(ori, invDir, hit.x, leftChildMin.xyz, leftChildMax.xyz),
+      intersectAabb(ori, invDir, hit.x, rightChildMin.xyz, rightChildMax.xyz) );
+
+    // Find indices of nearer and farther child
+    let near = select(1u, 0u, childDists[0] < childDists[1]);
+    let far = 1u - near;
+
+    if(childDists[near] == INF) {
+      // Did not hit any child, pop next node from stack
+      if(nodeStackIndex == 0) {
+        return hit;
+      } else {
         nodeStackIndex--;
         nodeIndex = nodeStack[nodeStackIndex];
       }
+    } else {
+      // Continue with near child
+      nodeIndex = (nodeChildren >> (near << 4u)) & SHORT_MASK;
+      // Push farther child on stack if also within distance
+      if(childDists[far] < INF) {
+        nodeStack[nodeStackIndex] = (nodeChildren >> (far << 4u)) & SHORT_MASK;
+        nodeStackIndex++;
+      } 
     }
   }
 
-  return hit;
+  return hit; // Required for Naga, Tint will warn on this
 }
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
@@ -387,15 +335,6 @@ fn m(@builtin(global_invocation_id) globalId: vec3u)
   }
 
   let frame = config[0];
-
-  // Initial reset
-  //atomicStore(&foundLeafCnt0, 0u);
-  //atomicStore(&foundLeafCnt1, 0u);
-  
-  // Push empty marker on stack, so we know when to stop
-  nodeStack[                0] = STACK_EMPTY_MARKER;
-  nodeStack[HALF_MAX_NODE_CNT] = STACK_EMPTY_MARKER;
-
   let ofs = (frame.x >> 16) * (frame.y >> 16);
   hits[gidx] = intersectTlas(pathStates[ofs + gidx].xyz, pathStates[(ofs << 1) + gidx].xyz, INF);
 }

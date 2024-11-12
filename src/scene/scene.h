@@ -13,32 +13,32 @@ typedef struct inst_info inst_info;
 typedef struct ltri ltri;
 typedef struct mesh mesh;
 typedef struct mtl mtl;
-typedef struct node node;
+typedef struct bvhnode bvhnode;
 
 typedef struct scene {
-  uint16_t max_mtl_cnt;
-  uint16_t mtl_cnt;
-  mtl *mtls;
-  uint16_t max_mesh_cnt;
-  uint16_t mesh_cnt;
-  mesh *meshes;
-  uint16_t max_inst_cnt;
-  uint16_t inst_cnt;
-  inst *instances;
+  uint16_t  max_mtl_cnt;
+  uint16_t  mtl_cnt;
+  mtl       *mtls;
+  uint16_t  max_mesh_cnt;
+  uint16_t  mesh_cnt;
+  mesh      *meshes;
+  uint16_t  max_inst_cnt;
+  uint16_t  inst_cnt;
+  inst      *instances;
   inst_info *inst_info;
-  node *tlas_nodes;
-  uint32_t max_ltri_cnt;
-  uint32_t ltri_cnt;
-  ltri *ltris;
-  uint32_t *tri_ids;
-  uint32_t max_tri_cnt;
-  node *blas_nodes;
-  cam *cams;
-  uint16_t cam_cnt;
-  cam *active_cam;
-  vec3 bg_col;
-  uint32_t dirty;
-  uint32_t curr_ofs;
+  bvhnode   *tlas_nodes;
+  uint32_t  max_ltri_cnt;
+  uint32_t  ltri_cnt;
+  ltri      *ltris;
+  uint32_t  *tri_ids;
+  uint32_t  max_tri_cnt;
+  bvhnode   *blas_nodes;
+  cam       *cams;
+  uint16_t  cam_cnt;
+  cam       *active_cam;
+  vec3      bg_col;
+  uint32_t  dirty;
+  uint32_t  curr_ofs;
 } scene;
 
 void scene_init(scene *s, uint16_t mesh_cnt, uint16_t mtl_cnt, uint16_t cam_cnt,
@@ -48,9 +48,10 @@ void scene_release(scene *s);
 void scene_set_dirty(scene *s, res_type r);
 void scene_clr_dirty(scene *s, res_type r);
 
-void scene_finalize(scene *s); // Call after loading the scene data
-void scene_prepare_render(
-    scene *s); // Call after each scene data update before render
+// Call after loading the scene data
+void scene_finalize(scene *s);
+// Call after each scene data update before render
+void scene_prepare_render(scene *s);
 
 uint16_t scene_add_mtl(scene *s, mtl *mtl);
 

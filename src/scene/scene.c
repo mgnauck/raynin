@@ -200,10 +200,9 @@ void scene_prepare_render(scene *s)
         memcpy(inst->inv_transform, info->inv_transform, 12 * sizeof(float));
 
         // Root node object-space aabb
-        vec3 mi, ma;
-        node *n = &s->blas_nodes[2 * (inst->data & INST_DATA_MASK)];
-        mi = vec3_min(n->lmin, n->rmin);
-        ma = vec3_max(n->lmax, n->rmax);
+        bvhnode *n = &s->blas_nodes[2 * (inst->data & INST_DATA_MASK)];
+        vec3 mi = n->min;
+        vec3 ma = n->max;
 
         // Transform instance aabb to world space
         aabb *a = &info->box;
