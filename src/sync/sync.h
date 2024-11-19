@@ -16,25 +16,25 @@ typedef enum blend_type {
 } blend_type;
 
 typedef struct event {
-  uint16_t row;
-  uint8_t id;
-  float value;
-  blend_type type;
+  uint16_t    row;
+  uint8_t     id;
+  float       value;
+  blend_type  type;
 } event;
 
 // Indexed runtime state
 typedef struct event_state {
-  int32_t beg_idx; // Index into track array for this event id
-  int32_t end_idx;
-  int32_t row_idx; // Runtime idx for this event id
+  int32_t     beg_idx; // Index into track array for this event id
+  int32_t     end_idx;
+  int32_t     row_idx; // Runtime idx for this event id
 } event_state;
 
 typedef struct track {
-  event *events;
-  uint16_t event_cnt;
+  event       *events;
+  uint16_t    event_cnt;
   event_state event_states[LAST_EVENT_ID]; // TODO Improve
-  uint16_t max_row;
-  float row_rate;
+  uint16_t    max_row;
+  float       row_rate;
 } track;
 
 void  sync_init_track(track *track, uint16_t max_event_cnt, uint16_t bpm,

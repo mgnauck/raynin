@@ -24,13 +24,13 @@ typedef enum inst_flags {
 
 // Additional CPU side data for instances
 typedef struct inst_info {
-  mat4 transform;
-  mat4 inv_transform;
-  aabb box;
-  uint16_t mesh_id;
-  uint32_t ltri_ofs;
-  uint32_t ltri_cnt;
-  uint32_t state;
+  mat4      transform;
+  mat4      inv_transform;
+  aabb      box;
+  uint16_t  mesh_id;
+  uint32_t  ltri_ofs;
+  uint32_t  ltri_cnt;
+  uint32_t  state;
 } inst_info;
 
 // inst.data:
@@ -38,11 +38,11 @@ typedef struct inst_info {
 // For mesh types, bits 0-31 is an offset into tris or 2 * ofs into blas_nodes
 
 typedef struct inst {
-  float inv_transform[12];
-  uint32_t id;    // (mtl override id << 16) | (inst id & 0xffff)
-  uint32_t data;  // See notes above
-  uint32_t flags; // Inst flags (gpu payload, see above)
-  uint32_t pad1;
+  float     inv_transform[12];
+  uint32_t  id;    // (mtl override id << 16) | (inst id & 0xffff)
+  uint32_t  data;  // See notes above
+  uint32_t  flags; // Inst flags (gpu payload, see above)
+  uint32_t  pad1;
 } inst;
 
 #endif

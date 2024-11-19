@@ -61,8 +61,8 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
                  total_tri_cnt * sizeof(tri),     // Tris (storage buf)
                  total_tri_cnt * sizeof(tri_nrm), // Tri nrms (storage buf)
                  total_ltri_cnt * sizeof(ltri),   // LTris (storage buf)
-                 2 * (total_tri_cnt + total_inst_cnt) *
-                     sizeof(bvhnode)); // BLAS + TLAS nodes (storage buf)
+                 // BLAS + TLAS nodes (storage buf)
+                 2 * (total_tri_cnt + total_inst_cnt) * sizeof(bvhnode)); 
 
   total_tris = total_tri_cnt;
 

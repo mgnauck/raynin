@@ -92,6 +92,7 @@ void blas_build(bvhnode *nodes, const tri *tris, uint32_t tri_cnt)
     aabb_grow(&a, t->v0);
     aabb_grow(&a, t->v1);
     aabb_grow(&a, t->v2);
+    aabb_pad(&a);
 
     bvhnode *n = &nodes[node_idx];
     n->min = a.min;

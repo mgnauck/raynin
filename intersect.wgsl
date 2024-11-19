@@ -77,7 +77,7 @@ const WG_SIZE             = vec3u(16, 16, 1);
 // Traversal stacks
 const MAX_NODE_CNT      = 64u;
 const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
-var<private> nodeStack: array<u32, MAX_NODE_CNT>; // For Aila traversal, switch to i32
+var<private> nodeStack: array<u32, MAX_NODE_CNT>;
 
 fn minComp4(v: vec4f) -> f32
 {
@@ -318,7 +318,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
       if(childDists[far] < INF) {
         nodeStack[nodeStackIndex] = (nodeChildren >> (far << 4u)) & SHORT_MASK;
         nodeStackIndex++;
-      } 
+      }
     }
   }
 

@@ -215,6 +215,7 @@ void scene_prepare_render(scene *s)
         aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ma.x, mi.y, ma.z}));
         aabb_grow(a, mat4_mul_pos(info->transform, (vec3){mi.x, ma.y, ma.z}));
         aabb_grow(a, mat4_mul_pos(info->transform, (vec3){ma.x, ma.y, ma.z}));
+        aabb_pad(a);
       }
 
       info->state &= ~IS_TRANS_DIRTY;

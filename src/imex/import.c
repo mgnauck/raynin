@@ -16,9 +16,9 @@
 #define logc(...) ((void)0)
 
 typedef struct mesh_ref {
-  int32_t mesh_idx;  // Render mesh index
-  bool is_emissive;  // True if mesh has emissive mtl
-  uint32_t inst_cnt; // Instances pointing to a mesh
+  int32_t   mesh_idx;     // Render mesh index
+  bool      is_emissive;  // True if mesh has emissive mtl
+  uint32_t  inst_cnt;     // Instances pointing to a mesh
 } mesh_ref;
 
 typedef enum obj_type {
