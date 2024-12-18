@@ -52,7 +52,7 @@ const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
 const EPS                 = 0.0001;
 const WG_SIZE             = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
+@group(0) @binding(0) var<uniform> instances: array<vec4f, 4096>; // Uniform buffer max is 64kb by default
 @group(0) @binding(1) var<storage, read> tris: array<vec4f>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: array<vec4u, 4>;

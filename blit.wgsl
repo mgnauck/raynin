@@ -12,29 +12,12 @@
 @group(0) @binding(0) var<storage, read> config: array<vec4u, 4>;
 @group(0) @binding(1) var<storage, read> colBuf: array<vec4f>;
 
+const pos = array<vec2f, 4u>(vec2f(-1.0, 1.0), vec2f(-1.0), vec2f(1.0), vec2f(1.0, -1.0)); // Not in naga
+//var<private> pos: array<vec2f, 4u> = array<vec2f, 4u>(vec2f(-1.0, 1.0), vec2f(-1.0), vec2f(1.0), vec2f(1.0, -1.0));
+
 @vertex
 fn vm(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f
 {
-  /*
-  // Workaround for below code which does work with with Naga
-  switch(vertexIndex)
-  {
-    case 0u: {
-      return vec4f(vec2f(-1.0, 1.0), 0.0, 1.0);
-    }
-    case 1u: {
-      return vec4f(vec2f(-1.0), 0.0, 1.0);
-    }
-    case 2u: {
-      return vec4f(vec2f(1.0), 0.0, 1.0);
-    }
-    default: {
-      return vec4f(vec2f(1.0, -1.0), 0.0, 1.0);
-    }
-  }
-  */
-
-  let pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0), vec2f(1.0), vec2f(1.0, -1.0));
   return vec4f(pos[vertexIndex], 0.0, 1.0);
 }
 

@@ -59,7 +59,7 @@ const SHORT_MASK          = 0xffffu;
 const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0
 
 // Instance flags (see inst_flags)
-const IF_INVISIBLE        = 0x1;
+const IF_INVISIBLE        = 0x1u;
 
 // General constants
 const EPS                 = 0.0001;
@@ -67,7 +67,7 @@ const INF                 = 3.402823466e+38;
 
 const WG_SIZE             = vec3u(16, 16, 1);
 
-@group(0) @binding(0) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
+@group(0) @binding(0) var<uniform> instances: array<vec4f, 4096>; // Uniform buffer max is 64kb by default
 @group(0) @binding(1) var<storage, read> tris: array<vec4f>;
 @group(0) @binding(2) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(3) var<storage, read> config: array<vec4u, 4>;
@@ -203,7 +203,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     let rightChildMax = nodes[ofs + 1];
 
     // Intersect both child node aabbs
-    let childDists = array<f32, 2>(
+    var childDists: array<f32, 2u> = array<f32, 2u>(
       intersectAabb(ori, invDir, (*hit).x, leftChildMin.xyz, leftChildMax.xyz),
       intersectAabb(ori, invDir, (*hit).x, rightChildMin.xyz, rightChildMax.xyz) );
 
@@ -295,7 +295,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
     let rightChildMax = nodes[ofs + 1];
 
     // Intersect both child node aabbs
-    let childDists = array<f32, 2>(
+    var childDists: array<f32, 2u> = array<f32, 2>(
       intersectAabb(ori, invDir, hit.x, leftChildMin.xyz, leftChildMax.xyz),
       intersectAabb(ori, invDir, hit.x, rightChildMin.xyz, rightChildMax.xyz) );
 

@@ -95,7 +95,7 @@ const INV_PI                = 1.0 / PI;
 const WG_SIZE               = vec3u(16, 16, 1);
 
 @group(0) @binding(0) var<uniform> materials: array<Mtl, 1024>; // One mtl per inst
-@group(0) @binding(1) var<uniform> instances: array<vec4f, 1024 * 4>; // Uniform buffer max is 64kb by default
+@group(0) @binding(1) var<uniform> instances: array<vec4f, 4096>; // Uniform buffer max is 64kb by default
 @group(0) @binding(2) var<storage, read> triNrms: array<vec4f>;
 @group(0) @binding(3) var<storage, read> ltris: array<vec4f>;
 @group(0) @binding(4) var<storage, read> hits: array<vec4f>;
