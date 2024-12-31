@@ -168,8 +168,8 @@ void reconnect_nodes(bvhnode *nodes)
       // miss link. Else, assign node on stack (right sibling) as miss link.
       n->children = 
         ((spos == 0) ? (0xffff << 16) : (stack[spos - 1] << 16))
+        // Hit link is always the next node (left child) and already assigned
         | (n->children & 0xffff);
-      // Hit link is always the next node (left child) and already assigned
       // Next node is left child
       n = &nodes[children & 0xffff];
       // Put right child on stack
