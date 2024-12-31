@@ -60,9 +60,9 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(5) var<storage, read_write> colBuf: array<vec4f>;
 
 // Traversal stacks
-const MAX_NODE_CNT      = 64u;
-const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
-var<private> nodeStack: array<u32, MAX_NODE_CNT>;
+//const MAX_NODE_CNT      = 64u;
+//const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
+//var<private> nodeStack: array<u32, MAX_NODE_CNT>;
 
 fn minComp4(v: vec4f) -> f32
 {
@@ -148,6 +148,38 @@ fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec
 fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
 {
   let blasOfs = dataOfs << 1;
+  var idx = 0u;
+
+  while(idx < SHORT_MASK) { // Not terminal
+    var ofs = (blasOfs + idx) << 1;
+    // Retrieve node data
+    let aabbMin = nodes[ofs + 0]; // w = miss link << 16 | hit link
+    let aabbMax = nodes[ofs + 1]; // w = triangle index
+    // Test for intersection with bbox
+    if(intersectAabbAnyHit(ori, invDir, tfar, aabbMin.xyz, aabbMax.xyz)) {
+      // Check if leaf
+      let triIdx = bitcast<u32>(aabbMax.w);
+      if(triIdx < 0xffffffff) {
+        // Intersect contained triangle
+        let triOfs = (dataOfs + triIdx) * 3; // 3 vec4f per tri
+        if(intersectTri(ori, dir, tfar, tris[triOfs + 0].xyz, tris[triOfs + 1].xyz, tris[triOfs + 2].xyz)) {
+          return true;
+        }
+      }
+      // Follow hit link
+      idx = bitcast<u32>(aabbMin.w) & SHORT_MASK;
+    } else {
+      // Follow miss link
+      idx = bitcast<u32>(aabbMin.w) >> 16;
+    }
+  }
+
+  return false;
+}
+
+/*fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
+{
+  let blasOfs = dataOfs << 1;
 
   var nodeIndex = 0u;
   var nodeStackIndex = HALF_MAX_NODE_CNT;
@@ -207,7 +239,7 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
   }
 
   return false; // Required for Naga, Tint will warn on this
-}
+}*/
 
 fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, instOfs: u32) -> bool
 {
@@ -228,6 +260,41 @@ fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, instOfs: u32) -> bool
 }
 
 fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
+{
+  let invDir = 1.0 / dir;
+
+  // Skip 2 * tri cnt blas nodes with 3 * vec4f per tri struct
+  let tlasOfs = 2 * arrayLength(&tris) / 3;
+  
+  var idx = 0u;
+
+  while(idx < SHORT_MASK) { // Not terminal
+    var ofs = (tlasOfs + idx) << 1;
+    // Retrieve node data
+    let aabbMin = nodes[ofs + 0]; // w = miss link << 16 | hit link
+    let aabbMax = nodes[ofs + 1]; // w = instance index
+    // Test for intersection with bbox
+    if(intersectAabbAnyHit(ori, invDir, tfar, aabbMin.xyz, aabbMax.xyz)) {
+      // Check if leaf
+      let instIdx = bitcast<u32>(aabbMax.w);
+      if(instIdx < 0xffffffff) {
+        // Intersect referenced instance
+        if(intersectInstAnyHit(ori, dir, tfar, instIdx << 2)) {
+          return true;
+        }
+      }
+      // Follow hit link
+      idx = bitcast<u32>(aabbMin.w) & SHORT_MASK;
+    } else {
+      // Follow miss link
+      idx = bitcast<u32>(aabbMin.w) >> 16;
+    }
+  }
+
+  return false;
+}
+
+/*fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
 {
   let invDir = 1.0 / dir;
 
@@ -291,7 +358,7 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
   }
 
   return false; // Required for Naga, Tint will warn on this
-}
+}*/
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)

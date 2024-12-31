@@ -75,9 +75,9 @@ const WG_SIZE             = vec3u(16, 16, 1);
 @group(0) @binding(5) var<storage, read_write> hits: array<vec4f>;
 
 // Traversal stacks
-const MAX_NODE_CNT      = 64u;
-const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
-var<private> nodeStack: array<u32, MAX_NODE_CNT>;
+//const MAX_NODE_CNT      = 64u;
+//const HALF_MAX_NODE_CNT = MAX_NODE_CNT / 2u;
+//var<private> nodeStack: array<u32, MAX_NODE_CNT>;
 
 fn minComp4(v: vec4f) -> f32
 {
@@ -100,6 +100,16 @@ fn intersectAabb(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxExt: ve
   let tmax = minComp4(vec4f(max(t0, t1), tfar));
   
   return select(INF, tmin, tmin <= tmax);
+}
+
+// Laine et al. 2013; Afra et al. 2016: GPU efficient slabs test
+// McGuire et al: A ray-box intersection algorithm and efficient dynamic voxel rendering
+fn intersectAabbAnyHit(ori: vec3f, invDir: vec3f, tfar: f32, minExt: vec3f, maxExt: vec3f) -> bool
+{
+  let t0 = (minExt - ori) * invDir;
+  let t1 = (maxExt - ori) * invDir;
+
+  return maxComp4(vec4f(min(t0, t1), EPS)) <= minComp4(vec4f(max(t0, t1), tfar));
 }
 
 // Moeller/Trumbore: Ray-triangle intersection
@@ -168,6 +178,34 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
 fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
 {
   let blasOfs = dataOfs << 1;
+  var idx = 0u;
+
+  while(idx < SHORT_MASK) { // Not terminal
+    var ofs = (blasOfs + idx) << 1;
+    // Retrieve node data
+    let aabbMin = nodes[ofs + 0]; // w = miss link << 16 | hit link
+    let aabbMax = nodes[ofs + 1]; // w = triangle index
+    // Test for intersection with bbox
+    if(intersectAabbAnyHit(ori, invDir, (*hit).x, aabbMin.xyz, aabbMax.xyz)) {
+      // Check if leaf
+      let triIdx = bitcast<u32>(aabbMax.w);
+      if(triIdx < 0xffffffff) {
+        // Intersect contained triangle
+        let triOfs = (dataOfs + triIdx) * 3; // 3 vec4f per tri
+        intersectTri(ori, dir, tris[triOfs + 0].xyz, tris[triOfs + 1].xyz, tris[triOfs + 2].xyz, (triIdx << 16) | (instId & SHORT_MASK), hit);
+      }
+      // Follow hit link
+      idx = bitcast<u32>(aabbMin.w) & SHORT_MASK;
+    } else {
+      // Follow miss link
+      idx = bitcast<u32>(aabbMin.w) >> 16;
+    }
+  }
+}
+
+/*fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
+{
+  let blasOfs = dataOfs << 1;
 
   var nodeIndex = 0u;
   var nodeStackIndex = HALF_MAX_NODE_CNT;
@@ -229,7 +267,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
       }
     }
   }
-}
+}*/
 
 fn intersectInst(ori: vec3f, dir: vec3f, instOfs: u32, hit: ptr<function, vec4f>)
 {
@@ -255,6 +293,41 @@ fn intersectInst(ori: vec3f, dir: vec3f, instOfs: u32, hit: ptr<function, vec4f>
 }
 
 fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
+{
+  let invDir = 1.0 / dir;
+
+  // Skip 2 * tri cnt blas nodes with 3 * vec4f per tri struct
+  let tlasOfs = 2 * arrayLength(&tris) / 3;
+
+  var hit = vec4f(tfar, 0, 0, 0);
+
+  var idx = 0u;
+  
+  while(idx < SHORT_MASK) { // Not terminal
+    var ofs = (tlasOfs + idx) << 1;
+    // Retrieve node data
+    let aabbMin = nodes[ofs + 0]; // w = miss link << 16 | hit link
+    let aabbMax = nodes[ofs + 1]; // w = instance index
+    // Test for intersection with bbox
+    if(intersectAabbAnyHit(ori, invDir, hit.x, aabbMin.xyz, aabbMax.xyz)) {
+      // Check if leaf
+      let instIdx = bitcast<u32>(aabbMax.w);
+      if(instIdx < 0xffffffff) {
+        // Intersect referenced instance 
+        intersectInst(ori, dir, instIdx << 2, &hit);
+      }
+      // Follow hit link
+      idx = bitcast<u32>(aabbMin.w) & SHORT_MASK;
+    } else {
+      // Follow miss link
+      idx = bitcast<u32>(aabbMin.w) >> 16;
+    }
+  }
+
+  return hit;
+}
+
+/*fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
 
@@ -323,7 +396,7 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
   }
 
   return hit; // Required for Naga, Tint will warn on this
-}
+}*/
 
 @compute @workgroup_size(WG_SIZE.x, WG_SIZE.y, WG_SIZE.z)
 fn m(@builtin(global_invocation_id) globalId: vec3u)

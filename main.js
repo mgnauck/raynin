@@ -9,6 +9,7 @@ const MAX_BOUNCES = 5; // Max is 15 (encoded in bits 0-3 in frame data)
 
 const PATH_TO_SCENES = "data/";
 const SCENES_TO_LOAD = [
+  "test.gltf",
   //"good_1.gltf",
   "good_2.gltf",
   "good_3.gltf",
@@ -520,6 +521,9 @@ async function render(time)
   let frameTime = performance.now() - last;
   document.title = `${frameTime.toFixed(2)} / ${(1000.0 / frameTime).toFixed(2)} `;
   last = performance.now();
+
+  //// DEBUG DEBUG
+  //return;
 
   // Initialize config data
   device.queue.writeBuffer(res.buf[BUF_CFG], 0,

@@ -1,5 +1,7 @@
 #include "bvh.h"
 #include <float.h>
+#include "../base/stdlib.h"
+#include "../base/string.h"
 #include "../scene/inst.h"
 #include "../scene/tri.h"
 #include "../util/aabb.h"
@@ -33,6 +35,18 @@ static uint32_t find_best_node(bvhnode *nodes,
   return best_idx;
 }
 
+/*void print_nodes(bvhnode *nodes, uint32_t node_cnt)
+{
+  for(uint32_t i=0; i<node_cnt; i++) {
+    bvhnode *n = &nodes[i];
+    logc("* Node %u", i);
+    logc("  min: %6.3f, %6.3f, %6.3f, max: %6.3f, %6.3f, %6.3f",
+        n->min.x, n->min.y, n->min.z, n->max.x, n->max.y, n->max.z);
+    logc("  lnk: %u << 16 | %u", n->children >> 16, n->children & 0xffff);
+    logc("  idx: %u", n->idx);
+  }
+}*/
+
 // Walter et al: Fast Agglomerative Clustering for Rendering
 uint32_t cluster_nodes(bvhnode *nodes, uint32_t node_idx,
                        uint32_t *node_indices, uint32_t node_indices_cnt)
@@ -54,6 +68,8 @@ uint32_t cluster_nodes(bvhnode *nodes, uint32_t node_idx,
       new_node->max = vec3_max(node_a->max, node_b->max);
       // Each child node index gets 16 bits
       new_node->children = (idx_b << 16) | idx_a;
+      // Indicate interior node (consumed by hit/miss link traversal)
+      new_node->idx = 0xffffffff;
 
       // Replace node A with newly created combined node
       node_indices[a] = node_idx--;
@@ -73,6 +89,93 @@ uint32_t cluster_nodes(bvhnode *nodes, uint32_t node_idx,
 
   // Index of root node - 1
   return node_idx;
+}
+
+// Reorder given nodes to depth-first in memory
+void reorder_nodes(bvhnode *nodes, uint32_t max_node_cnt)
+{
+  // Source nodes will be a temporary copy of the input nodes
+  bvhnode   *snodes = malloc(max_node_cnt * sizeof(*snodes));
+
+  // Stacks for source and target nodes
+  bvhnode   *src[64];
+  bvhnode   *tgt[64];
+  uint32_t  spos = 0;
+
+  // Current index of target node array
+  uint32_t  idx = 0;
+
+  bvhnode   *sn = snodes;
+  
+  // Copy input nodes to source node array
+  memcpy(snodes, nodes, max_node_cnt * sizeof(*snodes));
+
+  while(sn) {
+    bvhnode *tn = &nodes[idx++];
+    memcpy(tn, sn, sizeof(*tn));
+    
+    if(sn->children > 0) {
+      // Assign next target node array index as left child index
+      tn->children = idx;
+      // Right child of source nodes goes on source node stack
+      src[spos] = &snodes[sn->children >> 16];
+      // Current target node stored on target node stack, so we can update
+      // its right child index later on
+      tgt[spos++] = tn;
+      // New source node is left child
+      sn = &snodes[sn->children & 0xffff];
+    } else {
+      if(spos > 0) {
+        // Pop new source node from stack
+        sn = src[--spos];
+        // Adjust right child index of target node on stack
+        tgt[spos]->children |= idx << 16;
+      } else
+        break;
+    }
+  }
+ 
+  free(snodes);
+}
+
+// Reconnect nodes via hit/miss links
+void reconnect_nodes(bvhnode *nodes)
+{
+  uint32_t  stack[64];
+  uint32_t  spos = 0;
+
+  bvhnode   *n = nodes;
+
+  while(n) {
+    if(n->children == 0) {
+      // Leaf node
+      if(spos == 0) {
+        // No node on stack, assign hit/miss terminal (last node overall)
+        n->children = 0xffffffff;
+        break;
+      } else {
+        // Pop node of stack
+        uint32_t idx = stack[--spos];
+        // Assign index of popped node as hit and miss link
+        n->children = (idx << 16) | idx;
+        // Continue with popped node
+        n = &nodes[idx];
+      }
+    } else {
+      // Interior node
+      uint32_t children = n->children;
+      // If no node is on stack (= current is right child), assign terminal as
+      // miss link. Else, assign node on stack (right sibling) as miss link.
+      n->children = 
+        ((spos == 0) ? (0xffff << 16) : (stack[spos - 1] << 16))
+        | (n->children & 0xffff);
+      // Hit link is always the next node (left child) and already assigned
+      // Next node is left child
+      n = &nodes[children & 0xffff];
+      // Put right child on stack
+      stack[spos++] = children >> 16;
+    }
+  }
 }
 
 void blas_build(bvhnode *nodes, const tri *tris, uint32_t tri_cnt)
@@ -106,6 +209,8 @@ void blas_build(bvhnode *nodes, const tri *tris, uint32_t tri_cnt)
   }
 
   cluster_nodes(nodes, node_idx, node_indices, node_indices_cnt);
+  reorder_nodes(nodes, 2 * tri_cnt);
+  reconnect_nodes(nodes);
 }
 
 void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
@@ -119,7 +224,7 @@ void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
 
   // Construct a leaf node for each instance
   for(uint32_t i = 0; i < inst_cnt; i++) {
-    if((instances[i].state & IS_DISABLED) == 0) {
+    if((instances[i].state & IS_DISABLED) == 0) { // Need to handle gaps
       bvhnode *n = &nodes[node_idx];
       n->min = instances[i].box.min;
       n->max = instances[i].box.max;
@@ -139,4 +244,7 @@ void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
     // There were gaps (not all assumed leaf nodes were populated)
     // Move root node to front
     nodes[0] = nodes[node_idx + 1];
+
+  reorder_nodes(nodes, 2 * inst_cnt);
+  reconnect_nodes(nodes);
 }
