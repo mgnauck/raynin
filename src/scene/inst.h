@@ -10,10 +10,10 @@
 #define INST_DATA_MASK   0x7fffffff
 
 typedef enum inst_state {
-  IS_DISABLED = 1,
-  IS_TRANS_DIRTY = 2,
-  IS_MTL_DIRTY = 4,
-  IS_EMISSIVE = 8,
+  IS_DISABLED     = 1,
+  IS_TRANS_DIRTY  = 2,
+  IS_MTL_DIRTY    = 4,
+  IS_EMISSIVE     = 8,
   IS_WAS_EMISSIVE = 16
 } inst_state;
 
@@ -35,7 +35,7 @@ typedef struct inst_info {
 
 // inst.data:
 // Bit 32 indicates if the material override is active (MTL_OVERRIDE_BIT).
-// For mesh types, bits 0-31 is an offset into tris or 2 * ofs into blas_nodes
+// For mesh types, bits 0-31 is an offset into tris or 6 * 2 * ofs into blas_nodes
 
 typedef struct inst {
   float     inv_transform[12];

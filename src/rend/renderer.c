@@ -62,7 +62,7 @@ uint8_t renderer_gpu_alloc(uint32_t total_tri_cnt, uint32_t total_ltri_cnt,
                  total_tri_cnt * sizeof(tri_nrm), // Tri nrms (storage buf)
                  total_ltri_cnt * sizeof(ltri),   // LTris (storage buf)
                  // BLAS + TLAS nodes (storage buf)
-                 2 * (total_tri_cnt + total_inst_cnt) * sizeof(bvhnode)); 
+                 6 * 2 * (total_tri_cnt + total_inst_cnt) * sizeof(bvhnode));
 
   total_tris = total_tri_cnt;
 
@@ -117,15 +117,15 @@ void renderer_update(scene *s, bool converge)
 
   if(s->dirty & RT_BLAS) {
     gpu_write_buf(BT_NODE, 0, s->blas_nodes,
-                  2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
+                  6 * 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
     scene_clr_dirty(s, RT_BLAS);
   }
 
   if(s->dirty & RT_INST) {
     gpu_write_buf(BT_INST, 0, s->instances,
                   s->inst_cnt * sizeof(*s->instances));
-    gpu_write_buf(BT_NODE, 2 * total_tris * sizeof(*s->blas_nodes),
-                  s->tlas_nodes, 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
+    gpu_write_buf(BT_NODE, 6 * 2 * total_tris * sizeof(*s->blas_nodes),
+                  s->tlas_nodes, 6 * 2 * s->inst_cnt * sizeof(*s->tlas_nodes));
     scene_clr_dirty(s, RT_INST);
   }
 }

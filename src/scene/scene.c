@@ -23,7 +23,8 @@ void scene_init(scene *s, uint16_t max_mesh_cnt, uint16_t max_mtl_cnt,
 
   s->instances = malloc(max_inst_cnt * sizeof(*s->instances));
   s->inst_info = malloc(max_inst_cnt * sizeof(*s->inst_info));
-  s->tlas_nodes = malloc(2 * max_inst_cnt * sizeof(*s->tlas_nodes));
+  // 2 * n - 1 nodes per bvh * 2 per axis for mtbvh (-x, +x, ..)
+  s->tlas_nodes = malloc(6 * 2 * max_inst_cnt * sizeof(*s->tlas_nodes));
   s->max_inst_cnt = max_inst_cnt;
   s->inst_cnt = 0;
 
@@ -90,12 +91,13 @@ void scene_finalize(scene *s)
   s->tri_ids = malloc(s->max_ltri_cnt * sizeof(*s->tri_ids));
 
   // Allocate enough blas nodes to cover the tris of all meshes
-  s->blas_nodes = malloc(2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
+  // 2 * n - 1 nodes per bvh * 2 per axis for mtbvh (-x, +x, ..)
+  s->blas_nodes = malloc(6 * 2 * s->max_tri_cnt * sizeof(*s->blas_nodes));
 
   // Build a blas for each mesh
   for(uint16_t i = 0; i < s->mesh_cnt; i++) {
     mesh *m = &s->meshes[i];
-    blas_build(&s->blas_nodes[2 * m->ofs], m->tris, m->tri_cnt);
+    blas_build(&s->blas_nodes[6 * 2 * m->ofs], m->tris, m->tri_cnt);
   }
 
   scene_set_dirty(s, RT_BLAS);
@@ -200,7 +202,7 @@ void scene_prepare_render(scene *s)
         memcpy(inst->inv_transform, info->inv_transform, 12 * sizeof(float));
 
         // Root node object-space aabb
-        bvhnode *n = &s->blas_nodes[2 * (inst->data & INST_DATA_MASK)];
+        bvhnode *n = &s->blas_nodes[6 * 2 * (inst->data & INST_DATA_MASK)];
         vec3 mi = n->min;
         vec3 ma = n->max;
 
@@ -280,7 +282,7 @@ uint16_t scene_add_inst(scene *s, uint16_t mesh_id, uint16_t mtl_id,
   // Lowest 16 bits are instance id, i.e. max 65536 instances
   inst->id = s->inst_cnt & INST_ID_MASK;
 
-  // Tri ofs and blas node ofs * 2
+  // Tri ofs and blas node ofs * 2 * 6
   inst->data = s->meshes[mesh_id].ofs;
 
   // Flags (gpu payload)

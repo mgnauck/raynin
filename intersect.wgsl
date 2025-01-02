@@ -177,7 +177,8 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
 
 fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
 {
-  let blasOfs = dataOfs << 1;
+  //let blasOfs = dataOfs << 1;
+  let blasOfs = 6 * 2 * dataOfs;
   var idx = 0u;
 
   while(idx < SHORT_MASK) { // Not terminal
@@ -296,8 +297,8 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
 
-  // Skip 2 * tri cnt blas nodes with 3 * vec4f per tri struct
-  let tlasOfs = 2 * arrayLength(&tris) / 3;
+  // Skip 6 * 2 * tri cnt blas nodes with 3 * vec4f per tri struct
+  let tlasOfs = 6 * 2 * arrayLength(&tris) / 3;
 
   var hit = vec4f(tfar, 0, 0, 0);
 
