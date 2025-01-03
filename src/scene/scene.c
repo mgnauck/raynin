@@ -10,6 +10,8 @@
 #include "mtl.h"
 #include "tri.h"
 
+#define SHORT_MASK 0xffff
+
 void scene_init(scene *s, uint16_t max_mesh_cnt, uint16_t max_mtl_cnt,
                 uint16_t max_cam_cnt, uint16_t max_inst_cnt)
 {
@@ -278,15 +280,19 @@ uint16_t scene_add_inst(scene *s, uint16_t mesh_id, uint16_t mtl_id,
   info->ltri_cnt = 0;
 
   inst *inst = &s->instances[s->inst_cnt];
+  mesh *m = &s->meshes[mesh_id];
 
-  // Lowest 16 bits are instance id, i.e. max 65536 instances
-  inst->id = s->inst_cnt & INST_ID_MASK;
+  // Lower 16 bits are instance id, i.e. max 65536 instances
+  inst->id = s->inst_cnt & SHORT_MASK;
 
-  // Tri ofs and blas node ofs * 2 * 6
-  inst->data = s->meshes[mesh_id].ofs;
+  // Tri array ofs and blas node array ofs * 2 * 6 (lower 31 bits)
+  inst->data = m->ofs & INST_DATA_MASK;
 
   // Flags (gpu payload)
   inst->flags = flags;
+
+  // Tri count of assigned mesh (lower 16 bits)
+  inst->cnt = m->tri_cnt & SHORT_MASK;
 
   // Set transform and mtl override id to instance
   scene_upd_inst_trans(s, s->inst_cnt, transform);
@@ -315,7 +321,7 @@ void scene_upd_inst_mtl(scene *s, uint16_t inst_id, uint16_t mtl_id)
   // Mtl override if mtl_id != 0xffff
   if(mtl_id < NO_MTL_OVERRIDE) {
     // Highest 16 bits are mtl override id, i.e. max 65535 - 1 materials
-    inst->id = (mtl_id << 16) | (inst->id & INST_ID_MASK);
+    inst->id = (mtl_id << 16) | (inst->id & SHORT_MASK);
 
     // Set highest bit to enable the material override
     inst->data |= MTL_OVERRIDE_BIT;

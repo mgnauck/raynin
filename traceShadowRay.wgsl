@@ -15,7 +15,7 @@
   id:               u32,            // (mtl override id << 16) | (inst id & 0xffff)
   data:             u32,            // See comment on data in inst.h
   flags:            u32,            // Inst flags
-  pad1:             u32
+  cnt:              u32             // (unused << 16) | (tri cnt & 0xffff)
 }*/
 
 /*struct BvhNode
@@ -48,7 +48,12 @@
 
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
-const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
+const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0
+
+// Instance flags (see inst_flags)
+const IF_NO_SHADOW        = 0x2u;
+
+// General constants
 const EPS                 = 0.0001;
 const WG_SIZE             = vec3u(16, 16, 1);
 
@@ -145,7 +150,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec
   return select(false, true, t > EPS && t < tfar);
 }*/
 
-fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs: u32) -> bool
+fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs: u32, triCnt: u32) -> bool
 {
   //let blasOfs = dataOfs << 1;
   let blasOfs = 6 * 2 * dataOfs;
@@ -244,20 +249,26 @@ fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs
 
 fn intersectInstAnyHit(ori: vec3f, dir: vec3f, tfar: f32, instOfs: u32) -> bool
 {
+  // Inst id, inst data, inst flags, tri cnt
+  let data = instances[instOfs + 3];
+
+  // Do not intersect further if instance does not cast shadows
+  if((bitcast<u32>(data.z) & IF_NO_SHADOW) > 0) {
+    return false;
+  }
+
   // Inst inverse transform
   let m = mat4x4f(  instances[instOfs + 0],
                     instances[instOfs + 1],
                     instances[instOfs + 2],
                     vec4f(0.0, 0.0, 0.0, 1.0));
 
-  // Inst id + inst data
-  let data = instances[instOfs + 3];
-
   // Transform ray to inst object space
   let oriObj = (vec4f(ori, 1.0) * m).xyz;
   let dirObj = (vec4f(dir, 0.0) * m).xyz;
 
-  return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar, bitcast<u32>(data.y) & INST_DATA_MASK);
+  return intersectBlasAnyHit(oriObj, dirObj, 1.0 / dirObj, tfar,
+    bitcast<u32>(data.y) & INST_DATA_MASK, bitcast<u32>(data.w) & SHORT_MASK);
 }
 
 fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool

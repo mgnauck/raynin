@@ -15,7 +15,7 @@
   id:               u32,            // (mtl override id << 16) | (inst id & 0xffff)
   data:             u32,            // See comment on data in inst.h
   flags:            u32,            // Inst flags
-  pad1:             u32
+  cnt:              u32             // (unused << 16) | (tri cnt & 0xffff)
 }*/
 
 /*struct BvhNode
@@ -175,7 +175,7 @@ fn intersectTri(ori: vec3f, dir: vec3f, v0: vec3f, v1: vec3f, v2: vec3f, instTri
   }
 }*/
 
-fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, hit: ptr<function, vec4f>)
+fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u32, triCnt: u32, hit: ptr<function, vec4f>)
 {
   //let blasOfs = dataOfs << 1;
   let blasOfs = 6 * 2 * dataOfs;
@@ -272,7 +272,7 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
 
 fn intersectInst(ori: vec3f, dir: vec3f, instOfs: u32, hit: ptr<function, vec4f>)
 {
-  // Inst id, inst data, inst flags
+  // Inst id, inst data, inst flags, tri cnt
   let data = instances[instOfs + 3];
 
   // Do not intersect further if instance is invisible anyway
@@ -290,7 +290,8 @@ fn intersectInst(ori: vec3f, dir: vec3f, instOfs: u32, hit: ptr<function, vec4f>
   let oriObj = (vec4f(ori, 1.0) * m).xyz;
   let dirObj = (vec4f(dir, 0.0) * m).xyz;
 
-  intersectBlas(oriObj, dirObj, 1.0 / dirObj, bitcast<u32>(data.x), bitcast<u32>(data.y) & INST_DATA_MASK, hit);
+  intersectBlas(oriObj, dirObj, 1.0 / dirObj,
+    bitcast<u32>(data.x), bitcast<u32>(data.y) & INST_DATA_MASK, bitcast<u32>(data.w) & SHORT_MASK, hit);
 }
 
 fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f

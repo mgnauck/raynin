@@ -135,7 +135,7 @@ void reorder_nodes(bvhnode *dnodes, bvhnode *snodes)
 }
 
 // Reconnect nodes via hit/miss links
-void reconnect_nodes(bvhnode *dnodes, bvhnode *snodes)
+void reconnect_nodes(bvhnode *dnodes, bvhnode *snodes, uint8_t axis, uint8_t sign)
 {
   uint32_t  stack[64];
   uint32_t  spos = 0;
@@ -212,7 +212,10 @@ void blas_build(bvhnode *nodes, const tri *tris, uint32_t tri_cnt)
   cluster_nodes(nodes, node_idx, node_indices, node_indices_cnt);
 
   reorder_nodes(tnodes, nodes);
-  reconnect_nodes(nodes, tnodes);
+
+  // Prepare threaded bvh for each axis in neg/pos direction, i.e. +X, -X, ..
+  for(uint8_t i=0; i<6; i++)
+    reconnect_nodes(&nodes[2 * tri_cnt * i], tnodes, i / 2, i % 2);
 }
 
 void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
@@ -248,5 +251,7 @@ void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
     nodes[0] = nodes[node_idx + 1];
 
   reorder_nodes(tnodes, nodes);
-  reconnect_nodes(nodes, tnodes);
+
+  for(uint8_t i=0; i<6; i++)
+    reconnect_nodes(&nodes[2 * inst_cnt * i], tnodes, i / 2, i % 2);
 }

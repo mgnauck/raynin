@@ -5,7 +5,6 @@
 #include "../util/aabb.h"
 #include "../util/mat4.h"
 
-#define INST_ID_MASK     0xffff
 #define MTL_OVERRIDE_BIT 0x80000000
 #define INST_DATA_MASK   0x7fffffff
 
@@ -39,10 +38,10 @@ typedef struct inst_info {
 
 typedef struct inst {
   float     inv_transform[12];
-  uint32_t  id;    // (mtl override id << 16) | (inst id & 0xffff)
-  uint32_t  data;  // See notes above
-  uint32_t  flags; // Inst flags (gpu payload, see above)
-  uint32_t  pad1;
+  uint32_t  id;     // (mtl override id << 16) | (inst id & 0xffff)
+  uint32_t  data;   // See notes above
+  uint32_t  flags;  // Inst flags (gpu payload, see above)
+  uint32_t  cnt;    // (not used << 16) | (tri cnt & 0xffff)
 } inst;
 
 #endif
