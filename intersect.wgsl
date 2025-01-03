@@ -179,7 +179,11 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
 {
   //let blasOfs = dataOfs << 1;
   let blasOfs = 6 * 2 * dataOfs;
+
+  // Node index
   var idx = 0u;
+
+  // TODO Add x * triCnt * 2 to blasOfs to choose correct threaded bvh
 
   while(idx < SHORT_MASK) { // Not terminal
     var ofs = (blasOfs + idx) << 1;
@@ -189,9 +193,10 @@ fn intersectBlas(ori: vec3f, dir: vec3f, invDir: vec3f, instId: u32, dataOfs: u3
     // Test for intersection with bbox
     if(intersectAabbAnyHit(ori, invDir, (*hit).x, aabbMin.xyz, aabbMax.xyz)) {
       // Check if leaf
-      let triIdx = bitcast<u32>(aabbMax.w);
-      if(triIdx < 0xffffffff) {
+      var triIdx = bitcast<u32>(aabbMax.w);
+      if((triIdx & 0x80000000) == 0) { // Bit 31 not set indicates leaf node
         // Intersect contained triangle
+        triIdx = triIdx & SHORT_MASK;
         let triOfs = (dataOfs + triIdx) * 3; // 3 vec4f per tri
         intersectTri(ori, dir, tris[triOfs + 0].xyz, tris[triOfs + 1].xyz, tris[triOfs + 2].xyz, (triIdx << 16) | (instId & SHORT_MASK), hit);
       }
@@ -297,13 +302,19 @@ fn intersectInst(ori: vec3f, dir: vec3f, instOfs: u32, hit: ptr<function, vec4f>
 fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
 {
   let invDir = 1.0 / dir;
+  var hit = vec4f(tfar, 0, 0, 0);
+ 
+  // Node index
+  var idx = 0u;
 
   // Skip 6 * 2 * tri cnt blas nodes with 3 * vec4f per tri struct
-  let tlasOfs = 6 * 2 * arrayLength(&tris) / 3;
+  var tlasOfs = 6 * 2 * arrayLength(&tris) / 3;
 
-  var hit = vec4f(tfar, 0, 0, 0);
+  // Inst cnt is contained in first tlas root node idx at bits 16-30
+  let instCnt = (bitcast<u32>(nodes[(tlasOfs << 1) + 1].w) >> 16) & 0x7fff;
 
-  var idx = 0u;
+  // TODO Add x * 2 * inst cnt to tlasOfs to choose correct threaded bvh
+  //tlasOfs += instCnt << 1;
   
   while(idx < SHORT_MASK) { // Not terminal
     var ofs = (tlasOfs + idx) << 1;
@@ -314,9 +325,9 @@ fn intersectTlas(ori: vec3f, dir: vec3f, tfar: f32) -> vec4f
     if(intersectAabbAnyHit(ori, invDir, hit.x, aabbMin.xyz, aabbMax.xyz)) {
       // Check if leaf
       let instIdx = bitcast<u32>(aabbMax.w);
-      if(instIdx < 0xffffffff) {
+      if((instIdx & 0x80000000) == 0) { // Bit 31 not set indicates leaf node
         // Intersect referenced instance 
-        intersectInst(ori, dir, instIdx << 2, &hit);
+        intersectInst(ori, dir, (instIdx & SHORT_MASK) << 2, &hit);
       }
       // Follow hit link
       idx = bitcast<u32>(aabbMin.w) & SHORT_MASK;

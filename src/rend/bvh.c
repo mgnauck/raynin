@@ -73,7 +73,7 @@ uint32_t cluster_nodes(bvhnode *nodes, uint32_t node_idx,
       // Each child node index gets 16 bits
       new_node->children = (idx_b << 16) | idx_a;
       // Indicate interior node (consumed by hit/miss link traversal)
-      new_node->idx = 0xffffffff;
+      new_node->idx = 0x80000000;
 
       // Replace node A with newly created combined node
       node_indices[a] = node_idx--;
@@ -228,7 +228,7 @@ void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
   uint32_t node_idx = 2 * inst_cnt - 2;
 
   // Construct a leaf node for each instance
-  for(uint32_t i = 0; i < inst_cnt; i++) {
+  for(uint32_t i=0; i<inst_cnt; i++) {
     if((instances[i].state & IS_DISABLED) == 0) { // Need to handle gaps
       bvhnode *n = &nodes[node_idx];
       n->min = instances[i].box.min;
@@ -252,6 +252,10 @@ void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
 
   reorder_nodes(tnodes, nodes);
 
+  // Prepare threaded bvh for each axis in neg/pos direction, i.e. +X, -X, ..
   for(uint8_t i=0; i<6; i++)
     reconnect_nodes(&nodes[2 * inst_cnt * i], tnodes, i / 2, i % 2);
+
+  // Store instance count in bits 16-30 of first tlas root node idx
+  nodes->idx |= (inst_cnt & 0x7fff) << 16;
 }
