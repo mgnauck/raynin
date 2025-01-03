@@ -47,7 +47,7 @@ static uint32_t find_best_node(bvhnode *nodes,
     logc("  min: %6.3f, %6.3f, %6.3f, max: %6.3f, %6.3f, %6.3f",
         n->min.x, n->min.y, n->min.z, n->max.x, n->max.y, n->max.z);
     logc("  lnk: %u << 16 | %u", n->children >> 16, n->children & 0xffff);
-    logc("  idx: %u", n->idx);
+    logc("  idx: %u << 31 | %u << 16 | %u", n->idx >> 31, (n->idx >> 16) & 0x7fff, n->idx & 0xffff);
   }
 }*/
 
