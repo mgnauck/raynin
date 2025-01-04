@@ -51,7 +51,7 @@
 }*/
 
 // Scene data handling
-const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
+const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0
 const EPS                 = 0.0001;
 const STACK_EMPTY_MARKER  = 0xfffffffi;
 const WG_SIZE             = vec3u(16, 16, 1);
