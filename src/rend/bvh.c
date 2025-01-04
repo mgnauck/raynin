@@ -1,5 +1,6 @@
 #include "bvh.h"
 #include <float.h>
+#include "../base/log.h"
 #include "../base/stdlib.h"
 #include "../base/string.h"
 #include "../scene/inst.h"
@@ -39,7 +40,7 @@ static uint32_t find_best_node(bvhnode *nodes,
   return best_idx;
 }
 
-/*void print_nodes(bvhnode *nodes, uint32_t node_cnt)
+void print_nodes(bvhnode *nodes, uint32_t node_cnt)
 {
   for(uint32_t i=0; i<node_cnt; i++) {
     bvhnode *n = &nodes[i];
@@ -49,7 +50,7 @@ static uint32_t find_best_node(bvhnode *nodes,
     logc("  lnk: %u << 16 | %u", n->children >> 16, n->children & 0xffff);
     logc("  idx: %u << 31 | %u << 16 | %u", n->idx >> 31, (n->idx >> 16) & 0x7fff, n->idx & 0xffff);
   }
-}*/
+}
 
 // Walter et al: Fast Agglomerative Clustering for Rendering
 uint32_t cluster_nodes(bvhnode *nodes, uint32_t node_idx,
@@ -162,19 +163,30 @@ void reconnect_nodes(bvhnode *dnodes, bvhnode *snodes, uint8_t axis, uint8_t sig
       }
     } else {
       // Interior node
-      uint32_t children = dn->children;
-      uint32_t left_child = children & 0xffff;
+      uint32_t left_child = dn->children & 0xffff;
+      uint32_t right_child = dn->children >> 16;
+      /*// Sort child node bboxes by given axis and sign
+      vec3 left_center = vec3_scale(
+          vec3_sub(snodes[left_child].max, snodes[left_child].min), 0.5);
+      vec3 right_center = vec3_scale(
+          vec3_sub(snodes[right_child].max, snodes[right_child].min), 0.5);
+      if((vec3_get(left_center, axis) < vec3_get(right_center, axis)) ^ sign) {
+        // Swap nodes
+        uint32_t t = left_child;
+        left_child = right_child;
+        right_child = t;
+      }*/
       // If no node is on stack (= current is right child), assign terminal as
       // miss link. Else, assign node on stack (right sibling) as miss link.
       dn->children =
         ((spos == 0) ? (0xffff << 16) : (stack[spos - 1] << 16))
-        // Hit link is always the next node (left child) and already assigned
+        // Hit link is the next node (left child)
         | left_child;
       // Next node is left child
       sn = &snodes[left_child];
       dn = &dnodes[left_child];
       // Put right child on stack
-      stack[spos++] = children >> 16;
+      stack[spos++] = right_child;
     }
   }
 }
@@ -214,8 +226,11 @@ void blas_build(bvhnode *nodes, const tri *tris, uint32_t tri_cnt)
   reorder_nodes(tnodes, nodes);
 
   // Prepare threaded bvh for each axis in neg/pos direction, i.e. +X, -X, ..
-  for(uint8_t i=0; i<6; i++)
+  for(uint8_t i=0; i<6; i++) {
     reconnect_nodes(&nodes[2 * tri_cnt * i], tnodes, i / 2, i % 2);
+    //logc("########## %u", i);
+    //print_nodes(&nodes[2 * tri_cnt * i], 2 * tri_cnt - 1);
+  }
 }
 
 void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
@@ -253,8 +268,11 @@ void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
   reorder_nodes(tnodes, nodes);
 
   // Prepare threaded bvh for each axis in neg/pos direction, i.e. +X, -X, ..
-  for(uint8_t i=0; i<6; i++)
+  for(uint8_t i=0; i<6; i++) {
     reconnect_nodes(&nodes[2 * inst_cnt * i], tnodes, i / 2, i % 2);
+    //logc("########## %u", i);
+    //print_nodes(&nodes[2 * inst_cnt * i], 2 * inst_cnt - 1);
+  }
 
   // Store instance count in bits 16-30 of first tlas root node idx
   nodes->idx |= (inst_cnt & 0x7fff) << 16;
