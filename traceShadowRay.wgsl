@@ -48,7 +48,7 @@
 
 // Scene data handling
 const SHORT_MASK          = 0xffffu;
-const INST_DATA_MASK      = 0x3fffffffu; // Bits 31-0
+const INST_DATA_MASK      = 0x7fffffffu; // Bits 31-0
 const EPS                 = 0.0001;
 const WG_SIZE             = vec3u(16, 16, 1);
 
