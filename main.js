@@ -9,7 +9,6 @@ const MAX_BOUNCES = 5; // Max is 15 (encoded in bits 0-3 in frame data)
 
 const PATH_TO_SCENES = "data/";
 const SCENES_TO_LOAD = [
-  "test.gltf",
   //"good_1.gltf",
   "good_2.gltf",
   "good_3.gltf",
