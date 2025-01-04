@@ -150,15 +150,28 @@ fn intersectTri(ori: vec3f, dir: vec3f, tfar: f32, v0: vec3f, v1: vec3f, v2: vec
   return select(false, true, t > EPS && t < tfar);
 }*/
 
+fn mapDirToIndex(dir: vec3f) -> u32
+{
+  // Map the direction to a 'face' index of a virtual cube map
+  let da = abs(dir);
+
+  if(da.z >= da.x && da.z >= da.y) {
+    return select(4u, 5u, dir.z < 0.0);
+  } else if(da.y >= da.x) {
+    return select(2u, 3u, dir.y < 0.0);
+  }
+
+  return select(0u, 1u, dir.x < 0.0);
+}
+
 fn intersectBlasAnyHit(ori: vec3f, dir: vec3f, invDir: vec3f, tfar: f32, dataOfs: u32, triCnt: u32) -> bool
 {
-  //let blasOfs = dataOfs << 1;
-  let blasOfs = 6 * 2 * dataOfs;
+  // MTBVH = 6 TBVHs with 2 * triCnt nodes each, i.e. skip 6 * 2 * dataOfs mtbvhs before this one
+  // Adding x * triCnt * 2 to blasOfs to choose correct threaded bvh
+  let blasOfs = 6 * 2 * dataOfs + mapDirToIndex(dir) * (triCnt << 1);
 
   // Node index
   var idx = 0u;
-
-  // TODO Add x * triCnt * 2 to blasOfs to choose correct threaded bvh
 
   while(idx < SHORT_MASK) { // Not terminal
     var ofs = (blasOfs + idx) << 1;
@@ -283,14 +296,14 @@ fn intersectTlasAnyHit(ori: vec3f, dir: vec3f, tfar: f32) -> bool
   // Node index
   var idx = 0u;
 
-  // Skip 6 * 2 * tri cnt blas nodes with 3 * vec4f per tri struct
+  // Skip 6 * 2 * total tri cnt blas nodes with 3 * vec4f per tri struct
   var tlasOfs = 6 * 2 * arrayLength(&tris) / 3;
 
   // Inst cnt is contained in first tlas root node idx at bits 16-30
   let instCnt = (bitcast<u32>(nodes[(tlasOfs << 1) + 1].w) >> 16) & 0x7fff;
 
-  // TODO Add x * 2 * inst cnt to tlasOfs to choose correct threaded bvh
-  //tlasOfs += instCnt << 1;
+  // Add x * 2 * inst cnt to tlasOfs to choose correct threaded bvh
+  tlasOfs += mapDirToIndex(dir) * (instCnt << 1);
  
   while(idx < SHORT_MASK) { // Not terminal
     var ofs = (tlasOfs + idx) << 1;

@@ -136,55 +136,51 @@ void reorder_nodes(bvhnode *dnodes, bvhnode *snodes)
 }
 
 // Reconnect nodes via hit/miss links
-void reconnect_nodes(bvhnode *dnodes, bvhnode *snodes, uint8_t axis, uint8_t sign)
+void reconnect_nodes(bvhnode *nodes, uint8_t axis, uint8_t sign)
 {
   uint32_t  stack[64];
   uint32_t  spos = 0;
 
-  bvhnode   *sn = snodes;
-  bvhnode   *dn = dnodes;
+  bvhnode   *n = nodes;
 
-  while(sn) {
-    memcpy(dn, sn, sizeof(*dn));
-    if(dn->children == 0) {
+  while(n) {
+    if(n->children == 0) {
       // Leaf node
       if(spos == 0) {
         // No node on stack, assign hit/miss terminal (last node overall)
-        dn->children = 0xffffffff;
+        n->children = 0xffffffff;
         break;
       } else {
         // Pop node of stack
         uint32_t idx = stack[--spos];
         // Assign index of popped node as hit and miss link
-        dn->children = (idx << 16) | idx;
+        n->children = (idx << 16) | idx;
         // Continue with popped node
-        sn = &snodes[idx];
-        dn = &dnodes[idx];
+        n = &nodes[idx];
       }
     } else {
       // Interior node
-      uint32_t left_child = dn->children & 0xffff;
-      uint32_t right_child = dn->children >> 16;
-      /*// Sort child node bboxes by given axis and sign
+      uint32_t left_child = n->children & 0xffff;
+      uint32_t right_child = n->children >> 16;
+      // Sort child node bboxes by given axis and sign
       vec3 left_center = vec3_scale(
-          vec3_sub(snodes[left_child].max, snodes[left_child].min), 0.5);
+          vec3_sub(nodes[left_child].max, nodes[left_child].min), 0.5);
       vec3 right_center = vec3_scale(
-          vec3_sub(snodes[right_child].max, snodes[right_child].min), 0.5);
+          vec3_sub(nodes[right_child].max, nodes[right_child].min), 0.5);
       if((vec3_get(left_center, axis) < vec3_get(right_center, axis)) ^ sign) {
         // Swap nodes
         uint32_t t = left_child;
         left_child = right_child;
         right_child = t;
-      }*/
+      }
       // If no node is on stack (= current is right child), assign terminal as
       // miss link. Else, assign node on stack (right sibling) as miss link.
-      dn->children =
+      n->children =
         ((spos == 0) ? (0xffff << 16) : (stack[spos - 1] << 16))
         // Hit link is the next node (left child)
         | left_child;
       // Next node is left child
-      sn = &snodes[left_child];
-      dn = &dnodes[left_child];
+      n = &nodes[left_child];
       // Put right child on stack
       stack[spos++] = right_child;
     }
@@ -227,9 +223,11 @@ void blas_build(bvhnode *nodes, const tri *tris, uint32_t tri_cnt)
 
   // Prepare threaded bvh for each axis in neg/pos direction, i.e. +X, -X, ..
   for(uint8_t i=0; i<6; i++) {
-    reconnect_nodes(&nodes[2 * tri_cnt * i], tnodes, i / 2, i % 2);
+    bvhnode *n = &nodes[2 * tri_cnt * i];
+    memcpy(n, tnodes, 2 * tri_cnt * sizeof(*n));
+    reconnect_nodes(n, i / 2, i % 2);
     //logc("########## %u", i);
-    //print_nodes(&nodes[2 * tri_cnt * i], 2 * tri_cnt - 1);
+    //print_nodes(n, 2 * tri_cnt - 1);
   }
 }
 
@@ -269,9 +267,11 @@ void tlas_build(bvhnode *nodes, const inst_info *instances, uint32_t inst_cnt)
 
   // Prepare threaded bvh for each axis in neg/pos direction, i.e. +X, -X, ..
   for(uint8_t i=0; i<6; i++) {
-    reconnect_nodes(&nodes[2 * inst_cnt * i], tnodes, i / 2, i % 2);
+    bvhnode *n = &nodes[2 * inst_cnt * i];
+    memcpy(n, tnodes, 2 * inst_cnt * sizeof(*n));
+    reconnect_nodes(n, i / 2, i % 2);
     //logc("########## %u", i);
-    //print_nodes(&nodes[2 * inst_cnt * i], 2 * inst_cnt - 1);
+    //print_nodes(n, 2 * inst_cnt - 1);
   }
 
   // Store instance count in bits 16-30 of first tlas root node idx
