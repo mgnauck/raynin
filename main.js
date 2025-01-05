@@ -455,7 +455,7 @@ function accumulateSample(commandEncoder)
   // Dispatch primary ray generation directly
   passEncoder.setBindGroup(0, res.bindGroups[BG_GENERATE]);
   passEncoder.setPipeline(res.pipelines[PL_GENERATE]);
-  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / 16), Math.ceil(HEIGHT / 16), 1);
+  passEncoder.dispatchWorkgroups(Math.ceil(WIDTH / WG_SIZE_X), Math.ceil(HEIGHT / WG_SIZE_Y), 1);
 
   let bindGroupPathState = 0;
   for(let j=0; j<MAX_BOUNCES; j++) {
